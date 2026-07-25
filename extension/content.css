@@ -1,0 +1,12 @@
+#magpie-capture-picker { position: absolute; z-index: 2147483646; pointer-events: none; border: 2px solid #4dae62; border-radius: 5px; background: rgba(82, 180, 102, .13); box-shadow: 0 0 0 3px rgba(82, 180, 102, .18); transition: all .06s ease-out; }
+#magpie-snip-overlay { position: fixed; inset: 0; z-index: 2147483646; cursor: crosshair; background: rgba(16, 34, 22, .18); }
+#magpie-snip-overlay .magpie-snip-rect { display: none; position: fixed; border: 2px solid #4dae62; border-radius: 4px; background: transparent; box-shadow: 0 0 0 100000px rgba(16, 34, 22, .28), inset 0 0 0 1px rgba(255,255,255,.35); pointer-events: none; }
+#magpie-capture-toast { position: fixed; z-index: 2147483647; right: 20px; bottom: 20px; max-width: 300px; padding: 12px 15px; color: #f9fff8; background: #1f4730; border: 1px solid rgba(255,255,255,.15); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.28); font: 13px/1.4 system-ui, sans-serif; display: flex; flex-direction: column; gap: 8px; animation: magpie-toast-in .22s cubic-bezier(.2,.7,.3,1.1); }
+@keyframes magpie-toast-in { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #magpie-capture-toast { animation: none; } #magpie-capture-toast .magpie-toast-spinner { animation-duration: 1.6s; } }
+#magpie-capture-toast[data-state="hint"] { background: #244f34; }#magpie-capture-toast[data-state="loading"] { background: #385a40; }#magpie-capture-toast[data-state="error"] { background: #8d4035; }#magpie-capture-toast[data-state="review"] { background: #6b4f1f; }
+#magpie-capture-toast a { align-self: flex-start; color: #ffe9b8; font-weight: 600; text-decoration: underline; }
+#magpie-capture-toast a:hover { color: #fff; }
+#magpie-capture-toast .magpie-toast-row { display: flex; align-items: center; gap: 8px; }
+#magpie-capture-toast .magpie-toast-spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%; animation: magpie-toast-spin .8s linear infinite; }
+@keyframes magpie-toast-spin { to { transform: rotate(360deg); } }

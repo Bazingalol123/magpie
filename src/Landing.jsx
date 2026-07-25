@@ -1,0 +1,224 @@
+import { useEffect, useRef } from "react";
+import {
+  ArrowDown,
+  ArrowUpRight,
+  Bird,
+  Briefcase,
+  Camera,
+  Check,
+  ChefHat,
+  Home,
+  Layers3,
+  LoaderCircle,
+  LockKeyhole,
+  MousePointerClick,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  TrendingDown,
+  Wand2,
+} from "lucide-react";
+
+function Mark({ size = 30 }) {
+  return (
+    <div className="magpie-mark" style={{ width: size, height: size }}>
+      <Bird size={size * 0.64} strokeWidth={2.5} />
+    </div>
+  );
+}
+
+export default function Landing({ isSigningIn, onSignIn }) {
+  const heroRef = useRef(null);
+
+  useEffect(() => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in-view");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { threshold: 0.16 });
+    document.querySelectorAll("[data-reveal]").forEach((element) => {
+      if (reduceMotion) element.classList.add("in-view");
+      else observer.observe(element);
+    });
+
+    const hero = heroRef.current;
+    let frame = 0;
+    const onPointerMove = (event) => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const rect = hero.getBoundingClientRect();
+        const px = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+        const py = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+        hero.style.setProperty("--px", px.toFixed(3));
+        hero.style.setProperty("--py", py.toFixed(3));
+      });
+    };
+    if (hero && !reduceMotion) hero.addEventListener("pointermove", onPointerMove);
+    return () => {
+      observer.disconnect();
+      if (hero) hero.removeEventListener("pointermove", onPointerMove);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return (
+    <main className="ld-shell">
+      <header className="ld-topbar">
+        <div className="brand-lockup"><Mark size={30} /><span>magpie</span></div>
+        <button className="ld-signin-mini" onClick={onSignIn} disabled={isSigningIn}>Sign in</button>
+      </header>
+
+      <section className="ld-hero" ref={heroRef}>
+        <div className="ld-hero-copy">
+          <div className="eyebrow"><Sparkles size={13} /> web intelligence, kept alive</div>
+          <h1>Turn the messy web into <em>living, structured collections.</em></h1>
+          <p>Clip any listing, product, job, or recipe. Magpie understands what it is, files it with its siblings, and keeps watching the source so your research never goes stale.</p>
+          <button className="primary-button ld-cta" onClick={onSignIn} disabled={isSigningIn}>
+            {isSigningIn ? <LoaderCircle className="spin" size={17} /> : <ArrowUpRight size={17} />}
+            Continue with Google
+          </button>
+          <div className="ld-hero-trust"><ShieldCheck size={14} /> The extension can write clips — it can never read your data.</div>
+        </div>
+
+        <div className="ld-scene" aria-hidden="true">
+          <div className="ld-card ld-card-apartment">
+            <div className="ld-card-head"><Home size={13} /> Apartments</div>
+            <b>Altbau 2-Zimmer, Kreuzberg</b>
+            <div className="ld-card-rows"><span>Rent<i>€1,340</i></span><span>Rooms<i>2</i></span><span>Size<i>58 m²</i></span></div>
+            <div className="ld-card-badge"><RefreshCw size={9} /> watching daily</div>
+          </div>
+          <div className="ld-card ld-card-camera">
+            <div className="ld-card-head"><Camera size={13} /> Cameras</div>
+            <b>Sony Alpha 6600</b>
+            <div className="ld-card-rows"><span>Price<i>₪6,415</i></span><span>Type<i>Mirrorless</i></span></div>
+            <div className="ld-card-badge drop"><TrendingDown size={9} /> price dropped</div>
+          </div>
+          <div className="ld-card ld-card-recipe">
+            <div className="ld-card-head"><ChefHat size={13} /> Recipes</div>
+            <b>Shakshuka, proper heat</b>
+            <div className="ld-card-rows"><span>Time<i>25 min</i></span><span>Serves<i>4</i></span></div>
+          </div>
+          <div className="ld-orbit ld-orbit-a" />
+          <div className="ld-orbit ld-orbit-b" />
+        </div>
+
+        <div className="ld-scroll-hint"><ArrowDown size={14} /> see how it works</div>
+      </section>
+
+      <section className="ld-steps">
+        <div className="ld-step" data-reveal style={{ "--d": "0ms" }}>
+          <span className="ld-step-number"><MousePointerClick size={19} /></span>
+          <h3>1 · Clip anything</h3>
+          <p>Point at the part of the page that matters — an element, selection, image, or the whole page — and press one key. No folders, no forms.</p>
+        </div>
+        <div className="ld-step" data-reveal style={{ "--d": "110ms" }}>
+          <span className="ld-step-number"><Wand2 size={19} /></span>
+          <h3>2 · Magpie organizes</h3>
+          <p>The backend understands what you captured, extracts comparable fields, and files it into the right Collection — or asks you when it isn't sure.</p>
+        </div>
+        <div className="ld-step" data-reveal style={{ "--d": "220ms" }}>
+          <span className="ld-step-number"><RefreshCw size={19} /></span>
+          <h3>3 · Changes stay visible</h3>
+          <p>Prices, availability, deadlines: Magpie re-checks the sources you care about and shows every change with evidence and history.</p>
+        </div>
+      </section>
+
+      <section className="ld-story">
+        <div className="ld-story-intro" data-reveal>
+          <div className="eyebrow"><Layers3 size={13} /> one journey, real structure</div>
+          <h2>Moving to Berlin? <em>Watch it become a workspace.</em></h2>
+        </div>
+
+        <div className="ld-scene-row" data-reveal>
+          <div className="ld-scene-copy">
+            <span className="ld-scene-index">01</span>
+            <h3>Clip an apartment from any listing site</h3>
+            <p>Hover, press <kbd>C</kbd>, done. The original page, screenshot, and selected evidence travel with the capture.</p>
+          </div>
+          <div className="ld-mock ld-mock-capture">
+            <div className="ld-mock-page">
+              <div className="ld-mock-line w80" /><div className="ld-mock-line w60" />
+              <div className="ld-mock-highlight">
+                <b>Altbau 2-Zimmer · Kreuzberg</b>
+                <span>€1,340 warm · 58 m² · available Oct 1</span>
+              </div>
+              <div className="ld-mock-line w70" /><div className="ld-mock-line w40" />
+            </div>
+            <div className="ld-mock-toast"><span className="ld-dot" /> Saved — Magpie created “Apartments”.</div>
+          </div>
+        </div>
+
+        <div className="ld-scene-row reverse" data-reveal>
+          <div className="ld-scene-copy">
+            <span className="ld-scene-index">02</span>
+            <h3>Collections build themselves</h3>
+            <p>Apartments, Neighborhoods, Moving companies — each capture lands as a structured row you can actually compare.</p>
+          </div>
+          <div className="ld-mock ld-mock-table">
+            <div className="ld-mock-tabhead"><span>Apartments</span><i>live</i></div>
+            <div className="ld-mock-trow head"><span>Source</span><span>Rent</span><span>Rooms</span><span>m²</span></div>
+            <div className="ld-mock-trow"><span>immoscout…</span><span>€1,340</span><span>2</span><span>58</span></div>
+            <div className="ld-mock-trow"><span>kleinanzei…</span><span>€1,190</span><span>2</span><span>54</span></div>
+            <div className="ld-mock-trow new"><span>wg-gesucht…</span><span>€1,420</span><span>3</span><span>67</span></div>
+          </div>
+        </div>
+
+        <div className="ld-scene-row" data-reveal>
+          <div className="ld-scene-copy">
+            <span className="ld-scene-index">03</span>
+            <h3>The web moves. Your data follows.</h3>
+            <p>A rent changes, a listing disappears, a deadline shifts — Magpie updates the right Item and keeps the evidence-backed history.</p>
+          </div>
+          <div className="ld-mock ld-mock-history">
+            <div className="ld-history-row"><span className="ld-pulse"><Check size={10} /></span><div><b>rent</b> changed <del>€1,420</del> → <strong>€1,340</strong><small>2 hours ago</small></div></div>
+            <div className="ld-history-row"><span className="ld-pulse"><Check size={10} /></span><div><b>availability</b> changed <del>Oct 1</del> → <strong>Nov 1</strong><small>yesterday</small></div></div>
+            <div className="ld-history-row muted"><span className="ld-pulse warn"><LockKeyhole size={10} /></span><div>a source now requires sign-in — <strong>watch paused, nothing invented</strong><small>evidence preserved</small></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="ld-trust" data-reveal>
+        <div className="ld-trust-icon"><LockKeyhole size={22} /></div>
+        <div>
+          <h2>Built untrusted by design</h2>
+          <p>The browser extension holds one write-only pairing token. It can submit captures — it cannot read your Collections, your Items, or anything else. Owner isolation is enforced on the server, not promised in the client.</p>
+          <ul>
+            <li><Check size={13} /> Write-only capture client</li>
+            <li><Check size={13} /> Server-validated AI proposals</li>
+            <li><Check size={13} /> No crawling of pages you didn't clip</li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="ld-usecases">
+        <h2 data-reveal>One clipper, every kind of research</h2>
+        <div className="ld-usecase-grid">
+          <div className="ld-usecase" data-reveal style={{ "--d": "0ms" }}><Camera size={17} /><b>Compare products</b><p>Specs and prices, side by side.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "90ms" }}><Home size={17} /><b>Hunt apartments</b><p>Every listing, one live table.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "180ms" }}><Briefcase size={17} /><b>Track applications</b><p>Roles, deadlines, and changes.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "270ms" }}><ChefHat size={17} /><b>Collect anything</b><p>Recipes, tools, places, articles.</p></div>
+        </div>
+      </section>
+
+      <section className="ld-final" data-reveal>
+        <Mark size={44} />
+        <h2>Stop losing what you find.</h2>
+        <button className="primary-button ld-cta" onClick={onSignIn} disabled={isSigningIn}>
+          {isSigningIn ? <LoaderCircle className="spin" size={17} /> : <ArrowUpRight size={17} />}
+          Start clipping — it's free
+        </button>
+      </section>
+
+      <footer className="ld-footer">
+        <div className="brand-lockup"><Mark size={22} /><span>magpie</span></div>
+        <span>Built on Base44 · owner-scoped by design</span>
+      </footer>
+    </main>
+  );
+}

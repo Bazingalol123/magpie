@@ -1,0 +1,107 @@
+# Getting started with Magpie
+
+Magpie turns pieces of the web you find — listings, products, jobs, recipes —
+into structured, comparable, self-updating collections. This guide takes you
+from nothing to your first organized, watched Item in about five minutes.
+
+**You need:** Google Chrome, a Google account, and a copy of this repository
+(for the extension).
+
+## 1. Sign in to the dashboard
+
+Open **<https://magpieorelse.base44.app>** and click **Continue with Google**.
+That's the whole signup — your workspace is created on first sign-in and
+everything in it is visible only to you.
+
+## 2. Install the Chrome extension
+
+The extension is not on the Chrome Web Store; it loads as an *unpacked*
+extension, which takes about a minute:
+
+1. Download this repository (**Code → Download ZIP** on GitHub, then unzip —
+   or `git clone`).
+2. In Chrome, open `chrome://extensions`.
+3. Turn on **Developer mode** (toggle in the top-right corner).
+4. Click **Load unpacked** and select the repository's **`extension/`** folder.
+
+The Magpie icon appears in your toolbar (pin it via the puzzle-piece menu).
+Chrome shows a standard "developer mode extensions" notice on restart — that's
+expected for any unpacked extension.
+
+> **Why this is safe to install:** the extension is deliberately *write-only*.
+> It holds one opaque pairing token that can submit captures to your account
+> and nothing else — it cannot read your collections, your items, or anything
+> in your workspace. The full model is in the [Product Guide](PRODUCT_GUIDE.md#trust-model).
+
+## 3. Pair the extension with your account
+
+1. In the dashboard, click **Pair extension** (top-right).
+2. The dialog shows two values: an **ingest function URL** and a one-time
+   **pairing token** (shown only once; the server keeps only its hash).
+3. Click the Magpie toolbar icon. The popup opens with a "Connect Magpie
+   first" notice and its **Connection** section already expanded.
+4. Paste both values and click **Save connection**.
+
+The popup's status pill flips to **● paired** and the capture buttons light up.
+
+## 4. Capture something
+
+Open any page with something worth keeping — a product, an apartment listing,
+a recipe — and pick whichever feels natural:
+
+| Action | How |
+|---|---|
+| **Clip element** | Popup button or `Alt+Shift+M`, hover the part you want (it highlights), then press `C` — or just click it |
+| **Snip area** | Popup button, then drag a rectangle over anything, exactly like a screenshot snipping tool |
+| **Save page** | Popup button; captures the page's title, description, and visible text |
+| **Right-click** | Any selected text, link, or image → *Save … to Magpie* |
+
+You don't choose a destination — that's the point. A toast tells you what
+happened: saved to an existing Collection, a new Collection was created, or it
+needs a quick review (with a link straight to it).
+
+## 5. Watch it become structured
+
+Open the dashboard. Your capture is now an **Item** — a structured row (price,
+title, whatever fits its type) inside a **Collection** that Magpie chose or
+created. Click the row for the full picture: extracted fields, the original
+screenshot and captured text, source link, and update history.
+
+If Magpie wasn't confident, the capture sits in **Needs review** (amber button,
+top bar) instead of polluting a collection. From there you decide in one click:
+accept Magpie's suggestion, move it to a collection you pick, create a new
+collection (optionally under a new Project), or dismiss it.
+
+## 6. Keep it current
+
+- In an Item's detail panel, **Check source now** re-reads the source page.
+- Ask Magpie (or use the detail panel) to create a **watch** — hourly, daily,
+  or weekly automatic checks. Real changes appear as evidence-backed history:
+  `rent €1,420 → €1,340`.
+- Some sites (rentals, flights, anything behind a login) block server checks.
+  Magpie doesn't pretend: the Item shows a clear "source requires sign-in"
+  state — and here's the trick: **just visit the page yourself**. The
+  extension notices you're on a page you saved, quietly re-captures it in your
+  logged-in browser, and the Item heals itself, watch and all. On by default;
+  toggle it off in the popup any time.
+
+## 7. Ask Magpie
+
+Click **Ask Magpie** in the dashboard for a conversation grounded in your
+actual data: *"What needs my attention?"*, *"Compare the Sony with the
+Nikon"*, *"Why did this land in Cameras?"*, *"Watch this daily."* It answers
+only from what you've saved — never invented facts — and every action it takes
+runs through the same owner-checked backend as the buttons.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Popup says "not connected" | Re-open **Pair extension** in the dashboard and paste fresh values — tokens are shown only once |
+| Capture buttons do nothing on a page | Chrome system pages (`chrome://…`, the Web Store) block all extensions; try a normal site |
+| Pressing `C` doesn't clip | Reload the extension at `chrome://extensions` — and note clicking the highlighted element always works too |
+| Old tabs ignore new extension features | Reload the extension once; it re-equips all open tabs automatically |
+| An Item shows "blocked" | That source needs a login; visit the page in your browser and Magpie updates it from there |
+
+Next: the [Product Guide](PRODUCT_GUIDE.md) for every feature in depth, or the
+[API reference](API.md) if you're integrating.

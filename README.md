@@ -1,0 +1,153 @@
+# Magpie
+
+**Clip the web. Turn scattered evidence into structured information that stays
+useful.**
+
+Magpie is a Chrome MV3 extension, Base44 backend, and realtime dashboard.
+Capture a product, listing, job, recipe, article, place, or vendor. Magpie
+preserves the evidence, understands the object type, organizes it into a
+reusable Collection, extracts comparable fields, routes uncertainty to you
+instead of guessing, and keeps source-backed fields current — even behind
+login walls, by piggybacking on your own browsing.
+
+**Production:** <https://magpieorelse.base44.app>
+
+## Documentation
+
+| Read this | If you want to |
+|---|---|
+| [**Getting Started**](docs/GETTING_STARTED.md) | Sign in, install the unpacked extension, pair it, and make your first capture in ~5 minutes |
+| [**Product Guide**](docs/PRODUCT_GUIDE.md) | Understand every feature: capture modes, auto-organization, review, watches, refresh-on-revisit, Ask Magpie, and the trust model |
+| [**API Reference**](docs/API.md) | Call the backend: both principals, every endpoint, typed outcomes, and reason codes |
+| [Product Charter](docs/PRODUCT_CHARTER.md) | The authoritative product intent and boundaries |
+| [docs/README.md](docs/README.md) | The full internal documentation map |
+
+## Product loop
+
+```text
+capture -> understand -> organize -> review -> compare -> refresh
+```
+
+- **Project:** optional purpose, such as "Buy a camera" or "Move to Berlin."
+- **Collection:** reusable object type and schema.
+- **Item:** one structured Record inside a Collection.
+- **Capture:** source evidence behind an Item.
+- **Update:** a trusted source-backed field change.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  EXT["MV3 extension<br/>write-only capture"] -->|"plain fetch + paired token"| INGEST["ingest-clip"]
+  EXT -->|"revisit a saved page"| REFRESHCAP["refresh-capture"]
+  INGEST --> ROUTER["AI Gateway routing code agent"]
+  ROUTER --> VALIDATOR["deterministic validator"]
+  VALIDATOR --> MODEL["Project + Collection + Item + RoutingDecision"]
+
+  DASH["authenticated dashboard<br/>SDK + realtime"] --> MODEL
+  DASH --> REVIEW["resolve-routing<br/>delete-record"]
+  REVIEW --> MODEL
+  DASH --> CHAT["magpie_organizer Agent"]
+  CHAT --> TOOLS["owner-validating function tools"]
+  TOOLS --> MODEL
+
+  WATCH["WatchRule sweeps"] --> ENRICH["enrich-record"]
+  REFRESHCAP --> HISTORY["Enrichment history"]
+  ENRICH --> HISTORY
+  HISTORY --> DASH
+```
+
+AI proposes; deterministic code decides. The capture routing agent suggests
+Project and Collection placement; server code validates every proposal and
+owns every write. The `magpie_organizer` Agent is the user-facing intelligence
+layer — bounded owner context, comparisons, routing explanations, and watch
+management through four backend tools, with no direct entity access and no
+memory.
+
+## MV3 trust boundary
+
+The extension does **not** import `@base44/sdk`. It stores an opaque paired
+token in `chrome.storage.local` and submits bounded evidence through plain
+`fetch`. It can submit captures and refreshes and receive safe status; it
+cannot read Projects, Collections, Items, Captures, routing decisions,
+updates, watches, or Agent conversations. Its refresh-on-revisit memory is a
+local list of URLs it itself captured — the server never sends owner data to
+the extension.
+
+## Backend coverage
+
+| Surface | Load-bearing use |
+|---|---|
+| Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `ExtensionInstall` |
+| Backend functions | 14 deployed: pairing, ingestion, routing, correction, deletion, refresh, enrichment, sweeps, and four Agent tools |
+| AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
+| Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
+| Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
+| File storage | Browser-captured screenshot and snip evidence |
+| Auth and RLS | Google dashboard identity, separate hashed extension pairing, owner isolation on every row |
+| Deployment | Linked Base44 app, targeted function releases, Agent sync, hosted Vite site |
+
+## Current status
+
+Deployed and live-verified in production:
+
+- six capture modes including a drag-to-snip visual tool, with
+  layout-independent keyboard shortcuts and status-aware toasts;
+- existing/new/review automatic routing with semantic Project assignment and
+  capture-time duplicate detection (`content_hash`);
+- a Needs-review workflow: accept / move / create (with inline Project
+  creation) / dismiss, deep-linked from capture toasts;
+- permanent Item deletion with a full server-owned cascade;
+- watches with exponential backoff, auto-pause after three blocked checks, and
+  refresh-on-revisit that heals blocked Items from the owner's own browser;
+- the authenticated `magpie_organizer` Agent with four owner-validating tools;
+- a static CSS-3D landing page and a realtime dashboard with review, deletion,
+  monitoring, and comparison surfaces.
+
+Release gates: 108/108 Deno tests; all 14 backend entry points type-check; the
+production build passes; extension scripts parse; no extension SDK import;
+live smoke tests cover authentication, typed 404s, the deletion cascade, and a
+real browser-token refresh that updated a blocked Item end to end.
+
+## Local development
+
+```powershell
+npm install
+npx.cmd base44 whoami
+npx.cmd base44 dev
+```
+
+Load `extension/` through `chrome://extensions` as an unpacked extension —
+full steps in [Getting Started](docs/GETTING_STARTED.md).
+
+## Verify
+
+```powershell
+$magpieDeno = "$env:USERPROFILE\.deno\bin\deno.exe"
+& $magpieDeno test --allow-env --allow-read tests
+
+$entryFiles = (Get-ChildItem -Path base44\functions -Filter entry.ts -Recurse).FullName
+& $magpieDeno check $entryFiles
+
+npm.cmd run build
+rg -n "@base44/sdk" extension
+```
+
+The last command must return no matches. Do not deploy without explicit
+approval; `npx base44 agents push` synchronizes the complete local Agent
+directory.
+
+## Repository map
+
+```text
+base44/entities/        Owner-scoped Base44 schemas
+base44/functions/       14 backend functions (ingest, routing, review, refresh, Agent tools)
+base44/shared/          Deterministic validation and reusable backend logic
+extension/              MV3 picker, snip tool, worker, and pairing popup
+src/                    Landing page and realtime dashboard
+tests/                  108 pure Deno fixtures
+docs/                   User docs, API reference, charter, and engineering history
+```
+
+The original V1 README is preserved at
+[docs/README_V1_ARCHIVE.md](docs/README_V1_ARCHIVE.md).

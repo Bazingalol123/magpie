@@ -1,0 +1,375 @@
+# Magpie build guide
+
+This guide follows the build in dependency order. Check each box only after completing its verification step.
+
+## V1 — capture, structure, and refresh
+
+### 1. Define the data boundary
+
+- [x] **Build:** Replace the starter `Task` schema with `Clip`, `Collection`, `Record`, `Enrichment`, `WatchRule`, and `ExtensionInstall`. Owner identity lives on each row so dashboard reads can be owner scoped.
+- **Files:** `base44/entities/*.jsonc`, `base44/config.jsonc`
+- **Verify:** Run `npx base44 types generate`; the generated registry contains the product entities and no `Task` entry.
+
+### 2. Pair an extension securely
+
+- [x] **Build:** Add `create-extension-pairing`. A signed-in dashboard user receives one opaque browser token; only its SHA-256 hash and owner binding are persisted.
+- **Files:** `base44/entities/extension-install.jsonc`, `base44/functions/create-extension-pairing/entry.ts`, `base44/shared/auth.ts`, `src/App.jsx`
+- **Verify:** Click **Pair extension** while signed in. Copy the token, close the dialog, then confirm no raw token is available from an `ExtensionInstall` entity read.
+
+### 3. Add backend-only ingestion
+
+- [x] **Build:** Add `ingest-clip`, which authenticates the calling principal, validates a bounded clip payload, uploads an optional screenshot through Base44 file storage, and persists only through `base44.asServiceRole`.
+- **Files:** `base44/functions/ingest-clip/entry.ts`, `base44/shared/*.ts`
+- **Verify:** Invoke the function with a valid bearer token and confirm it returns a `clip_id`; invoke it without one and confirm it returns `401`.
+
+### 4. Classify clips into records
+
+- [x] **Build:** Add `classify-clip`, which uses the Base44 AI gateway to choose or define a Collection, then creates a structured Record.
+- **Files:** `base44/functions/classify-clip/entry.ts`, `base44/shared/*.ts`
+- **Verify:** Classify a product clip and a recipe clip. Confirm each creates a Record whose fields conform to its Collection schema.
+
+### 5. Add enrichment and watch sweeps
+
+- [x] **Build:** Add `enrich-record` to revisit a source and append an Enrichment only when trusted fields differ. Add `sweep-watches` to process active rules in batches.
+- **Files:** `base44/functions/enrich-record/entry.ts`, `base44/functions/sweep-watches/entry.ts`, `base44/shared/*.ts`
+- **Verify:** Update a mocked source field, invoke enrichment, and confirm one history row records the old and new values. A repeat invocation with unchanged data creates no additional row.
+
+### 6. Build the authenticated dashboard
+
+- [x] **Build:** Replace the Todo UI with a dashboard that loads owner-scoped data, subscribes to Record changes, and displays detail plus enrichment history.
+- **Files:** `src/App.jsx`, `src/api/base44Client.js`, `src/index.css`, `src/components/*.jsx`
+- **Verify:** Sign in, open the dashboard in two tabs, then create a Record from one tab. The second tab shows the new row without a reload.
+
+### 7. Add the extension handoff
+
+- [x] **Build:** Create an MV3 extension with a global `Alt+Shift+M` picker shortcut, dashboard launcher, and a worker that stores its token in `chrome.storage.local` and calls the backend using plain `fetch`.
+- **Files:** `extension/manifest.json`, `extension/content.js`, `extension/service-worker.js`, extension styles
+- **Verify:** Reload the extension, clip an element, let the worker go idle, and clip again. Both calls authenticate and no extension file imports `@base44/sdk`.
+
+### 8. Finish product documentation
+
+- [x] **Build:** Document architecture, the security boundary, Base44 surface coverage, and deployment.
+- **Files:** `README.md`, `docs/ENGINEERING_NOTES.md`, `docs/DECISIONS.md`
+- **Verify:** From a fresh checkout, the README links here, explains the MV3 boundary, names the asymmetric trust boundary, and identifies every load-bearing Base44 surface.
+
+### 9. Validate local resources
+
+- [x] **Build:** Run local checks and generate resource types.
+- **Files:** `base44/.types/types.d.ts`
+- **Verify:** Run `npm run build` and `npx base44 types generate`; both exit successfully and the generated registries contain the implemented resources.
+
+### 10. Deploy the application
+
+- [ ] **Build:** Deploy Base44 resources and the dashboard after reviewing the remote change set.
+- **Files:** deployed Base44 resources
+- **Verify:** In the deployed dashboard, complete the documented clean-pairing demo and confirm realtime classification and enrichment.
+
+## V2 — purpose and reliability
+
+### 11. Generalize Missions
+
+- [ ] **Build:** Replace the apartment-only Mission contract with reusable goal, constraint, ranking, watch, and lifecycle fields. Retain schema fields during compatibility work.
+- **Files:** `base44/entities/mission.jsonc`, `base44/functions/create-mission/entry.ts`
+- **Verify:** Create apartment and laptop Missions. Confirm both remain active and neither creation archives the other.
+
+### 12. Make captures and candidates Mission-aware
+
+- [ ] **Build:** Add bounded capture identity and processing fields, plus top-level Record fields for Mission filtering, ranking, freshness, and decision state.
+- **Files:** `base44/entities/clip.jsonc`, `base44/entities/record.jsonc`, `base44/shared/clip.ts`, `base44/functions/extension-context/entry.ts`, `extension/*`
+- **Verify:** Submit one `idempotency_key` twice and confirm the backend reuses the first Clip. Confirm a classified Record exposes Mission, schema version, decision, score, freshness, and processing fields.
+
+### 13. Extract against the transitional Mission schema
+
+- [ ] **Build:** Add Mission-constrained extraction without allowing the AI to mutate the stored schema. Preserve Collection and `fields_json` compatibility.
+- **Files:** `base44/shared/classification.ts`, `base44/functions/ingest-clip/entry.ts`, `base44/functions/classify-clip/entry.ts`
+- **Verify:** Capture one candidate into each of two Missions. Confirm every emitted field belongs to the selected transitional schema.
+
+### 14. Expose multiple Missions in the dashboard
+
+- [ ] **Build:** Replace the single active-Mission assumption with explicit Mission selection and a general Mission creator.
+- **Files:** `src/App.jsx`, `src/index.css`
+- **Verify:** Switch between two active Missions without reloading; each view shows only its associated Records and policy summary.
+
+### 15. Validate the V2 foundation
+
+- [x] **Build:** Generate Base44 types, build the frontend, and record platform or migration surprises.
+- **Files:** `base44/.types/types.d.ts`, `docs/ENGINEERING_NOTES.md`, `docs/DECISIONS.md`
+- **Verify:** `npx base44 types generate` and `npm run build` both exit successfully.
+
+### 16. Verify local authentication
+
+- [ ] **Build:** Configure the browser SDK from the app ID and local backend URL injected by `base44 dev`, while retaining deployed defaults.
+- **Files:** `src/api/base44Client.js`
+- **Verify:** Start with `npx base44 dev`, complete Google login from the Vite URL, and confirm the callback returns locally with `base44.auth.me()` resolving the signed-in user.
+
+### 17. Harden enrichment outcomes
+
+- [x] **Build:** Replace generic source-fetch errors and heuristic title mutation with typed, persisted enrichment outcomes and watch backoff.
+- **Files:** `docs/API_AND_FAILURE_MAP.md`, `base44/shared/enrichment-v2.ts`, `base44/entities/record.jsonc`, `base44/entities/watch-rule.jsonc`, `base44/functions/enrich-record/entry.ts`, `base44/functions/sweep-watches/entry.ts`, `src/App.jsx`
+- **Verify:** Exercise changed, unchanged, unreachable, blocked, not-found, rate-limited, invalid-content, unsupported-field, and suspicious-data fixtures. Confirm only trusted changes mutate fields or create Enrichment rows.
+
+## V3 — automatic organization
+
+Read `docs/PRODUCT_CHARTER.md` and `docs/V3_AUTO_ORGANIZATION_PLAN.md` before starting these steps.
+
+### 18. Define and test routing outcomes
+
+- [x] **Build:** Extract a pure routing engine that can select an existing Collection, propose a new Collection, or request review without mutating durable data.
+- **Files:** `base44/shared/routing.ts`, `tests/routing.test.ts`, `base44/shared/classification.ts`
+- **Verify:** Existing, new, ambiguous, cross-owner, synonym/equivalent-schema, Mission-scoped versus global, mixed-content, malformed-AI, and AI-outage fixtures all produce the documented deterministic outcomes. Review results contain no Collection/Record mutation instruction.
+- **Verified 2026-07-24:** 17/17 fixtures passed with Node 22 TypeScript stripping and, after restoring Deno 2.9.4, with native `deno test tests/routing.test.ts`; esbuild bundled `routing.ts` and `classification.ts`.
+
+### 19. Define auditable routing storage
+
+- [x] **Build:** Add `RoutingDecision` and Collection/Clip routing fields while retaining V2 compatibility.
+- **Files:** `base44/entities/routing-decision.jsonc`, `base44/entities/collection.jsonc`, `base44/entities/clip.jsonc`, `base44/.types/types.d.ts`
+- **Verify:** Definitions remain additive, generated types include the new registry and fields, and RoutingDecision is owner-readable but server-write-only. Runtime uniqueness is verified in step 20.
+- **Verified 2026-07-24:** All three JSONC definitions parsed locally, generated types include RoutingDecision and the V3 fields, and `npm run build` passed. Nothing was pushed or deployed.
+
+### 20. Route before extraction
+
+- [ ] **Build:** Replace Mission-only extraction with validated existing/new/review routing, plus an owner-scoped `resolve-routing` correction workflow.
+- **Files:** `base44/shared/classification.ts`, `base44/shared/routing-persistence.ts`, `base44/functions/ingest-clip/entry.ts`, `base44/functions/classify-clip/entry.ts`, `base44/functions/resolve-routing/entry.ts`
+- **Verify:** Under one moving Mission, apartment, neighborhood, and moving-company captures create or reuse three Collections; an ambiguous capture enters review. One accepted Clip has exactly one RoutingDecision, and retrying ingestion or `classify-clip` creates no duplicate Clip, Collection, Record, or decision.
+- **Local checkpoint 2026-07-25:** The ingest and dashboard-retry functions call the validated V3 persistence workflow. Eight in-memory persistence fixtures prove existing/new/review writes, sequential retry idempotency, AI-outage review, global routing without a Mission hint, partial-Record recovery, and a Hebrew camera capture with a formatted shekel price. `resolve-routing`, simultaneous-request serialization, owner-RLS integration, and the Chrome end-to-end matrix remain before this step can be checked.
+
+### 21. Make extension context explicit
+
+- [ ] **Build:** Default the popup to Auto-organize and make Mission an explicit optional hint. Remove the implicit Latest active Mission behavior.
+- **Files:** `extension/popup.html`, `extension/popup.js`, `extension/service-worker.js`, `base44/functions/extension-context/entry.ts`
+- **Verify:** No Mission remains selected after the user clears it, choosing a Mission affects only subsequent captures, and the extension still cannot read Collections or Records.
+- **Local checkpoint 2026-07-24:** Popup copy now defaults to Auto-organize and presents an optional Project context. `extension-context` returns `auto_organize` plus the same bounded context under `projects` and the backward-compatible `missions` key. All extension scripts parse and the extension directory has no `@base44/sdk` import. Live Chrome sleep/wake and capture checks remain.
+
+### 22. Expose routing and corrections
+
+- [ ] **Build:** Show Library, Mission Collections, realtime routing results, and the capture review inbox. Record moves as routing feedback.
+- **Files:** dashboard components and styles, routing function integration
+- **Verify:** A new Collection and Record appear live; accepting or correcting an ambiguous route updates the destination and improves the next matching fixture.
+
+### 23. Validate the V3 demo
+
+- [ ] **Build:** Harden the clean-pairing demo, update documentation with actual platform behavior, and verify all resource types and builds.
+- **Files:** `README.md`, `docs/ENGINEERING_NOTES.md`, `docs/DECISIONS.md`, generated types
+- **Verify:** In 60 seconds, clip an apartment, neighborhood guide, and moving company under **Move to Berlin**; observe three correct Collections, then show one trusted source-backed update.
+
+## V3.1.0 — product polish and bounded organization
+
+Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
+
+### 24. Freeze the V3.1 product and risk contract
+
+- [x] **Build:** Define UI vocabulary, information architecture, bounded-folder semantics, risk scoring, backend impact, migration, rollback, and sequencing.
+- **Files:** `docs/PRODUCT_CHARTER.md`, `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`, `docs/DECISIONS.md`, `docs/ENGINEERING_NOTES.md`
+- **Verify:** Every proposed change has a risk score; critical folder work has a backend gate; entity renames, arbitrary depth, and routing-aware folders are rejected.
+
+### 25. Finish the testable V3 loop
+
+- [ ] **Build:** Complete steps 20–23 before V3.1 visual work can hide or compound routing defects.
+- **Verify:** Chrome captures demonstrate existing, new, and review outcomes end to end.
+- **Checkpoint:** The route/persist fixture gate is complete (24 routing tests; 33 total Deno tests). Chrome and local Base44 persistence remain the release gate.
+- **Recalculated checkpoint 2026-07-25:** Hosted triage reproduced the actual AI contract swap (`schema` returned as a label and `fields` returned as definitions). The replacement JSON-schema contract and compatibility adapter now have four direct contract fixtures; HTML-size validation has its own hosted-limit regression. The full suite is 45/45 passing. Deployment and a clean hosted reclip remain the release gate.
+
+### 26. Improve vocabulary and visual foundations
+
+- [ ] **Build:** Apply UI-only terminology, reusable design tokens/components, and complete loading/empty/error/success states.
+- **Files:** dashboard components and styles
+- **Verify:** Project/Item/Capture labels are clear while SDK calls still use Mission/Record/Clip; responsive and keyboard checks pass.
+- **Local checkpoint 2026-07-24:** The first presentation-only slice is active: the dashboard opens to Library instead of an implicit latest Mission, Missions display as optional Projects, and Records/Candidates display as Items. Entity names, SDK calls, permissions, and routing identity are unchanged; the production build passes.
+
+### 27. Expand landing and onboarding
+
+- [ ] **Build:** Turn the current auth landing into a product story and add a first-run pairing/capture checklist.
+- **Files:** landing, authentication, and onboarding components/styles
+- **Verify:** The public landing performs no entity reads; a new user can explain Capture → Organize → Review → Refresh and complete pairing.
+
+### 28. Add application navigation
+
+- [ ] **Build:** Introduce Home, Library, Projects, Needs review, and Updates views over one owner-scoped realtime data layer.
+- **Files:** dashboard components, view state/routing, data subscriptions
+- **Verify:** Reload/deep-link behavior, owner isolation, realtime inserts, and typed failure states remain correct.
+
+### 29. Add multi-mode evidence capture
+
+- [ ] **Build:** Add element, selection, page, link, visual, and image capture choices that all submit through the same plain-fetch MV3 boundary. Store additive mode/context metadata, crop visual evidence in the browser, and attach images to routing only for visual/image captures.
+- **Files:** `extension/*`, `base44/entities/clip.jsonc`, `base44/shared/clip.ts`, `base44/shared/classification.ts`, capture/classification fixtures
+- **Verify:** Right-click selection/link/image/page actions and popup element/visual/page actions create bounded payloads; link capture performs no backend URL request; visual/image routing receives the crop; all existing routing tests pass; no extension file imports `@base44/sdk`.
+- **Local checkpoint 2026-07-25:** Source implementation is complete. Generated types include additive mode/context fields; 50/50 Deno tests, backend checks, extension syntax checks, the MV3 import check, and the Vite build pass. Keep this step unchecked until Chrome interaction and live multimodal gateway behavior are verified.
+- **Hosted checkpoint 2026-07-25:** After explicit approval, the eight-entity schema set synchronized successfully and Base44 deployed only `ingest-clip` and `classify-clip`. Hosted smoke checks returned app `200`, CORS preflight `204`, and unauthenticated ingestion `401`. Reload and exercise extension `0.2.0` before checking this step.
+
+### 29.1 Add bounded Project-aware routing agent
+
+- [x] **Build:** Replace the default single-shot proposal provider with a bounded
+  backend AI Gateway tool loop that jointly proposes optional Project context and
+  Collection routing. Keep explicit Project selection authoritative, preserve the
+  structured provider for rollback, and give the agent no entity-write tool.
+- **Files:** `base44/shared/project-routing.ts`,
+  `base44/shared/classification.ts`, `base44/shared/routing-persistence.ts`,
+  `base44/entities/routing-decision.jsonc`, Project-agent/persistence fixtures
+- **Verify:** Clear semantic Project assignment requires confidence `>= 0.90` and a
+  lead `>= 0.15`; ambiguity enters review; no match remains global; explicit context
+  wins; owner/inactive IDs are rejected; the tool loop cannot submit before reading
+  Projects and Collections and stops after four steps.
+- **Verified 2026-07-25:** 64/64 Deno tests passed, both routing entry points passed
+  `deno check`, generated types contain the additive Project audit fields, the Vite
+  build passed, extension scripts parsed, and the MV3 SDK-import check was clean. After
+  explicit approval, the eight-entity definition set synchronized and only
+  `classify-clip`/`ingest-clip` were deployed. Hosted smoke checks returned app `200`,
+  ingestion preflight `204`, and unauthenticated ingestion `401`.
+
+### 29.2 Add the bounded user-facing Magpie Agent
+
+- [x] **Build:** Add one managed `magpie_organizer` Agent as an authenticated
+  dashboard interface across Projects and Collections. Give it only owner-validating
+  context, comparison, routing-explanation, and watch-management function tools.
+  Explicitly disable Agent memory and do not grant direct entity operations.
+- **Files:** `base44/agents/magpie_organizer.jsonc`,
+  `base44/functions/agent-*/entry.ts`, shared Agent tool helpers and fixtures,
+  `src/App.jsx`, `src/index.css`
+- **Verify:** Cross-owner IDs return no partial data; context and comparison outputs
+  stay bounded; watch creation/update is idempotent; Agent configuration contains no
+  entity tools and has memory disabled; dashboard conversations stream through the
+  normal authenticated SDK; all existing routing tests and the MV3 SDK-import check
+  still pass.
+- **Release gate:** Keep this step local until Chrome/dashboard regression checks
+  pass and the owner separately approves function deployment, full Agent
+  synchronization, and site deployment.
+- **Local checkpoint 2026-07-25:** Source implementation is complete. The configured
+  Agent has four function tools, no entity tools, and memory disabled. The full Deno
+  suite passes 72/72, every backend function entry point passes `deno check`, the
+  production frontend builds, extension scripts parse, and the MV3 SDK-import check
+  is clean. At this local checkpoint, `agents push`, function deployment, and site
+  deployment had not been run.
+  Keep this step unchecked until the separately approved hosted Agent can complete
+  real conversations and tool calls.
+- **Hosted checkpoint 2026-07-25:** After explicit approval, Base44 deployed the four
+  Agent tool functions, created `magpie_organizer` through the full Agent
+  synchronization, and deployed the dashboard to
+  `https://magpieorelse.base44.app`. No entities or extension files were deployed.
+  A production smoke check found that the SDK auth exception initially escaped as
+  `500`; `requireUser` now maps only authentication-shaped SDK errors to the
+  documented `401` while preserving unrelated failures. The revised suite passes
+  76/76. Hosted checks return app `200` and a safe JSON `401` from all four functions
+  without authentication. A signed-in dashboard conversation and tool call remain
+  the final check before ticking this step.
+- **Signed-in checkpoint 2026-07-25:** A scripted authenticated conversation through
+  `base44 exec` (functionally the dashboard SDK path) verified all four tools:
+  `agent-workspace-context` answered only from stored owner data,
+  `agent-explain-organization` and `agent-compare-items` returned bounded grounded
+  results, and `agent-configure-monitoring` created exactly one WatchRule with an
+  idempotent retry confirmed against the entity. Function logs showed only `INFO`
+  entries. Step 29.2 is complete.
+
+### 29.3 Add owner routing correction (`resolve-routing`)
+
+- [x] **Build:** Implement the owner-only correction workflow for `needs_review`
+  Captures: accept the stored suggestion, redirect to an eligible existing
+  Collection, or create an owner-approved bounded Collection. Add a dashboard
+  Needs-review panel with those actions and a `?review=<clip_id>` deep link, and
+  make extension toasts routing-status-aware with a link back to the dashboard.
+- **Files:** `base44/shared/routing-resolution.ts`,
+  `base44/functions/resolve-routing/entry.ts`, `tests/routing-resolution.test.ts`,
+  `src/App.jsx`, `src/index.css`, `extension/content.js`, `extension/content.css`,
+  `extension/service-worker.js`
+- **Verify:** Accept/redirect/create each produce at most one Collection and one
+  Record; cross-owner targets return `403`; non-review Clips return `409`; identical
+  retries are idempotent; conflicting retries return `409`; unsafe owner-supplied
+  names are rejected; the original RoutingDecision proposal stays auditable via
+  `corrected_collection_id`/`corrected_at`; the extension pairing principal cannot
+  call the function.
+- **Hosted checkpoint 2026-07-25:** After explicit approval, `resolve-routing` was
+  deployed with a targeted function deploy and the dashboard was redeployed. The
+  first authenticated smoke test returned `500` for a missing Clip because the
+  hosted SDK throws `Base44Error: Entity ... not found` from `get()` instead of
+  returning null; a `getOrNull` mapping restored the documented `404`, a fixture
+  pinned the behavior, and the redeployed function returned
+  `{"error":"Capture not found"}` with `404`. Unauthenticated calls return a safe
+  JSON `401`. The suite passes 87/87. No entities or Agents were pushed.
+
+### 29.4 Ten-gap release: deletion, dismissal, blocked watches, review UX, chat markdown, landing
+
+- [x] **Build:** Add owner Item deletion (`delete-record` cascade), review dismissal
+  and Project-scoped creation (`resolve-routing` extensions), blocked-watch
+  auto-pause after three consecutive blocked checks, clickable URL fields, a sticky
+  dashboard header, a title-as-dropdown Project switcher, markdown rendering for
+  Agent replies, blocked-source guidance with watch pause/resume, Project creation
+  inside the review wizard, and a full static landing page with CSS-3D hero and
+  scroll-revealed storyboard.
+- **Files:** `base44/shared/record-removal.ts`, `base44/shared/routing-resolution.ts`,
+  `base44/shared/enrichment-v2.ts`, `base44/functions/delete-record/entry.ts`,
+  `base44/functions/resolve-routing/entry.ts`, `base44/functions/sweep-watches/entry.ts`,
+  `tests/record-removal.test.ts`, `tests/routing-resolution.test.ts`,
+  `tests/enrichment-v2.test.ts`, `src/App.jsx`, `src/Landing.jsx`, `src/index.css`,
+  `package.json` (react-markdown, remark-gfm)
+- **Verify:** Cascade counts, cross-owner aborts before any delete, idempotent
+  partial-state retries, dismiss happy/409/404 paths, Project validation without
+  silent global fallback, auto-pause threshold cases; the landing performs no
+  entity reads and honors reduced motion.
+- **Hosted checkpoint 2026-07-25:** After pre-approved batch deployment,
+  `delete-record`, `resolve-routing`, and `sweep-watches` were deployed with a
+  targeted functions deploy and the site was redeployed. Smoke checks:
+  unauthenticated `delete-record` returns a safe JSON `401`; authenticated calls
+  with nonexistent IDs return `404 {"error":"Item not found"}` and
+  `404 {"error":"Capture not found"}`; the live page serves the new bundle; no
+  error-level function logs. The suite passes 102/102. No entities or Agents were
+  pushed.
+
+### 29.5 getOrNull 404 sweep and extension popup redesign
+
+- [x] **Build:** Convert every remaining bare `entity.get()` on a possibly-missing
+  ID to the shared `getOrNull` pattern (`base44/shared/service-entities.ts`) across
+  `classify-clip`, `ingest-clip`, `enrich-record`/`enrichment-v2`, the four
+  `agent-*` functions, `configureWatch`, and `routing-persistence`. Redesign the
+  extension popup: brand-matched header, connection-aware pairing state with a
+  first-run setup callout, an icon-led capture hierarchy with the keyboard
+  shortcut, and a polished toast entrance.
+- **Verify:** Two throwing-get fixtures pin `processStoredClip` and
+  `configureWatch`; the suite passes 104/104; extension scripts parse and the
+  SDK-import guard stays clean.
+- **Hosted checkpoint 2026-07-25:** After approval, all 13 functions were
+  redeployed. A synthetic live happy-path run verified dismiss and the
+  `delete-record` cascade end to end in production with exact counts and
+  idempotent `404` retries, leaving no synthetic rows. The extension redesign is
+  local-only (reload the unpacked extension); no entities, Agents, or site were
+  deployed.
+
+### 29.6 Refresh-on-revisit and capture-time duplicate status
+
+- [x] **Build:** New pairing-authenticated `refresh-capture` function: matches the
+  owner's most recent Record by exact `source_url`, diffs watched fields from
+  browser-supplied bounded text through the shared enrichment guards
+  (`refreshRecordFromEvidence`), appends Enrichment rows, restores freshness, and
+  reactivates auto-paused watches (`reactivateWatchesAfterRefresh`). `ingest-clip`
+  gains an owner + `content_hash` duplicate check with an additive
+  `capture_status` response field. The extension remembers the URLs it captured
+  (local-only, capped at 500), auto-refreshes on revisit (default on, popup
+  toggle, 12-hour per-URL rate limit), and shows a toast only when a refresh
+  changes something or a capture is a duplicate.
+- **Files:** `base44/shared/enrichment-v2.ts`,
+  `base44/functions/refresh-capture/entry.ts`,
+  `base44/functions/ingest-clip/entry.ts`, `tests/enrichment-v2.test.ts`,
+  `extension/service-worker.js`, `extension/content.js`, `extension/popup.html`,
+  `extension/popup.css`, `extension/popup.js`
+- **Verify:** Refresh fixtures cover updated, unchanged (restores blocked
+  freshness), suspicious (mutates nothing), and watch reactivation including
+  cross-owner isolation; 108/108 pass; all 14 entries type-check; extension
+  scripts parse; the SDK-import guard is clean.
+- **Hosted checkpoint 2026-07-25:** After approval, `refresh-capture` and
+  `ingest-clip` were deployed. A live smoke run through a real (immediately
+  revoked) pairing token verified the full chain in production: unauthenticated
+  `401`; a price change in browser-supplied text produced
+  `{"outcome":"updated","change_count":1}`, one `extension-refresh-v1`
+  Enrichment row (`$50 -> $40`), restored `fresh` freshness, and reactivated
+  the auto-paused watch with its failure count reset; an uncaptured URL
+  returned `no_match`. The synthetic Item was cascade-deleted and the smoke
+  pairing deactivated.
+
+### 30. Add bounded folder persistence
+
+- [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.
+- **Files:** folder fixtures, entity definitions, backend functions, generated types
+- **Verify:** Cross-owner, duplicate sibling, cycle, depth, archive/restore, retry, Unfiled, and no-routing-impact cases pass locally.
+
+### 31. Add folder UI and harden V3.1
+
+- [ ] **Build:** Add explicit folder controls, then drag-and-drop with rollback; complete accessibility, responsive, migration, rollback, and demo checks.
+- **Verify:** Users can organize Collections without changing Mission scope or routing, and the complete V3 flow remains testable from Chrome.

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Magpie Clip",
+  "version": "0.2.0",
+  "description": "Clip a useful part of any page into your Magpie library.",
+  "permissions": ["activeTab", "storage", "tabs", "scripting", "contextMenus"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Clip with Magpie",
+    "default_popup": "popup.html"
+  },
+  "commands": {
+    "start-picker": {
+      "suggested_key": {
+        "default": "Alt+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Start the Magpie element picker"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

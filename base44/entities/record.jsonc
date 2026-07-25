@@ -1,0 +1,54 @@
+{
+  "name": "Record",
+  "description": "A structured row emitted from a classified clip.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user that owns the record" },
+    "collection_id": { "type": "string", "description": "Collection containing this row" },
+    "clip_id": { "type": "string", "description": "Original captured clip" },
+    "fields_json": { "type": "string", "description": "JSON-encoded values conforming to the collection schema" },
+    "source_url": { "type": "string", "format": "uri", "description": "Copied source URL for detail and enrichment" },
+    "last_check_at": { "type": "string", "format": "date-time", "description": "Most recent completed enrichment attempt" },
+    "last_enriched_at": { "type": "string", "format": "date-time", "description": "Most recent trusted successful enrichment check" },
+    "enrichment_status": {
+      "type": "string",
+      "enum": ["idle", "checking", "changed", "unchanged", "no_extractable_fields", "suspicious_data", "blocked", "not_found", "rate_limited", "unreachable", "invalid_content", "failed"],
+      "default": "idle",
+      "description": "Typed outcome of the latest source check"
+    },
+    "enrichment_error_code": { "type": "string", "description": "Stable machine-readable latest enrichment problem" },
+    "enrichment_error_message": { "type": "string", "description": "User-safe latest enrichment problem" },
+    "consecutive_check_failures": { "type": "integer", "default": 0, "description": "Consecutive non-successful source checks" },
+    "mission_id": { "type": "string", "description": "Decision mission containing this candidate" },
+    "schema_version": { "type": "integer", "default": 1, "description": "Mission schema version used for extraction" },
+    "decision_status": { "type": "string", "enum": ["inbox", "shortlisted", "contacted", "rejected", "decided", "expired"], "default": "inbox", "description": "Where this candidate stands in the decision" },
+    "processing_status": { "type": "string", "enum": ["ready", "needs_review", "failed"], "default": "ready", "description": "Whether extraction needs user attention" },
+    "score": { "type": "number", "description": "Deterministic fit score from zero to one hundred" },
+    "confidence": { "type": "number", "description": "Extraction confidence from zero to one" },
+    "freshness": { "type": "string", "enum": ["fresh", "stale", "unreachable", "blocked"], "default": "fresh" },
+    "next_action": { "type": "string", "description": "Most useful next action for the user" },
+    "last_changed_at": { "type": "string", "format": "date-time", "description": "Most recent meaningful source change" }
+  },
+  "required": ["owner_id", "collection_id", "clip_id", "fields_json", "source_url"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "WatchRule",
+  "description": "An active instruction to revisit a record on a schedule.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user that owns the watch" },
+    "record_id": { "type": "string", "description": "Record to re-check" },
+    "natural_language_condition": { "type": "string", "description": "What changes should matter to the user" },
+    "frequency": {
+      "type": "string",
+      "enum": ["hourly", "daily", "weekly"],
+      "default": "daily",
+      "description": "Requested sweep cadence"
+    },
+    "active": { "type": "boolean", "default": true, "description": "Whether this watch is eligible for sweeps" },
+    "last_checked_at": { "type": "string", "format": "date-time", "description": "Last completed sweep for this watch" },
+    "last_status": { "type": "string", "description": "Typed result of the latest source check" },
+    "last_error_code": { "type": "string", "description": "Stable machine-readable latest failure" },
+    "failure_count": { "type": "integer", "default": 0, "description": "Consecutive retry/backoff counter" },
+    "next_check_at": { "type": "string", "format": "date-time", "description": "Next eligible source-check time" }
+  },
+  "required": ["owner_id", "record_id", "natural_language_condition", "frequency", "active"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    }
+  }
+}

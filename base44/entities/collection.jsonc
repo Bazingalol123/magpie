@@ -1,0 +1,41 @@
+{
+  "name": "Collection",
+  "description": "A user-owned table shape inferred from similar clips.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user that owns the collection" },
+    "name": { "type": "string", "description": "Human-readable collection name" },
+    "description": { "type": "string", "maxLength": 240, "description": "Bounded description used to explain and validate routing" },
+    "mission_id": { "type": "string", "description": "Optional Mission scope; absent means the global Library" },
+    "normalized_key": { "type": "string", "maxLength": 180, "description": "Deterministic owner, scope, and normalized-name key used to prevent duplicate Collections" },
+    "schema_json": { "type": "string", "description": "JSON-encoded inferred field schema" },
+    "schema_signature": { "type": "string", "maxLength": 500, "description": "Deterministic normalized field-name and type signature" },
+    "schema_version": { "type": "integer", "minimum": 1, "default": 1, "description": "Version of the reusable Collection schema" },
+    "routing_profile_json": { "type": "string", "description": "JSON-encoded bounded aliases and correction cues used by routing" },
+    "status": { "type": "string", "enum": ["active", "archived"], "default": "active", "description": "Whether new captures may route into this Collection" },
+    "origin": { "type": "string", "enum": ["agent", "user", "legacy"], "default": "legacy", "description": "How this Collection was first established" },
+    "is_shared_readonly": { "type": "boolean", "default": false, "description": "Reserved for future read-only sharing" }
+  },
+  "required": ["owner_id", "name", "schema_json"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    }
+  }
+}

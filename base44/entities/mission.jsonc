@@ -1,0 +1,27 @@
+{
+  "name": "Mission",
+  "description": "A bounded, user-owned decision Magpie helps keep current.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user who owns this mission" },
+    "title": { "type": "string", "description": "Outcome the user is trying to achieve" },
+    "goal": { "type": "string", "description": "Plain-language outcome and context for this decision" },
+    "template": { "type": "string", "enum": ["custom", "apartment", "product", "job"], "default": "custom" },
+    "domain": { "type": "string", "description": "Backward-compatible decision domain label" },
+    "schema_json": { "type": "string", "description": "JSON-encoded extraction fields owned by this mission" },
+    "schema_version": { "type": "integer", "default": 1, "description": "Version stamped onto candidates extracted with this schema" },
+    "constraints_json": { "type": "string", "description": "JSON-encoded hard constraints and preferences" },
+    "ranking_policy_json": { "type": "string", "description": "JSON-encoded deterministic scoring weights and hard constraints" },
+    "watch_policy_json": { "type": "string", "description": "JSON-encoded fields and cadence that deserve monitoring" },
+    "status": { "type": "string", "enum": ["active", "paused", "decided", "archived"], "default": "active" },
+    "deadline": { "type": "string", "format": "date-time", "description": "Optional decision deadline" },
+    "briefed_at": { "type": "string", "format": "date-time", "description": "Most recent generated decision brief" }
+  },
+  "required": ["owner_id", "title", "constraints_json", "status"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "$or": [{ "data.owner_id": "{{user.id}}" }, { "user_condition": { "role": "admin" } }] },
+    "update": { "$or": [{ "data.owner_id": "{{user.id}}" }, { "user_condition": { "role": "admin" } }] },
+    "delete": { "$or": [{ "data.owner_id": "{{user.id}}" }, { "user_condition": { "role": "admin" } }] }
+  }
+}

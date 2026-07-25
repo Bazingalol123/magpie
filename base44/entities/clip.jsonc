@@ -1,0 +1,63 @@
+{
+  "name": "Clip",
+  "description": "An unstructured capture submitted by the Magpie extension.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user that owns this capture" },
+    "source_url": { "type": "string", "format": "uri", "description": "Page where the capture originated" },
+    "context_url": { "type": "string", "format": "uri", "description": "Optional containing page when source_url is a clicked link target" },
+    "capture_mode": {
+      "type": "string",
+      "enum": ["element", "selection", "page", "link", "visual", "image"],
+      "default": "element",
+      "description": "Browser evidence mode used for this capture"
+    },
+    "raw_html": { "type": "string", "description": "Sanitized HTML fragment captured from the page" },
+    "raw_text": { "type": "string", "description": "Visible text captured from the selected element" },
+    "screenshot_id": { "type": "string", "description": "Optional Base44 public file URL for the captured image" },
+    "captured_at": { "type": "string", "format": "date-time", "description": "When the extension captured the element" },
+    "collection_id": { "type": "string", "description": "Collection selected only after validated routing" },
+    "mission_id": { "type": "string", "description": "Optional explicit context hint, or the active owner Project assigned by validated backend routing" },
+    "routing_status": {
+      "type": "string",
+      "enum": ["pending", "routed_existing", "created_collection", "needs_review", "failed"],
+      "default": "pending",
+      "description": "Validated V3 organization outcome"
+    },
+    "routing_confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "Clamped confidence attached to the validated routing result" },
+    "routing_reason_code": { "type": "string", "maxLength": 80, "description": "Primary allowlisted reason for the routing outcome" },
+    "capture_intent": { "type": "string", "enum": ["compare", "watch", "act", "reference", "contact", "ignore"], "default": "compare", "description": "Why the user captured this candidate; contact and ignore are retained for V1 rows" },
+    "idempotency_key": { "type": "string", "description": "Opaque browser-generated key used to make capture retries safe" },
+    "content_hash": { "type": "string", "description": "SHA-256 fingerprint of normalized URL and selected text" },
+    "attempt_count": { "type": "integer", "default": 0, "description": "Number of processing attempts" },
+    "processing_error": { "type": "string", "description": "Last safe processing failure message" },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "processing", "ready", "needs_review", "duplicate", "failed", "classified"],
+      "default": "queued",
+      "description": "Classification lifecycle state"
+    }
+  },
+  "required": ["owner_id", "source_url", "raw_text", "captured_at", "status"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "delete": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    }
+  }
+}

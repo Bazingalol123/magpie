@@ -1,0 +1,55 @@
+{
+  "name": "RoutingDecision",
+  "description": "The auditable validated organization decision for one captured Clip.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user that owns the source Clip and routing decision" },
+    "clip_id": { "type": "string", "description": "Clip resolved by this decision; persistence enforces one decision per Clip" },
+    "mission_id": { "type": "string", "description": "Explicit or deterministically validated Mission/Project context used for Collection routing" },
+    "project_assignment": {
+      "type": "string",
+      "enum": ["explicit", "agent", "global", "review"],
+      "description": "How optional Project context was resolved; absent on legacy decisions"
+    },
+    "project_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validated confidence for the optional Project assignment"
+    },
+    "project_reason_codes_json": {
+      "type": "string",
+      "description": "JSON-encoded allowlisted Project-assignment reasons"
+    },
+    "project_candidate_scores_json": {
+      "type": "string",
+      "description": "JSON-encoded bounded active-owner Project IDs and scores used for deterministic margin validation"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["existing", "new", "review", "failed"],
+      "description": "Validated route outcome; review is expected and failed is reserved for unexpected durable-processing faults"
+    },
+    "selected_collection_id": { "type": "string", "description": "Validated existing or newly created Collection, absent for unresolved review" },
+    "suggested_name": { "type": "string", "maxLength": 48, "description": "Bounded proposed Collection name retained for review and audit" },
+    "suggested_schema_json": { "type": "string", "description": "JSON-encoded bounded proposed schema retained for review and audit" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "Clamped confidence of the validated decision" },
+    "reason_codes_json": { "type": "string", "description": "JSON-encoded allowlisted deterministic routing reasons" },
+    "classifier_version": { "type": "string", "maxLength": 80, "description": "Routing contract or classifier version that produced the decision" },
+    "corrected_collection_id": { "type": "string", "description": "Owner-selected destination after a routing correction" },
+    "decided_at": { "type": "string", "format": "date-time", "description": "When the original routing outcome became durable" },
+    "corrected_at": { "type": "string", "format": "date-time", "description": "When the owner resolved or corrected the route" }
+  },
+  "required": ["owner_id", "clip_id", "outcome", "confidence", "reason_codes_json", "classifier_version", "decided_at"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {
+      "$or": [
+        { "data.owner_id": "{{user.id}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}
