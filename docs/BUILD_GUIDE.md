@@ -363,6 +363,93 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   returned `no_match`. The synthetic Item was cascade-deleted and the smoke
   pairing deactivated.
 
+### 29.7 Remove RLS admin bypass (security incident fix)
+
+- [x] **Build:** Live incident 2026-07-26: the app owner's account carries
+  `role: "admin"`, and every owner-scoped entity's RLS included an admin
+  `$or` bypass on read (and update/delete for several entities), letting the
+  admin account read/edit/delete any owner's data through the ordinary
+  dashboard SDK. `shared/auth.ts`'s `canAccessOwner()` carried the same
+  bypass for `classify-clip`/`enrich-record`. Fix: `read`/`update`/`delete`
+  on `Clip`, `Record`, `Collection`, `Mission`, `WatchRule` are now a strict
+  `data.owner_id == {{user.id}}` check; `Enrichment`, `RoutingDecision`, and
+  `ExtensionInstall` (already client-write-only-via-function) get owner-only
+  `read` and `update`/`delete: false`. `canAccessOwner()` is now a strict
+  `user.id === ownerId` check.
+- **Files:** `base44/entities/*.jsonc` (all eight), `base44/shared/auth.ts`,
+  `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`, `docs/API_AND_FAILURE_MAP.md`,
+  `docs/DECISIONS.md`
+- **Verify:** 108/108 Deno tests pass, all 14 entries pass `deno check`,
+  extension scripts parse, no SDK import in `extension/`, the production
+  build passes; live, an admin account's unfiltered `Clip.list()` returns
+  only its own rows.
+- **Hosted checkpoint 2026-07-26:** After explicit approval, all eight
+  entity definitions were pushed and `classify-clip`/`enrich-record` were
+  redeployed (the only functions importing `canAccessOwner`). A live check
+  confirmed the admin account's unfiltered `Clip.list()` now returns only
+  its own 13 rows, where it previously returned 13 plus 6 belonging to
+  another owner.
+
+### 29.8 Real brand icon, card view, and landing AI messaging
+
+- [x] **Build:** Replace the placeholder CSS-drawn bird mark with the real
+  Magpie logo (`src/icon/magpie.png`) everywhere: extension manifest/toolbar/
+  popup icons (cropped tight from the source artwork so it reads clearly at
+  16-48px), dashboard topbar/pairing-dialog/landing mark, and the browser
+  favicon. Added an auto per-Collection Cards/Table view to `RecordTable`
+  (Cards when most Items in a Collection have a captured screenshot, Table
+  otherwise) reusing the Clip screenshots already loaded into dashboard
+  state — no new entity reads. Added a landing-page section naming the AI
+  surfaces the product already has but didn't advertise: bounded routing
+  decisions, Item comparison, routing explanation, and natural-language
+  watch configuration.
+- **Files:** `extension/manifest.json`, `extension/popup.html`,
+  `extension/popup.css`, `extension/icons/*.png`, `src/icon/*.png`,
+  `src/App.jsx`, `src/Landing.jsx`, `src/index.css`, `index.html`
+- **Verify:** Extension `manifest.json` parses and scripts pass `node --check`;
+  the Vite production build passes; no new entity reads were introduced.
+- **Hosted checkpoint 2026-07-26:** Deployed to production in two batches
+  (`npx base44 site deploy -y`): the icon wiring first, then the card view
+  and landing AI section. Both smoke-checked `200` for the app. The
+  extension icon needs no deploy — reload the unpacked extension to see it.
+
+### 29.9 In-app Docs page
+
+- [x] **Build:** Replaced linking out to raw GitHub markdown with a branded
+  in-app Docs page (`src/Docs.jsx`) that renders the existing
+  `docs/GETTING_STARTED.md`, `docs/PRODUCT_GUIDE.md`, and `docs/API.md`
+  through `react-markdown`/`remark-gfm` (bundled at build time via Vite's
+  `?raw` import — single source of truth, no content duplication).
+  Cross-document links between the three files are intercepted client-side
+  to switch sections instead of 404ing. Reached via `?docs=<slug>` (mirrors
+  the existing `?review=` deep-link pattern, so no server-side routing is
+  needed). Linked from the landing hero ("How it works, and how to install
+  the extension") right next to the trust-boundary line, and from the
+  dashboard topbar.
+- **Files:** `src/Docs.jsx`, `src/App.jsx`, `src/Landing.jsx`,
+  `src/index.css`
+- **Verify:** The Vite production build passes and the bundled JS contains
+  the doc content; a signed-out visit to `?docs=...` triggers no dashboard
+  data load (the existing `if (!user) return` guard on the load effect
+  still applies), preserving the zero-entity-read guarantee for anonymous
+  visitors.
+- **Hosted checkpoint 2026-07-26:** Deployed via `npx base44 site deploy -y`;
+  smoke-checked `200` for the app.
+- **Follow-up fix 2026-07-26:** Real markdown tables (Getting Started's
+  Action/How and Symptom/Fix tables) exposed a table-layout bug: the short
+  first column claimed its full natural width while the long descriptive
+  column absorbed the entire deficit and wrapped heavily. First attempt
+  paired the standard `width: 1%` + `white-space: nowrap` shrink-to-content
+  hint with `table-layout: fixed` — wrong pairing: `fixed` takes `1%`
+  literally instead of as a content-sizing hint, so the unwrapped first
+  column overflowed into the second column instead of shrinking to fit.
+  Corrected to `table-layout: auto` (the hint only works there) with the
+  same first-column `width: 1%` + `nowrap`, which lets the browser size the
+  first column to its actual content and gives the rest of the row to the
+  description column. Applies to both the Docs page and the Ask Magpie chat
+  tables since both share `.agent-md`. Deployed via `npx base44 site deploy
+  -y`, smoke-checked `200`.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

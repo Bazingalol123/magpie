@@ -3,8 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowRightLeft,
-  ArrowUpRight,
-  Bird,
+  Book,
   Check,
   ChevronDown,
   ChevronRight,
@@ -35,6 +34,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
+import Docs from "./Docs.jsx";
+import magpieMarkSrc from "./icon/magpie-mark.png";
 
 const markdownComponents = {
   table: (props) => <div className="md-table-scroll"><table {...props} /></div>,
@@ -68,6 +69,26 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+// A spinner alone reads as stuck once a wait crosses a few seconds. Cycling
+// through text that names plausible real work (rather than a fake progress
+// bar, which is misleading for a genuinely indeterminate wait) keeps a
+// 10+ second operation — a slow source fetch, a multi-tool Agent turn —
+// reading as "working" instead of "broken."
+function useStagedMessage(active, stages, intervalMs = 3500) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setIndex(0);
+      return undefined;
+    }
+    const id = setInterval(() => {
+      setIndex((current) => Math.min(current + 1, stages.length - 1));
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [active, stages, intervalMs]);
+  return stages[Math.min(index, stages.length - 1)];
 }
 
 function formatDate(value) {
@@ -108,12 +129,12 @@ function FieldValue({ value }) {
   );
 }
 
+function screenshotUrlFor(clip) {
+  return clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url) || "";
+}
+
 function MagpieMark({ size = 28 }) {
-  return (
-    <div className="magpie-mark" style={{ width: size, height: size }}>
-      <Bird size={size * 0.64} strokeWidth={2.5} />
-    </div>
-  );
+  return <img src={magpieMarkSrc} alt="" className="magpie-mark" width={size} height={size} />;
 }
 
 function PairingDialog({ pairing, onClose }) {
@@ -285,11 +306,15 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect 
   );
 }
 
-function RecordTable({ collection, records, onSelect }) {
+function RecordTable({ collection, records, clips, onSelect }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
   if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
+
+  const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
+  const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
+  const showCards = records.length > 0 && withImageCount / records.length > 0.5;
 
   return (
     <section className="table-panel">
@@ -300,34 +325,82 @@ function RecordTable({ collection, records, onSelect }) {
         </div>
         <div className="live-indicator"><span /> live</div>
       </div>
-      <div className="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Source</th>
-              {columns.map((column) => <th key={column.name}>{column.label}</th>)}
-              <th aria-label="Open record" />
-            </tr>
-          </thead>
-          <tbody>
-            {records.length ? records.map((record) => {
-              const fields = parseJson(record.fields_json, {});
-              return (
-                <tr key={record.id} onClick={() => onSelect(record)}>
-                  <td>
-                    <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
-                  </td>
-                  {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
-                  <td><ChevronRight size={17} /></td>
-                </tr>
-              );
-            }) : (
-              <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {showCards ? (
+        <RecordCardGrid records={records} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                {columns.map((column) => <th key={column.name}>{column.label}</th>)}
+                <th aria-label="Open record" />
+              </tr>
+            </thead>
+            <tbody>
+              {records.length ? records.map((record) => {
+                const fields = parseJson(record.fields_json, {});
+                return (
+                  <tr key={record.id} onClick={() => onSelect(record)}>
+                    <td>
+                      <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
+                    </td>
+                    {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
+                    <td><ChevronRight size={17} /></td>
+                  </tr>
+                );
+              }) : (
+                <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
+  );
+}
+
+function RecordCardGrid({ records, columns, clipsById, onSelect }) {
+  if (!records.length) return <div className="table-empty">Waiting for a matching clip…</div>;
+
+  const primaryColumn = columns[0];
+  const secondaryColumns = columns.slice(1, 3);
+
+  return (
+    <div className="card-grid">
+      {records.map((record) => {
+        const fields = parseJson(record.fields_json, {});
+        const image = screenshotUrlFor(clipsById.get(record.clip_id));
+        const title = (primaryColumn && fields[primaryColumn.name]) || hostFromUrl(record.source_url);
+        return (
+          <button key={record.id} className="record-card" onClick={() => onSelect(record)}>
+            <div className="record-card-media">
+              {image ? (
+                <img src={image} alt="" loading="lazy" />
+              ) : (
+                <span className="record-card-fallback">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>
+              )}
+              {record.freshness === "blocked" && (
+                <span className="record-card-badge" title="Source requires sign-in"><LockKeyhole size={11} /></span>
+              )}
+            </div>
+            <div className="record-card-body">
+              <div className="record-card-title">{String(title)}</div>
+              {secondaryColumns.map((column) => {
+                const value = fields[column.name];
+                if (value === undefined || value === null || value === "") return null;
+                return (
+                  <div key={column.name} className="record-card-field">
+                    <span>{column.label}</span><FieldValue value={value} />
+                  </div>
+                );
+              })}
+              <div className="record-card-source"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -358,15 +431,18 @@ function ActivityPanel({ enrichments, records, onSelect }) {
   );
 }
 
+const CHECKING_STAGES = ["Checking…", "Still checking — some sources are slow…", "Almost done…"];
+
 function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, isRefreshing, onStatus, refreshNotice, onDelete, isDeleting, onToggleWatch, isTogglingWatch }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   useEffect(() => {
     setIsConfirmingDelete(false);
   }, [record?.id]);
+  const checkingLabel = useStagedMessage(isRefreshing, CHECKING_STAGES);
 
   if (!record) return null;
   const fields = parseJson(record.fields_json, {});
-  const screenshotUrl = clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url);
+  const screenshotUrl = screenshotUrlFor(clip);
   const isBlocked = record.freshness === "blocked";
   const isAutoPaused = watch?.last_error_code === "AUTO_PAUSED_BLOCKED" && !watch?.active;
   return (
@@ -408,7 +484,7 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
         )}
         <div className="detail-actions">
           <button className="secondary-button" onClick={onRefresh} disabled={isRefreshing}>
-            <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> Check source now
+            <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
           </button>
           <span>Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
         </div>
@@ -655,12 +731,15 @@ function messageText(content) {
   return "";
 }
 
+const THINKING_STAGES = ["Reading your Magpie evidence…", "Still thinking — checking a few things…", "Almost there…"];
+
 function MagpieAgentPanel({ project, collection, record, onClose }) {
   const [conversation, setConversation] = useState(null);
   const [input, setInput] = useState("");
   const [isLoadingConversation, setIsLoadingConversation] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const thinkingLabel = useStagedMessage(isSending, THINKING_STAGES);
 
   useEffect(() => {
     let active = true;
@@ -812,7 +891,7 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
               </div>
             </div>
           )}
-          {isSending && <div className="agent-thinking"><LoaderCircle className="spin" size={14} /> Reading your Magpie evidence…</div>}
+          {isSending && <div className="agent-thinking"><LoaderCircle className="spin" size={14} /> {thinkingLabel}</div>}
         </section>
 
         {error && <div className="agent-error">{error}</div>}
@@ -1083,6 +1162,11 @@ export default function App() {
     [data.routingDecisions],
   );
 
+  const docsParams = new URLSearchParams(window.location.search);
+  if (docsParams.has("docs")) {
+    return <Docs initialSlug={docsParams.get("docs")} isSignedIn={!!user} isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
+  }
+
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
@@ -1091,7 +1175,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
@@ -1100,7 +1184,7 @@ export default function App() {
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span></footer>

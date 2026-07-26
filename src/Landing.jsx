@@ -1,16 +1,18 @@
 import { useEffect, useRef } from "react";
 import {
   ArrowDown,
+  ArrowRightLeft,
   ArrowUpRight,
-  Bird,
   Briefcase,
   Camera,
   Check,
   ChefHat,
+  Eye,
   Home,
   Layers3,
   LoaderCircle,
   LockKeyhole,
+  MessageCircle,
   MousePointerClick,
   RefreshCw,
   ShieldCheck,
@@ -18,13 +20,10 @@ import {
   TrendingDown,
   Wand2,
 } from "lucide-react";
+import magpieMarkSrc from "./icon/magpie-mark.png";
 
 function Mark({ size = 30 }) {
-  return (
-    <div className="magpie-mark" style={{ width: size, height: size }}>
-      <Bird size={size * 0.64} strokeWidth={2.5} />
-    </div>
-  );
+  return <img src={magpieMarkSrc} alt="" className="magpie-mark" width={size} height={size} />;
 }
 
 export default function Landing({ isSigningIn, onSignIn }) {
@@ -83,6 +82,7 @@ export default function Landing({ isSigningIn, onSignIn }) {
             {isSigningIn ? <LoaderCircle className="spin" size={17} /> : <ArrowUpRight size={17} />}
             Continue with Google
           </button>
+          <a className="ld-docs-link" href="/?docs=getting-started">How it works, and how to install the extension →</a>
           <div className="ld-hero-trust"><ShieldCheck size={14} /> The extension can write clips — it can never read your data.</div>
         </div>
 
@@ -180,6 +180,20 @@ export default function Landing({ isSigningIn, onSignIn }) {
             <div className="ld-history-row"><span className="ld-pulse"><Check size={10} /></span><div><b>availability</b> changed <del>Oct 1</del> → <strong>Nov 1</strong><small>yesterday</small></div></div>
             <div className="ld-history-row muted"><span className="ld-pulse warn"><LockKeyhole size={10} /></span><div>a source now requires sign-in — <strong>watch paused, nothing invented</strong><small>evidence preserved</small></div></div>
           </div>
+        </div>
+      </section>
+
+      <section className="ld-ai">
+        <div className="ld-ai-intro" data-reveal>
+          <div className="eyebrow"><Sparkles size={13} /> bounded AI, deterministic writes</div>
+          <h2>AI does the thinking. <em>Code decides what gets written.</em></h2>
+          <p>Magpie isn't a folder you file things into by hand. An AI layer proposes, reads, and explains — every write is still validated by ordinary server code, never invented from a hunch.</p>
+        </div>
+        <div className="ld-usecase-grid">
+          <div className="ld-usecase" data-reveal style={{ "--d": "0ms" }}><Wand2 size={17} /><b>Decides where things go</b><p>Every capture is auto-routed to the right Collection by a bounded AI proposal — deterministic code validates it before anything is written.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "90ms" }}><ArrowRightLeft size={17} /><b>Compares your Items</b><p>Ask which apartment fits the budget or which camera has the better sensor — grounded in what you actually captured, never invented.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "180ms" }}><MessageCircle size={17} /><b>Explains its own reasoning</b><p>Ask why something landed where it did and get the real decision trail — not a black box.</p></div>
+          <div className="ld-usecase" data-reveal style={{ "--d": "270ms" }}><Eye size={17} /><b>Configures your watches</b><p>Tell Magpie what to watch for in plain language — a price drop, a deadline — and it sets up the monitoring.</p></div>
         </div>
       </section>
 

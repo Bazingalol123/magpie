@@ -101,6 +101,13 @@ authorization to crawl.
 - Extension toasts are routing-status-aware, duplicate-aware, and link to the
   dashboard review panel. The extension remains write-only; its URL memory is
   local-only and dies with the pairing token (`docs/DECISIONS.md`).
+- **Security fix 2026-07-26:** every owner-scoped entity's RLS had an admin
+  `$or` bypass (the app owner's account carries `role: "admin"` by Base44
+  default), letting that account read/edit/delete any owner's data — verified
+  live and closed. All eight entities were re-pushed with strict
+  `owner_id`-only RLS, and `classify-clip`/`enrich-record` were redeployed
+  after `shared/auth.ts`'s matching `canAccessOwner()` bypass was removed.
+  See `docs/ENGINEERING_NOTES.md` (2026-07-26) and `docs/DECISIONS.md`.
 
 Latest verified release gates:
 

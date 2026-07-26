@@ -217,7 +217,7 @@ async function captureElement(element) {
     captured_at: new Date().toISOString(),
     idempotency_key: crypto.randomUUID(),
     capture_intent: "compare",
-    capture_rect: pickerMode === "visual" ? rectPayload(rect) : undefined,
+    capture_rect: rectPayload(rect),
   };
   stopPicker();
 
@@ -394,6 +394,16 @@ function reviewMessage(reasonCode) {
 }
 
 let toastTimer = null;
+let toastStageTimers = [];
+
+// A real capture (screenshot upload, then AI routing) can genuinely run past
+// 10 seconds under load. A spinner alone reads as stuck past a few seconds —
+// staged text that names plausible real work keeps it reading as "working."
+const LOADING_STAGES = [
+  { delay: 3500, message: "Uploading the screenshot…" },
+  { delay: 8000, message: "Understanding what this is…" },
+  { delay: 14000, message: "Almost there — organizing this for you…" },
+];
 
 function showToast(message, state, url) {
   let toast = document.getElementById(TOAST_ID);
@@ -403,6 +413,8 @@ function showToast(message, state, url) {
     document.body.append(toast);
   }
   window.clearTimeout(toastTimer);
+  toastStageTimers.forEach((id) => window.clearTimeout(id));
+  toastStageTimers = [];
   toast.dataset.state = state;
   toast.replaceChildren();
 
@@ -417,6 +429,12 @@ function showToast(message, state, url) {
   text.textContent = message;
   row.append(text);
   toast.append(row);
+
+  if (state === "loading") {
+    for (const stage of LOADING_STAGES) {
+      toastStageTimers.push(window.setTimeout(() => { text.textContent = stage.message; }, stage.delay));
+    }
+  }
 
   if (url) {
     const link = document.createElement("a");

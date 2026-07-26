@@ -9,8 +9,7 @@ main { padding: 16px 16px 12px; }
 
 header { display: flex; align-items: center; gap: 9px; }
 header b { font-size: 19px; letter-spacing: -.045em; color: #193325; }
-.mark { width: 30px; height: 30px; display: grid; place-items: center; color: #f6f6eb; background: #315a3d; border-radius: 35% 65% 58% 42% / 46% 40% 60% 54%; transform: rotate(-8deg); box-shadow: inset -4px -4px 0 rgba(12,50,25,.22); }
-.mark svg { width: 17px; height: 17px; transform: rotate(8deg); }
+.mark { width: 30px; height: 30px; display: block; }
 .pill { margin-left: auto; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: .02em; color: #69806e; background: #e9efe5; }
 body[data-connected="true"] .pill { color: #2f6b3f; background: #dff0dc; }
 body[data-connected="true"] .pill::before { content: "● "; font-size: 8px; }

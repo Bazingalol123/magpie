@@ -188,8 +188,72 @@ No change rated High or Critical begins production implementation until its back
 | Rename Base44 entities | Cleaner code terminology | Broad refactor | Destructive entity/function/type migration | 4 | 5 | 20 Critical | Reject for V3.1 |
 | Let folders influence routing | More contextual filing | Hidden behavior and complex controls | Routing contract, prompts, keys, correction memory, migrations | 4 | 5 | 20 Critical | Reject |
 | Arbitrary folder depth | Flexible hierarchy | Recursive tree and complex navigation | Recursive validation, cycle/path migration, larger query surface | 4 | 4 | 16 Critical | Reject |
+| Remove RLS admin bypass on owner-scoped entities (security incident fix) | Restore the promised owner-isolation guarantee; stop cross-owner data exposure | None | Every owner-scoped entity's `read`/`update`/`delete` RLS drops the `user_condition: role=admin` `$or` clause; `canAccessOwner()` in `shared/auth.ts` drops its admin fallback | 2 | 5 | 10 High | Ship immediately; entity + affected-function deploy required |
+| Real brand icon (extension + dashboard) | Replaces the placeholder CSS bird mark with the real Magpie logo everywhere | Extension manifest/popup icons; dashboard topbar/pairing/landing mark; browser favicon | None | 1 | 1 | 1 Low | Ship; site deploy only (extension icon needs no deploy, just a reload) |
+| Card view for image-bearing Collections | Product listings read as visual cards instead of a dense table | Auto per-Collection Cards/Table choice in `RecordTable`, reusing already-loaded Clip screenshots | None; no new entity reads | 1 | 2 | 2 Low | Ship |
+| Landing page AI-capability section | Names the AI decision/comparison/explanation/watch-config surface the landing previously didn't mention | New static `Landing.jsx` section | None; no entity reads, preserves the zero-entity-read landing constraint | 1 | 1 | 1 Low | Ship |
+| In-app Docs page | Replaces linking out to raw GitHub markdown with a branded in-app docs surface; explains the extension trust story right next to the sign-in CTA | New `Docs.jsx` view reached via `?docs=<slug>` (no server routing needed, same pattern as the `?review=` deep link); links from Landing and the dashboard topbar | None; renders the existing `docs/*.md` files client-side via a build-time `?raw` import, no entity reads for a signed-out visitor | 1 | 1 | 1 Low | Ship |
 
 ## Backend change plan
+
+### Remove RLS admin bypass (security incident fix)
+
+Live cross-owner data exposure confirmed 2026-07-26: the app owner's account
+carries `role: "admin"` (Base44's default for the app creator), and every
+owner-scoped entity's RLS included `{"user_condition": {"role": "admin"}}` as
+an `$or` alternative to the `data.owner_id` check on `read` (and, for `Record`,
+`Clip`, `Collection`, `Mission`, `WatchRule`, on `update`/`delete` too). This
+let the admin account read, edit, or delete any owner's Clips, Records,
+Collections, Projects, WatchRules, Enrichments, RoutingDecisions, and
+ExtensionInstalls through the ordinary dashboard SDK — verified live via an
+unfiltered `Clip.list()` call as the admin account, which returned another
+owner's Clips mixed with its own. `shared/auth.ts`'s `canAccessOwner()` carried
+the identical bypass, extending it to `classify-clip` and `enrich-record`.
+
+The reverse direction reported alongside this (a non-admin account allegedly
+seeing the admin's data) has no matching code path: RLS and every
+`requireOwned`/strict-`owner_id` check in `delete-record`, `resolve-routing`,
+and the agent tools only ever add rows for an admin caller, never remove the
+owner check for a plain `role: "user"` caller. The most likely explanation is
+session/browser sharing during a joint test, not a second bug; this fix does
+not depend on resolving that separately.
+
+- **User value:** restores the product's owner-isolation guarantee (Product
+  Charter: captures and organized data are private to their owner).
+- **Frontend surface:** none. `src/App.jsx` has no admin-role branch, so
+  nothing in the UI depends on the bypass.
+- **Backend surface:** `base44/entities/*.jsonc` — drop the admin `$or`
+  alternative from `read`/`update`/`delete` on `clip`, `record`, `collection`,
+  `mission`, `watch-rule`, `enrichment`, `routing-decision`,
+  `extension-install`. `create` stays admin-only on every entity (unchanged;
+  all writes already go through `asServiceRole` in backend functions, never
+  direct client writes). `base44/shared/auth.ts` — `canAccessOwner()` becomes a
+  strict `user.id === ownerId` check (or is removed and call sites inline the
+  check, matching the `requireOwned` pattern already used by `delete-record`
+  and `resolve-routing`).
+- **Data compatibility:** no schema change, no backfill; this only narrows who
+  can read/write existing rows.
+- **Security/RLS:** this is the fix, not a new exposure. No new ID crosses
+  owners; the extension pairing principal is unaffected (it never had entity
+  access).
+- **Failure behavior:** an admin calling `classify-clip`/`enrich-record` on
+  another owner's id now gets `403` instead of succeeding, matching the
+  behavior every other owner-scoped function already has.
+- **Migration/rollback:** none needed; re-adding the `$or` clause is the
+  rollback, but should only happen with a scoped, function-mediated admin
+  audit path if that capability is ever legitimately needed — never a blanket
+  RLS bypass.
+- **Release authority:** entity deployment (`npx base44 entities deploy`)
+  required for the RLS change; function deployment required for
+  `classify-clip` and `enrich-record` (the only importers of `canAccessOwner`).
+  Both need explicit owner approval before running.
+
+Risk is L=2, I=5 (worst-credible impact is cross-owner data exposure, the
+highest category the risk model has), score 10 High — scored High rather than
+the matrix's usual Critical banding because this is a pure narrowing with no
+migration, no schema change, and no dependent feature to rehearse; the
+severity lives in the impact of the bug being fixed, not in the risk of the
+fix itself.
 
 ### Configured Magpie Agent
 

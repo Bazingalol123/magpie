@@ -342,3 +342,39 @@ before the worker screenshots, so the overlay never contaminates the crop.
 Text evidence is sampled from a 3×3 grid of points inside the rectangle. No
 backend change was needed — the deployed `visual` mode already accepts a
 `capture_rect` with a cropped screenshot and routes it multimodally.
+
+## 2026-07-26 — RLS admin bypass caused a live cross-owner data leak
+
+A user report ("I can see my friend's data and he can see mine") traced to
+one root cause: every owner-scoped entity's RLS included
+`{"user_condition": {"role": "admin"}}` as an `$or` alternative to the
+`data.owner_id` check on `read`, and on `update`/`delete` for `Clip`,
+`Record`, `Collection`, `Mission`, and `WatchRule`. Base44 assigns
+`role: "admin"` to the app creator by default, so the project owner's own
+account could — and, verified live, did — read another signed-up user's
+Clips through an ordinary unfiltered `Clip.list()` call from the dashboard
+SDK. `shared/auth.ts`'s `canAccessOwner()` carried the identical bypass,
+extending it to `classify-clip` and `enrich-record`.
+
+The reported reverse direction (a plain `role: "user"` account seeing the
+admin's data) has no matching code path: RLS and every backend
+ownership check (`requireOwned` in `delete-record`, `resolve-routing`, the
+agent tools) only ever add rows for an admin caller — they never remove the
+strict owner check for a non-admin caller. The likely explanation is a
+shared browser/session during joint testing, not a second bug; see
+`docs/DECISIONS.md` for why this was not pursued as a separate fix.
+
+The fix removes the bypass outright rather than narrowing it to an
+admin-audit path, since nothing in the shipped frontend or backend
+functions depended on it (`requireOwned`/strict `owner_id` checks were
+already the pattern everywhere except the two functions using
+`canAccessOwner`). `create` stays admin-(service-role-)only on every entity,
+unchanged — all writes already go through `asServiceRole` in backend
+functions, never a direct client create. `Enrichment`, `RoutingDecision`,
+and `ExtensionInstall` — entities the dashboard only ever reads, never
+writes, directly — now set client `update`/`delete` to `false` outright
+rather than admin-only, since only the service role should ever mutate them.
+
+Live verification after deploy: an unfiltered `Clip.list()` call from the
+admin account, which previously returned 13 of its own Clips mixed with 6
+belonging to another owner, now returns only its own 13.

@@ -138,3 +138,27 @@ owner action on the trusted surface — never a read capability for the token.
 Auto-refresh defaults on with a popup toggle, is bounded to explicitly saved
 pages, is rate-limited to once per URL per 12 hours, and announces itself with
 a toast when it changes anything.
+
+## No RLS admin bypass, and no scoped admin-audit replacement built
+
+Discovered 2026-07-26 as a live incident: every owner-scoped entity's RLS
+allowed `role: "admin"` to read/update/delete any owner's rows, and
+`canAccessOwner()` gave the same bypass to `classify-clip`/`enrich-record`.
+The app owner's own account carries `role: "admin"` (Base44's default for the
+app creator), so the bypass was not theoretical — it was actively exposing
+one real user's Clips to another during ordinary dashboard use, verified live.
+
+The fix removes the bypass entirely rather than narrowing it to a dedicated
+admin-audit function. Magpie's product promise is per-owner isolation with no
+interpersonal visibility (`docs/PRODUCT_CHARTER.md`); nothing in the shipped
+product needs an admin to see across owners, and nothing in the frontend or
+backend depended on the bypass once removed. If a legitimate cross-owner
+admin/support tool is ever needed, it should be a new, explicitly audited,
+owner-facing-consent-aware function — never a blanket RLS or auth-helper
+bypass — and that is a future decision, not part of this fix.
+
+The reverse report from the same incident (a non-admin account allegedly
+seeing another owner's data) has no matching code path in RLS or in any
+backend function's ownership check; every non-admin path is a strict
+`owner_id == caller.id` check with no alternative. This was not treated as a
+second bug to fix — see `docs/API_AND_FAILURE_MAP.md` for the reasoning.

@@ -20,6 +20,28 @@ This document separates deployed state from the local V3 source currently under 
 | Expected remote/source failure | 200 | Typed outcome such as `blocked` or `unreachable` |
 | Unexpected internal failure | 500 | Generic client message; detailed server log |
 
+## Owner isolation and RLS — security fix 2026-07-26
+
+Every owner-scoped entity's `read`/`update`/`delete` RLS is a strict
+`data.owner_id == {{user.id}}` check with no other alternative. There is no
+admin/role-based bypass anywhere in RLS or in backend authorization helpers.
+`create` on every owner-scoped entity remains admin-(service-role-)only, since
+all writes go through backend functions using `asServiceRole`, never a direct
+client create.
+
+This closes a confirmed live incident: entity RLS previously included
+`{"user_condition": {"role": "admin"}}` as an `$or` read/update/delete
+alternative, and `shared/auth.ts`'s `canAccessOwner()` carried the same
+admin fallback. The app owner's account carries `role: "admin"` (Base44's
+default for the app creator), so that account could read, edit, or delete any
+other owner's Clips, Records, Collections, Projects, WatchRules, Enrichments,
+RoutingDecisions, and ExtensionInstalls, and could call `classify-clip` /
+`enrich-record` on another owner's row. Verified live via an unfiltered
+`Clip.list()` call as the admin account, which returned another owner's Clips
+mixed with its own. See `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` for the full
+change record and `docs/DECISIONS.md` for why no scoped admin-audit
+replacement was built.
+
 ## V3 frozen routing contract
 
 ### Outcome and persistence map
@@ -116,7 +138,8 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 
 - **Caller:** signed-in dashboard retry.
 - **Hosted V3.1 success:** `200`; returns the existing idempotent routing result or runs route-then-extract once, persists one RoutingDecision, and creates at most one Record.
-- **Expected cases:** missing ID `400`; missing Clip `404`; cross-owner Clip `403`.
+- **Expected cases:** missing ID `400`; missing Clip `404`; cross-owner Clip `403`
+  (strict owner check; no admin bypass, see "Owner isolation and RLS" above).
 - **Hosted V3.1 degradation:** AI outage, invalid JSON, ambiguity, or unsafe proposals return a typed review result and create no Collection or Record.
 - **Data invariant:** unknown AI fields are dropped; proposed Collection IDs must pass owner, status, and scope eligibility checks.
 - **Project-aware hosted implementation:** the backend code agent can inspect bounded,

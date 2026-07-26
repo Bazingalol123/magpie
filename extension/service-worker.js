@@ -83,7 +83,11 @@ async function addViewportScreenshot(payload, sender) {
       format: "jpeg",
       quality: 58,
     });
-    if ((payload.capture_mode === "visual" || payload.capture_mode === "image") && captureRect) {
+    // Every screenshot-needing mode now sends its bounding rect, so crop
+    // whenever we have one instead of special-casing which modes qualify —
+    // element mode used to be silently excluded here and captured the whole
+    // viewport instead of the clicked element.
+    if (captureRect) {
       screenshotDataUrl = await cropScreenshot(screenshotDataUrl, captureRect);
     }
     return { ...boundedPayload, screenshot_data_url: screenshotDataUrl };

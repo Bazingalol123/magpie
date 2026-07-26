@@ -38,7 +38,7 @@ export async function requireExtensionPrincipal(base44: any, req: Request, touch
 }
 
 export function canAccessOwner(user: AuthenticatedUser, ownerId: string) {
-  return user.role === "admin" || user.id === ownerId;
+  return user.id === ownerId;
 }
 
 export function createPairingToken() {
