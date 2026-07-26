@@ -148,6 +148,36 @@ Children are removed first and already-missing rows are skipped, so a
 mid-failure retry completes the cascade; a retry after full success returns
 `404` (done). This is a real deletion — there is no undo.
 
+### `delete-collection`
+
+Permanently delete one Collection and every Item inside it.
+**Request:** `collection_id`. **`200`:**
+
+```json
+{"deleted": {"watch_rules": 1, "enrichments": 3, "decisions": 2, "clips": 2, "records": 2, "collections": 1}}
+```
+
+Same cascade `delete-record` uses, applied to every Item in the Collection,
+then the Collection itself. Children are removed first, already-missing rows
+are skipped, and a retry after full success returns `404` (done). This is a
+real deletion — there is no undo.
+
+### `delete-mission`
+
+Permanently delete one Project and every Collection (and Item) inside it.
+**Request:** `mission_id`. **`200`:**
+
+```json
+{"deleted": {"watch_rules": 1, "enrichments": 3, "decisions": 2, "clips": 2, "records": 2, "collections": 2, "missions": 1}}
+```
+
+Cascades over every Collection scoped to the Project, then the Project
+itself. A `needs_review` capture that only had this Project as a hint (but
+never became a Collection/Item) is left alone — only structurally-scoped
+Collections and Items are deleted. Same idempotent-retry behavior as
+`delete-record`/`delete-collection`: children first, missing rows skipped,
+`404` on a retry after success.
+
 ### `enrich-record`
 
 Check an Item's source now. **Request:** `record_id`. **`200`** always returns

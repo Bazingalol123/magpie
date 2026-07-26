@@ -88,6 +88,13 @@ and captured text, freshness, update history, and per-Project decision status
 update history, capture, and routing record — after an explicit confirmation.
 There is no undo; removal is a real deletion, not an archive.
 
+The same permanent-delete action is available one and two levels up: removing
+a Collection from the sidebar deletes every Item inside it, and removing a
+Project from the switcher deletes every Collection (and Item) scoped to it,
+each behind the same two-step confirmation. Deleting a Project never touches
+a Needs-review capture that only had it as a hint — only Collections and
+Items actually filed under the Project are removed.
+
 ## Staying current
 
 - **Check source now** re-reads a source on demand.

@@ -378,3 +378,76 @@ rather than admin-only, since only the service role should ever mutate them.
 Live verification after deploy: an unfiltered `Clip.list()` call from the
 admin account, which previously returned 13 of its own Clips mixed with 6
 belonging to another owner, now returns only its own 13.
+
+## 2026-07-26 — Owner Collection/Project deletion (Build Guide 29.10)
+
+Extended `delete-record`'s full-delete cascade to Collections and Projects
+(Missions) on branch `feature/cascade-delete`, local only. The per-record
+cascade (watches → enrichments → decision → clip → record) was extracted out
+of `base44/shared/record-removal.ts` into a reusable `cascadeRecord`, so
+`delete-collection` and `delete-mission` reuse the exact same primitive
+instead of a second implementation. A new `listAllOwned` pagination helper
+(`base44/shared/service-entities.ts`) pages through `entity.filter(query,
+sort, limit, skip)` so a Collection or Project with more rows than one page
+still gets a complete cascade, and fails loud (a plain thrown `Error`, mapped
+by `errorResponse` to a generic `500`) rather than silently truncating a
+destructive delete past a 2000-row bound.
+
+Real local gate results:
+
+- `deno test --allow-env --allow-read tests`: 123 passed, 0 failed (was 102
+  before this work; +21 from `tests/collection-removal.test.ts` (6),
+  `tests/mission-removal.test.ts` (6), and `tests/service-entities.test.ts`
+  (4), plus the existing `record-removal.test.ts` suite (7) still green
+  unmodified after the `cascadeRecord` extraction — confirming the refactor
+  was behavior-preserving).
+- `deno check` passed on all 16 `base44/functions/*/entry.ts` files, including
+  the two new ones.
+- `rg -n "@base44/sdk" extension`: no matches, unaffected by this change.
+- `npm run build`: passed (Vite production build, pre-existing >500kB chunk
+  warning unrelated to this change).
+- `npx base44 dev`: local backend booted and logged `delete-collection` and
+  `delete-mission` alongside the other 14 functions with no load errors;
+  frontend Vite dev server started cleanly. This confirms the new functions
+  parse and register locally, but is not a substitute for exercising them.
+
+The one remaining item from the plan is a real manual browser pass (sign in,
+delete a Collection with Items, delete a Project with Collections, confirm a
+hint-only `needs_review` capture survives) — deferred by the owner for now
+rather than performed in this session, since it requires an interactive
+Google login this agent cannot complete.
+
+Deployed with owner approval: `delete-collection`/`delete-mission` via a
+targeted `functions deploy`, and the site via `npx base44 site deploy -y`.
+Live smoke checks passed (`401` unauthenticated on both functions, `200` on
+the site). No entities or Agents changed or were pushed.
+
+## 2026-07-26 — Realtime reload burst caused live Base44 429s
+
+Live use immediately after the above deploy surfaced Base44 `429` responses.
+`npx base44 logs --level error` (and unfiltered) returned no matches, which
+ruled out `delete-collection`/`delete-mission` themselves — the 429s were
+happening at the platform API layer, not inside our functions.
+
+The actual cause was in `src/App.jsx`'s dashboard-loading effect: 6 realtime
+subscriptions (`Collection`, `Record`, `Clip`, `Enrichment`,
+`RoutingDecision`, `WatchRule`) each independently called the full
+7-query `loadDashboard()` on every row change, with no debouncing. This was
+already fragile — even one `delete-record` cascade (~5 row deletes) could
+fire several redundant full reloads — but it was never acute enough to hit a
+rate limit before. A `delete-collection`/`delete-mission` cascade over a
+Collection or Project with real data can delete dozens of rows across those
+same 5 entity types in quick succession, so if Base44's realtime layer emits
+one change event per row, that is dozens of subscription callbacks each
+firing a 7-call reload: a burst of potentially hundreds of near-simultaneous
+list requests, comfortably past Base44's rate limiter.
+
+Fixed by debouncing the realtime callback (400ms trailing debounce, single
+shared timer across all 6 subscriptions) so a burst of row changes during a
+cascade collapses into one reload instead of one per row. Explicit
+`loadDashboard()` calls after an owner's own action (delete, resolve, toggle
+watch, etc.) are unaffected — they still call `loadDashboard` directly and
+immediately, since those need to resolve before updating local selection
+state. Site-only change (`src/App.jsx`), no entity or function impact;
+`npm run build` passed and it was deployed via `npx base44 site deploy -y`,
+smoke-checked `200`.

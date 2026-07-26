@@ -233,6 +233,42 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
   mid-cascade failure is completed by retrying.
 - **Security invariant:** every row is owner-checked before any delete.
 
+### `delete-collection`
+
+- **Caller:** signed-in owner only; the extension pairing principal has no path.
+- **Semantics:** permanent full delete at explicit owner request. Cascade order
+  is children first: for every owned Record in the Collection, its WatchRules,
+  Enrichments, RoutingDecision, and Clip (the same per-record cascade
+  `delete-record` uses), then the Record, then the Collection.
+- **Success:** `200` with deleted-row counts per entity:
+  `{ deleted: { watch_rules, enrichments, decisions, clips, records, collections } }`.
+- **Expected cases:** missing `collection_id` `400`; unauthenticated `401`;
+  cross-owner Collection `403`; already-fully-deleted Collection `404` (a retry
+  `404` after success means done). Missing child rows are skipped, never
+  errors, so a mid-cascade failure is completed by retrying.
+- **Security invariant:** every row is owner-checked before any delete.
+
+### `delete-mission`
+
+- **Caller:** signed-in owner only; the extension pairing principal has no path.
+- **Semantics:** permanent full delete at explicit owner request. Cascade order
+  is children first: for every owned Collection scoped to the Mission
+  (`Collection.mission_id`), the same cascade as `delete-collection` (Records
+  and their WatchRules/Enrichments/RoutingDecision/Clips, then the Collection),
+  then the Mission.
+- **Scope:** only Collections structurally scoped to this Mission are deleted.
+  A `needs_review`/`failed` Clip that merely carried this Mission as a routing
+  hint but never produced a Collection/Record is left untouched; its
+  `mission_id` becomes a dangling reference, which `resolve-routing`'s existing
+  Project validation already handles as a typed `404` rather than a crash
+  (`docs/DECISIONS.md`). Global Collections (no `mission_id`) are never touched.
+- **Success:** `200` with deleted-row counts per entity:
+  `{ deleted: { watch_rules, enrichments, decisions, clips, records, collections, missions } }`.
+- **Expected cases:** missing `mission_id` `400`; unauthenticated `401`;
+  cross-owner Mission `403`; already-fully-deleted Mission `404` (a retry `404`
+  after success means done). Missing child rows are skipped, never errors.
+- **Security invariant:** every row is owner-checked before any delete.
+
 ### `enrich-record`
 
 - **Caller:** signed-in dashboard.

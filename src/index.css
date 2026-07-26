@@ -53,11 +53,18 @@ button:disabled { cursor: wait; opacity: .7; }
 .sidebar-heading { padding: 0 8px 13px; display: flex; justify-content: space-between; color: #617064; font-size: 12px; font-weight: 600; }
 .collection-total { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 5px; font: 10px "DM Mono", monospace; color: #6f7e72; background: #edf0e9; }
 .collection-list { display: grid; gap: 3px; }
-.collection-item { display: grid; grid-template-columns: 9px 1fr auto; gap: 8px; align-items: center; text-align: left; padding: 9px 8px; border-radius: 8px; color: #56645a; background: transparent; font-size: 13px; transition: background .15s; }
+.collection-item { display: flex; align-items: center; gap: 2px; border-radius: 8px; color: #56645a; background: transparent; font-size: 13px; transition: background .15s; }
 .collection-item:hover { background: #f2f5ee; }
 .collection-item.active { background: #e9f2e6; color: #224d2f; font-weight: 600; }
+.collection-select { flex: 1; min-width: 0; display: grid; grid-template-columns: 9px 1fr auto; gap: 8px; align-items: center; text-align: left; padding: 9px 8px; background: transparent; }
 .collection-dot { width: 7px; height: 7px; border-radius: 3px; background: #94ab91; }.dot-1 { background: #d69768; }.dot-2 { background: #668fa2; }.dot-3 { background: #aa7c9e; }
 .collection-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.collection-count { color: #879288; font: 10px "DM Mono", monospace; }.sidebar-footnote { margin-top: auto; padding: 13px 8px 2px; border-top: 1px solid #e7ece5; display: flex; gap: 7px; color: #7a887d; font-size: 11px; }
+.collection-delete { flex: 0 0 auto; width: 24px; height: 24px; margin-right: 6px; opacity: 0; transition: opacity .15s, background .2s; }
+.collection-item:hover .collection-delete, .collection-item:focus-within .collection-delete { opacity: 1; }
+.collection-confirm { flex: 1; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 8px; color: #82422c; font-size: 11px; white-space: nowrap; }
+.collection-confirm span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.collection-confirm .text-button { margin-top: 0; font-size: 11px; }
+.danger-button.danger-button-compact { padding: 6px; }
 .table-panel { min-width: 0; overflow: hidden; }.panel-header { padding: 22px 25px 19px; display: flex; justify-content: space-between; border-bottom: 1px solid #e7ece5; }.panel-header h2 { margin: 5px 0 0; font-size: 21px; letter-spacing: -.035em; }.live-indicator { margin-top: 3px; height: 24px; padding: 0 8px; border-radius: 7px; background: #eff6ec; color: #47814f; display: flex; align-items: center; gap: 6px; font: 10px "DM Mono", monospace; text-transform: uppercase; }.live-indicator span { width: 5px; height: 5px; background: #58a75e; border-radius: 50%; }
 .table-scroll { overflow-x: auto; }table { width: 100%; border-collapse: collapse; min-width: 560px; }th { padding: 12px 16px; border-bottom: 1px solid #e8ede6; text-align: left; color: #869087; font: 10px "DM Mono", monospace; letter-spacing: .06em; text-transform: uppercase; }td { padding: 14px 16px; color: #3d4c42; border-bottom: 1px solid #edf0eb; font-size: 13px; }tbody tr { cursor: pointer; transition: background .15s; }tbody tr:hover { background: #f4f8f1; }tbody tr td:last-child { color: #8aa18b; width: 30px; }.source-cell { display: flex; align-items: center; gap: 7px; max-width: 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.source-favicon { width: 19px; height: 19px; display: grid; flex: 0 0 auto; place-items: center; background: #edf1eb; color: #55725a; border-radius: 5px; font: 10px "DM Mono", monospace; }.table-empty { padding: 66px 0; text-align: center; color: #8a948b; }
 .empty-collection { min-height: 485px; padding: 70px 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #fefffc; border: 1px dashed #cfdccc; border-radius: 14px; }.empty-icon { width: 52px; height: 52px; display: grid; place-items: center; color: #63866a; background: #edf5e8; border-radius: 16px; }.empty-collection h2 { margin: 18px 0 7px; font-size: 22px; letter-spacing: -.04em; }.empty-collection p { max-width: 390px; margin: 0; color: #6f7d73; line-height: 1.5; font-size: 14px; }.text-button { margin-top: 15px; color: #367045; background: transparent; display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 600; }.capture-steps { margin-top: 32px; display: flex; gap: 17px; color: #65766a; font-size: 11px; }.capture-steps span { display: flex; align-items: center; gap: 5px; }.capture-steps b { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: #47714f; background: #e4efe0; font: 10px "DM Mono", monospace; }
@@ -136,6 +143,17 @@ button:disabled { cursor: wait; opacity: .7; }
 .workspace-menu button svg:first-child { color: #6d8f74; flex: 0 0 auto; }
 .workspace-menu button svg:last-child { margin-left: auto; color: #4a9957; }
 .workspace-menu-divider { margin: 5px 4px; border-top: 1px solid #e7ece5; }
+.workspace-menu-row { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+.workspace-menu-row:hover { background: #eef4ea; }
+.workspace-menu-row button[role="menuitem"] { flex: 1; min-width: 0; }
+.workspace-menu-row .icon-button { flex: 0 0 auto; width: 24px; height: 24px; padding: 0; margin-right: 6px; opacity: 0; transition: opacity .15s, background .2s; }
+.workspace-menu-row:hover .icon-button, .workspace-menu-row .icon-button:focus-visible { opacity: 1; }
+.workspace-menu-confirm { flex: 1; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; color: #82422c; font-size: 11px; white-space: nowrap; }
+.workspace-menu-confirm span:first-child { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.workspace-menu-confirm button { padding: 6px; gap: 0; }
+.workspace-menu-confirm .danger-button-compact { color: #fff; background: #a44a2f; }
+.workspace-menu-confirm .danger-button-compact:hover { background: #8d3c24; }
+.workspace-menu-confirm .text-button { margin-top: 0; padding: 6px 4px; font-size: 11px; color: #367045; }
 .field-link { display: inline-flex; align-items: center; gap: 4px; color: #2f6b3f; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .field-link:hover { color: #1d4a2b; }
 

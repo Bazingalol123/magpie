@@ -19,6 +19,7 @@ login walls, by piggybacking on your own browsing.
 | [**Getting Started**](docs/GETTING_STARTED.md) | Sign in, install the unpacked extension, pair it, and make your first capture in ~5 minutes |
 | [**Product Guide**](docs/PRODUCT_GUIDE.md) | Understand every feature: capture modes, auto-organization, review, watches, refresh-on-revisit, Ask Magpie, and the trust model |
 | [**API Reference**](docs/API.md) | Call the backend: both principals, every endpoint, typed outcomes, and reason codes |
+| [**Project Write-up**](docs/PROJECT_WRITEUP.md) | Submission-form summary, decisions defended, what I got wrong, and what's not done |
 | [Product Charter](docs/PRODUCT_CHARTER.md) | The authoritative product intent and boundaries |
 | [docs/README.md](docs/README.md) | The full internal documentation map |
 
@@ -45,7 +46,7 @@ flowchart LR
   VALIDATOR --> MODEL["Project + Collection + Item + RoutingDecision"]
 
   DASH["authenticated dashboard<br/>SDK + realtime"] --> MODEL
-  DASH --> REVIEW["resolve-routing<br/>delete-record"]
+  DASH --> REVIEW["resolve-routing<br/>delete-record/collection/mission"]
   REVIEW --> MODEL
   DASH --> CHAT["magpie_organizer Agent"]
   CHAT --> TOOLS["owner-validating function tools"]
@@ -79,7 +80,7 @@ the extension.
 | Surface | Load-bearing use |
 |---|---|
 | Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `ExtensionInstall` |
-| Backend functions | 14 deployed: pairing, ingestion, routing, correction, deletion, refresh, enrichment, sweeps, and four Agent tools |
+| Backend functions | 16 deployed: pairing, ingestion, routing, correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, and four Agent tools |
 | AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
 | Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
 | Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
@@ -97,16 +98,17 @@ Deployed and live-verified in production:
   capture-time duplicate detection (`content_hash`);
 - a Needs-review workflow: accept / move / create (with inline Project
   creation) / dismiss, deep-linked from capture toasts;
-- permanent Item deletion with a full server-owned cascade;
+- permanent Item, Collection, and Project deletion, each a full server-owned
+  cascade over everything scoped beneath it;
 - watches with exponential backoff, auto-pause after three blocked checks, and
   refresh-on-revisit that heals blocked Items from the owner's own browser;
 - the authenticated `magpie_organizer` Agent with four owner-validating tools;
 - a static CSS-3D landing page and a realtime dashboard with review, deletion,
   monitoring, and comparison surfaces.
 
-Release gates: 108/108 Deno tests; all 14 backend entry points type-check; the
+Release gates: 123/123 Deno tests; all 16 backend entry points type-check; the
 production build passes; extension scripts parse; no extension SDK import;
-live smoke tests cover authentication, typed 404s, the deletion cascade, and a
+live smoke tests cover authentication, typed 404s, the deletion cascades, and a
 real browser-token refresh that updated a blocked Item end to end.
 
 ## Local development
@@ -141,11 +143,11 @@ directory.
 
 ```text
 base44/entities/        Owner-scoped Base44 schemas
-base44/functions/       14 backend functions (ingest, routing, review, refresh, Agent tools)
+base44/functions/       16 backend functions (ingest, routing, review, deletion, refresh, Agent tools)
 base44/shared/          Deterministic validation and reusable backend logic
 extension/              MV3 picker, snip tool, worker, and pairing popup
 src/                    Landing page and realtime dashboard
-tests/                  108 pure Deno fixtures
+tests/                  123 pure Deno fixtures
 docs/                   User docs, API reference, charter, and engineering history
 ```
 

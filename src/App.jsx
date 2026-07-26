@@ -188,9 +188,14 @@ function ProjectDialog({ onClose, onCreate, isCreating }) {
   );
 }
 
-function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject }) {
+function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, onDelete, deletingId, collections }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmingId, setConfirmingId] = useState(null);
   const active = missions.find((mission) => mission.id === activeMissionId);
+
+  useEffect(() => {
+    if (!isOpen) setConfirmingId(null);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -243,11 +248,42 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject }
           <button role="menuitem" className={active ? "" : "current"} onClick={() => choose("")}>
             <Layers3 size={14} /> Library — all Collections {!active && <Check size={14} />}
           </button>
-          {missions.map((mission) => (
-            <button role="menuitem" key={mission.id} className={mission.id === activeMissionId ? "current" : ""} onClick={() => choose(mission.id)}>
-              <Target size={14} /> {mission.title} {mission.id === activeMissionId && <Check size={14} />}
-            </button>
-          ))}
+          {missions.map((mission) => {
+            const isConfirming = confirmingId === mission.id;
+            const isDeleting = deletingId === mission.id;
+            const count = collections.filter((collection) => collection.mission_id === mission.id).length;
+            return (
+              <div className="workspace-menu-row" key={mission.id}>
+                <button role="menuitem" className={mission.id === activeMissionId ? "current" : ""} onClick={() => choose(mission.id)}>
+                  <Target size={14} /> {mission.title} {mission.id === activeMissionId && <Check size={14} />}
+                </button>
+                {isConfirming ? (
+                  <span className="workspace-menu-confirm">
+                    <span>Delete {count} Collection{count === 1 ? "" : "s"}?</span>
+                    <button
+                      type="button"
+                      className="danger-button danger-button-compact"
+                      onClick={() => { onDelete(mission.id); setConfirmingId(null); }}
+                      disabled={isDeleting}
+                      aria-label={`Confirm delete ${mission.title}`}
+                    >
+                      {isDeleting ? <LoaderCircle className="spin" size={12} /> : <Trash2 size={12} />}
+                    </button>
+                    <button type="button" className="text-button" onClick={() => setConfirmingId(null)} disabled={isDeleting}>Cancel</button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => setConfirmingId(mission.id)}
+                    aria-label={`Delete ${mission.title}`}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
           <div className="workspace-menu-divider" role="separator" />
           <button role="menuitem" onClick={() => { setIsOpen(false); onNewProject(); }}>
             <Plus size={14} /> New Project
@@ -274,7 +310,8 @@ function EmptyCollection({ onSelect }) {
   );
 }
 
-function CollectionSidebar({ collections, activeCollectionId, records, onSelect }) {
+function CollectionSidebar({ collections, activeCollectionId, records, onSelect, onDelete, deletingId }) {
+  const [confirmingId, setConfirmingId] = useState(null);
   return (
     <aside className="collection-sidebar">
       <div className="sidebar-heading">
@@ -285,16 +322,40 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect 
         {collections.map((collection, index) => {
           const count = records.filter((record) => record.collection_id === collection.id).length;
           const isActive = collection.id === activeCollectionId;
+          const isConfirming = confirmingId === collection.id;
+          const isDeleting = deletingId === collection.id;
           return (
-            <button
-              className={`collection-item ${isActive ? "active" : ""}`}
-              key={collection.id}
-              onClick={() => onSelect(collection.id)}
-            >
-              <span className={`collection-dot dot-${index % 4}`} />
-              <span className="collection-name">{collection.name}</span>
-              <span className="collection-count">{count}</span>
-            </button>
+            <div className={`collection-item ${isActive ? "active" : ""}`} key={collection.id}>
+              <button className="collection-select" onClick={() => onSelect(collection.id)}>
+                <span className={`collection-dot dot-${index % 4}`} />
+                <span className="collection-name">{collection.name}</span>
+                <span className="collection-count">{count}</span>
+              </button>
+              {isConfirming ? (
+                <span className="collection-confirm">
+                  <span>Delete {count} Item{count === 1 ? "" : "s"}?</span>
+                  <button
+                    type="button"
+                    className="danger-button danger-button-compact"
+                    onClick={() => { onDelete(collection.id); setConfirmingId(null); }}
+                    disabled={isDeleting}
+                    aria-label={`Confirm delete ${collection.name}`}
+                  >
+                    {isDeleting ? <LoaderCircle className="spin" size={12} /> : <Trash2 size={12} />}
+                  </button>
+                  <button type="button" className="text-button" onClick={() => setConfirmingId(null)} disabled={isDeleting}>Cancel</button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="icon-button collection-delete"
+                  onClick={() => setConfirmingId(collection.id)}
+                  aria-label={`Delete ${collection.name}`}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -936,6 +997,8 @@ export default function App() {
   const [resolveError, setResolveError] = useState("");
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
   const [isTogglingWatch, setIsTogglingWatch] = useState(false);
+  const [deletingCollectionId, setDeletingCollectionId] = useState(null);
+  const [deletingMissionId, setDeletingMissionId] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     const [missions, collections, records, clips, enrichments, routingDecisions, watchRules] = await Promise.all([
@@ -966,6 +1029,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return undefined;
     let cancelled = false;
+    let debounceTimer = null;
     const load = async () => {
       try {
         await loadDashboard();
@@ -974,17 +1038,26 @@ export default function App() {
         if (!cancelled) setLoadError(error.message || "Could not load your workspace.");
       }
     };
+    // A cascade delete (delete-collection/delete-mission) can touch dozens of
+    // rows across several entities in quick succession. Without debouncing,
+    // each subscription fires its own full reload per row change, bursting
+    // enough parallel list calls to trip Base44's rate limit (429).
+    const debouncedLoad = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(load, 400);
+    };
     load();
     const unsubscribers = [
-      base44.entities.Collection.subscribe(load),
-      base44.entities.Record.subscribe(load),
-      base44.entities.Clip.subscribe(load),
-      base44.entities.Enrichment.subscribe(load),
-      base44.entities.RoutingDecision.subscribe(load),
-      base44.entities.WatchRule.subscribe(load),
+      base44.entities.Collection.subscribe(debouncedLoad),
+      base44.entities.Record.subscribe(debouncedLoad),
+      base44.entities.Clip.subscribe(debouncedLoad),
+      base44.entities.Enrichment.subscribe(debouncedLoad),
+      base44.entities.RoutingDecision.subscribe(debouncedLoad),
+      base44.entities.WatchRule.subscribe(debouncedLoad),
     ];
     return () => {
       cancelled = true;
+      clearTimeout(debounceTimer);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, [loadDashboard, user]);
@@ -1121,6 +1194,44 @@ export default function App() {
     setIsDeletingRecord(false);
   };
 
+  const deleteCollection = async (collectionId) => {
+    setDeletingCollectionId(collectionId);
+    try {
+      await base44.functions.invoke("delete-collection", { collection_id: collectionId });
+    } catch (error) {
+      if (error.response?.status !== 404) {
+        setLoadError(error.response?.data?.error || error.message || "Could not remove this collection.");
+        setDeletingCollectionId(null);
+        return;
+      }
+    }
+    if (selectedRecord?.collection_id === collectionId) {
+      setSelectedRecord(null);
+      setRefreshNotice(null);
+    }
+    await loadDashboard();
+    setDeletingCollectionId(null);
+  };
+
+  const deleteMission = async (missionId) => {
+    setDeletingMissionId(missionId);
+    try {
+      await base44.functions.invoke("delete-mission", { mission_id: missionId });
+    } catch (error) {
+      if (error.response?.status !== 404) {
+        setLoadError(error.response?.data?.error || error.message || "Could not remove this Project.");
+        setDeletingMissionId(null);
+        return;
+      }
+    }
+    if (selectedRecord?.mission_id === missionId) {
+      setSelectedRecord(null);
+      setRefreshNotice(null);
+    }
+    await loadDashboard();
+    setDeletingMissionId(null);
+  };
+
   const toggleSelectedWatch = async (watch) => {
     if (!selectedRecord || !watch) return;
     setIsTogglingWatch(true);
@@ -1178,12 +1289,12 @@ export default function App() {
         <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
-        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
+        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
         <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span>{activeMission ? `${missionRecords.length} Items` : `${data.records.length} Items`}</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <section className="workspace-grid">
-        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} />
+        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} onDelete={deleteCollection} deletingId={deletingCollectionId} />
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
