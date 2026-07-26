@@ -1,0 +1,151 @@
+import { removeCollection } from "../base44/shared/collection-removal.ts";
+import { HttpError } from "../base44/shared/http.ts";
+
+function fakeService(seed: Record<string, any[]> = {}) {
+  const tables: Record<string, any[]> = {};
+  for (const name of ["Clip", "Collection", "Record", "RoutingDecision", "WatchRule", "Enrichment"]) {
+    tables[name] = (seed[name] ?? []).map((row) => ({ ...row }));
+  }
+  const service = Object.fromEntries(Object.keys(tables).map((name) => [
+    name,
+    {
+      get: async (id: string) => tables[name].find((row) => row.id === id) ?? null,
+      filter: async (query: Record<string, unknown>, _sort?: string, limit?: number, skip = 0) =>
+        tables[name]
+          .filter((row) => Object.entries(query).every(([key, value]) => row[key] === value))
+          .slice(skip, skip + (limit ?? tables[name].length)),
+      delete: async (id: string) => {
+        const index = tables[name].findIndex((row) => row.id === id);
+        if (index < 0) throw new Error(`Entity ${name} with ID ${id} not found`);
+        tables[name].splice(index, 1);
+      },
+    },
+  ]));
+  return { service, tables };
+}
+
+function record(overrides: Record<string, any>): Record<string, any> {
+  return {
+    owner_id: "owner-1",
+    collection_id: "collection-1",
+    fields_json: "{}",
+    source_url: "https://shop.example/item",
+    ...overrides,
+  };
+}
+
+function seedCollection(overrides: Record<string, any[]> = {}) {
+  return {
+    Collection: [{ id: "collection-1", owner_id: "owner-1", name: "Apartments", schema_json: "{}" }],
+    Record: [
+      record({ id: "record-1", clip_id: "clip-1" }),
+      record({ id: "record-2", clip_id: "clip-2" }),
+    ],
+    Clip: [
+      { id: "clip-1", owner_id: "owner-1", source_url: "https://shop.example/1" },
+      { id: "clip-2", owner_id: "owner-1", source_url: "https://shop.example/2" },
+    ],
+    RoutingDecision: [
+      { id: "decision-1", owner_id: "owner-1", clip_id: "clip-1", outcome: "existing" },
+      { id: "decision-2", owner_id: "owner-1", clip_id: "clip-2", outcome: "existing" },
+    ],
+    WatchRule: [
+      { id: "watch-1", owner_id: "owner-1", record_id: "record-1", active: true },
+    ],
+    Enrichment: [
+      { id: "enrichment-1", owner_id: "owner-1", record_id: "record-1", field: "price" },
+      { id: "enrichment-2", owner_id: "owner-1", record_id: "record-2", field: "price" },
+    ],
+    ...overrides,
+  };
+}
+
+function assertEquals(actual: unknown, expected: unknown, message = "Values differ") {
+  const left = JSON.stringify(actual);
+  const right = JSON.stringify(expected);
+  if (left !== right) throw new Error(`${message}\nexpected: ${right}\nactual:   ${left}`);
+}
+
+async function assertThrowsHttp(callback: () => Promise<unknown>, status: number, message = `expected HttpError ${status}`) {
+  try {
+    await callback();
+  } catch (error) {
+    if (error instanceof HttpError) {
+      assertEquals(error.status, status, message);
+      return error;
+    }
+    throw error;
+  }
+  throw new Error(`${message}: no error was thrown`);
+}
+
+Deno.test("removal cascades over every Record's watches, history, decision, and capture, then the Collection", async () => {
+  const { service, tables } = fakeService(seedCollection());
+
+  const result = await removeCollection(service, "owner-1", "collection-1");
+
+  assertEquals(result.deleted, {
+    watch_rules: 1,
+    enrichments: 2,
+    decisions: 2,
+    clips: 2,
+    records: 2,
+    collections: 1,
+  }, "expected full cascade counts across both Records");
+  for (const name of ["Collection", "Record", "Clip", "RoutingDecision", "WatchRule", "Enrichment"]) {
+    assertEquals(tables[name].length, 0, `expected ${name} to be empty`);
+  }
+});
+
+Deno.test("removal never touches another owner's Collection", async () => {
+  const { service, tables } = fakeService(seedCollection({
+    Collection: [{ id: "collection-1", owner_id: "owner-2", name: "Apartments", schema_json: "{}" }],
+  }));
+
+  await assertThrowsHttp(() => removeCollection(service, "owner-1", "collection-1"), 403);
+  assertEquals(tables.Record.length, 2, "no child rows may be deleted on a rejected call");
+});
+
+Deno.test("removing a missing Collection returns 404 so a retry reads as done", async () => {
+  const { service } = fakeService();
+  await assertThrowsHttp(() => removeCollection(service, "owner-1", "collection-9"), 404);
+});
+
+Deno.test("a partial-state retry skips already-missing children and finishes", async () => {
+  const { service, tables } = fakeService(seedCollection({
+    WatchRule: [],
+    Enrichment: [],
+    RoutingDecision: [],
+    Clip: [],
+  }));
+
+  const result = await removeCollection(service, "owner-1", "collection-1");
+
+  assertEquals(result.deleted, {
+    watch_rules: 0,
+    enrichments: 0,
+    decisions: 0,
+    clips: 0,
+    records: 2,
+    collections: 1,
+  }, "missing children are skipped, not errors");
+  assertEquals(tables.Collection.length, 0, "the Collection itself is still removed");
+});
+
+Deno.test("a Collection with several Records cascades and aggregates counts across all of them", async () => {
+  const manyRecords = Array.from({ length: 5 }, (_, index) => record({ id: `record-${index}`, clip_id: `clip-${index}` }));
+  const manyClips = manyRecords.map((row) => ({ id: row.clip_id, owner_id: "owner-1", source_url: `https://shop.example/${row.clip_id}` }));
+  const { service, tables } = fakeService(seedCollection({
+    Record: manyRecords,
+    Clip: manyClips,
+    RoutingDecision: [],
+    WatchRule: [],
+    Enrichment: [],
+  }));
+
+  const result = await removeCollection(service, "owner-1", "collection-1");
+
+  assertEquals(result.deleted.records, 5, "every Record across pages must be cascaded");
+  assertEquals(tables.Clip.length, 0, "every Record's Clip must be removed");
+  assertEquals(tables.Collection.length, 0, "the Collection itself is still removed");
+});

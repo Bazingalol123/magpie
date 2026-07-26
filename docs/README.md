@@ -10,6 +10,7 @@ but must not silently change the product model or trust boundary.
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Sign in, install the unpacked extension, pair, and first capture |
 | [`PRODUCT_GUIDE.md`](PRODUCT_GUIDE.md) | Every feature in depth: capture modes, organization, review, watches, refresh-on-revisit, the Agent, and the trust model |
 | [`API.md`](API.md) | Public API reference: principals, endpoints, typed outcomes, reason codes |
+| [`PROJECT_WRITEUP.md`](PROJECT_WRITEUP.md) | Submission write-up: decisions defended, what went wrong, what's not done |
 
 ## Continue development
 
@@ -34,10 +35,11 @@ but must not silently change the product model or trust boundary.
 ## Current release checkpoint
 
 - Production: <https://magpieorelse.base44.app>
-- 14 backend functions deployed, including `resolve-routing`, `delete-record`,
-  and `refresh-capture`; configured Agent `magpie_organizer` verified signed-in
-- Automated suite: 108/108 passing; live smoke tests cover auth, deletion
-  cascade, and a real pairing-token refresh
+- 16 backend functions deployed, including `resolve-routing`,
+  `delete-record`/`delete-collection`/`delete-mission`, and `refresh-capture`;
+  configured Agent `magpie_organizer` verified signed-in
+- Automated suite: 123/123 passing; live smoke tests cover auth, deletion
+  cascades, and a real pairing-token refresh
 - Remaining priorities: manual Chrome pass, folders, competition finish
   (`CLAUDE_CODE_HANDOFF.md`)
 - Deployment remains explicit-approval only

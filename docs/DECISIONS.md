@@ -109,6 +109,27 @@ owner of the evidence may destroy it, and only through an authenticated
 owner-validated function. Nothing else in the product deletes evidence, and
 enrichment failures still never mutate or remove anything.
 
+## Collection and Project deletion reuse the same full-delete semantic
+
+`delete-collection` and `delete-mission` extend the same owner-destroys-their-
+own-evidence exception one and two levels up the hierarchy: deleting a
+Collection permanently deletes every Record inside it (and each Record's
+WatchRules, Enrichments, RoutingDecision, and Clip); deleting a Project
+(Mission) does the same for every Collection scoped to it. Both reuse the
+identical per-record cascade `delete-record` already established rather than a
+second cascade implementation.
+
+Deleting a Project deliberately does not reach `needs_review`/`failed` Clips
+that only carried it as a routing hint and never became a Collection/Record.
+Silently deleting unresolved review work because it once mentioned a Project
+the owner is now removing would surprise a user trying to declutter their
+organized structure, not their inbox. Those Clips keep a dangling `mission_id`;
+this is safe because `resolve-routing`'s existing Project validation already
+returns a typed `404` for an unknown Project id rather than crashing, and the
+review UI simply shows the capture as no longer having a resolvable Project
+hint. Global Collections (no `mission_id`) are never touched by Project
+deletion.
+
 ## Blocked watches pause themselves after three consecutive blocked checks
 
 A login-walled or bot-challenged source is a stable condition, not a transient

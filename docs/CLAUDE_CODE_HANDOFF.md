@@ -120,6 +120,19 @@ Latest verified release gates:
 - `delete-record` and `resolve-routing` return safe JSON `401` unauthenticated
   and typed `404`s for missing rows when authenticated.
 
+## Deployed 2026-07-26, not yet merged
+
+`delete-collection` and `delete-mission` (Build Guide 29.10) extend the
+`delete-record` full-delete cascade to Collections and Projects. Built on
+branch `feature/cascade-delete` (not yet merged to `main`), gated locally
+(123/123 Deno tests, every `entry.ts` type-checked, Vite build passed), then
+deployed with explicit owner approval: both functions via a targeted
+`functions deploy`, and the site with the new sidebar/switcher delete UI.
+Live smoke checks passed (`401` unauthenticated, site `200`). The manual
+sign-in click-through (actually deleting a Collection/Project in the browser)
+still has not been performed — do that next. No entities or Agents changed
+or were pushed this round.
+
 ## Immediate continuation
 
 Build Guide 29.2–29.4 are complete and deployed. The remaining manual check is

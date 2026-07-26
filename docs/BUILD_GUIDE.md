@@ -450,6 +450,71 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   tables since both share `.agent-md`. Deployed via `npx base44 site deploy
   -y`, smoke-checked `200`.
 
+### 29.10 Owner Collection/Project deletion (`delete-collection`, `delete-mission`)
+
+- [x] **Build:** Extend the `delete-record` full-delete semantic one and two
+  levels up the hierarchy. Extract the per-record cascade out of
+  `record-removal.ts` into a reusable `cascadeRecord`; add a paginated
+  `listAllOwned` helper; add `delete-collection` (cascades over every owned
+  Record in a Collection, then the Collection) and `delete-mission` (cascades
+  over every owned Collection scoped to a Mission via the same primitive, then
+  the Mission). Add a delete action with two-step confirm to the Collection
+  sidebar and the Project switcher.
+- **Files:** `base44/shared/record-removal.ts`, `base44/shared/service-entities.ts`,
+  `base44/shared/collection-removal.ts`, `base44/shared/mission-removal.ts`,
+  `base44/functions/delete-collection/entry.ts`,
+  `base44/functions/delete-mission/entry.ts`,
+  `tests/record-removal.test.ts`, `tests/collection-removal.test.ts`,
+  `tests/mission-removal.test.ts`, `src/App.jsx`, `src/index.css`
+- **Verify:** Cascade counts across multiple Collections/Records, cross-owner
+  rejection before any delete, missing-row idempotent retry, a pagination case
+  exceeding one page, and a fixture proving an unrelated global Collection and
+  a hint-only `needs_review` Clip both survive Project deletion untouched.
+- **Hosted checkpoint 2026-07-26:** After explicit owner approval, `delete-collection`
+  and `delete-mission` were deployed with a targeted `functions deploy`, and the
+  site was redeployed with the new sidebar/switcher delete UI. Smoke checks:
+  unauthenticated calls to both functions return a safe JSON `401`; the live
+  page returns `200`. No entities or Agents were pushed (unchanged this
+  session). The deferred manual sign-in click-through (delete a Collection
+  with Items, delete a Project with Collections) still has not been performed.
+- **Follow-up fix 2026-07-26 — realtime reload burst:** live use surfaced
+  Base44 `429`s. Every one of the dashboard's 6 realtime subscriptions
+  (`Collection`, `Record`, `Clip`, `Enrichment`, `RoutingDecision`,
+  `WatchRule`) independently called the full 7-query `loadDashboard()` on
+  every row change with no debouncing. A single cascade delete can touch
+  dozens of rows across those entities, so it could burst into hundreds of
+  near-simultaneous list calls — a pre-existing fragility this release's
+  cascade deletes made acute. Fixed by debouncing the realtime callback
+  (400ms trailing) so a burst of row changes collapses into one reload;
+  explicit reloads after an owner's own action stay immediate. Site-only
+  change, no entity/function impact; deployed via `npx base44 site deploy -y`
+  after a passing `npm run build`, smoke-checked `200`.
+
+### 29.11 One capture in flight at a time
+
+- [x] **Build:** Every capture path (picker/snip submission in `content.js`,
+  the popup's "Save page" button, and the right-click context menu) funnels
+  through `service-worker.js` before hitting the network. Added a single
+  `captureInFlight` lock (`withCaptureLock`) around all three entry points —
+  a second capture attempt while one is still submitting is rejected
+  immediately with a clear toast/status message instead of firing a second
+  overlapping `ingest-clip` request and risking a rate limit. The quiet
+  background auto-refresh check also skips while a manual capture is
+  in-flight.
+- **Files:** `extension/service-worker.js`
+- **Verify:** Extension scripts parse and no extension file imports
+  `@base44/sdk`. Local-only change — reload the unpacked extension to pick
+  it up; no backend or site deploy involved.
+- **Follow-up 2026-07-26:** Rejecting a second capture with a toast still let
+  the user attempt one — proactively disabling controls is better UX.
+  `content.js` now tracks a local `captureSubmitting` flag and refuses to
+  open the picker/snip UI in the same tab while a capture from that tab is
+  still submitting (toast instead of silently failing later). The popup
+  queries a new `magpie:capture-status` message on open and disables all
+  three capture buttons if a capture is already in flight anywhere, and
+  disables them itself for the duration of its own "Save page" / picker-start
+  requests, re-enabling on error.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

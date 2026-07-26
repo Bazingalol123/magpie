@@ -34,6 +34,14 @@ V3.1 does not replace or postpone the V3 routing contract. The first release gat
 - No destructive migration, cascade delete, or arbitrary-depth tree.
 - No deployment or remote resource push without explicit approval.
 
+> The "no destructive migration, cascade delete" constraint above governs
+> schema/migration-time deletion — it is not a ban on the owner-triggered,
+> explicitly-confirmed delete features scored individually in the change
+> matrix below (`delete-record`, `delete-collection`, `delete-mission`). Those
+> are a deliberate, narrow, per-feature exception recorded in
+> `docs/DECISIONS.md`, gated by their own risk score and fixtures, never an
+> automatic or migration-driven deletion.
+
 ## Multi-mode capture contract
 
 V3.1 adds capture choices without turning Magpie into a crawler or a generic screenshot archive:
@@ -178,6 +186,8 @@ No change rated High or Critical begins production implementation until its back
 | Project-aware routing code agent | Auto-associate a capture with a clearly matching active Project | No required extension read or filing step | Bounded AI Gateway tool loop, deterministic Project validator, additive RoutingDecision audit fields | 4 | 4 | 16 Critical | Ship behind thresholds, fallback, fixtures, and separate deploy approval |
 | Owner routing correction (`resolve-routing`) | Let an owner accept, redirect, or approve a new Collection for a `needs_review` or wrongly routed capture instead of it sitting unresolved | Wire existing Needs review / Item detail actions to one function call; no new view | New `resolve-routing` function; server-owned move/create across Clip, Record, RoutingDecision; reuses `classify-clip` owner/scope checks; no schema change | 3 | 4 | 12 High | Ship behind contract fixtures and separate deploy approval; before folders |
 | Owner Item deletion (`delete-record`) | Let an owner permanently remove an Item they no longer want, including its watches, update history, capture, and routing audit | Remove-item action with two-step confirm in Item detail | New `delete-record` function; owner-validated destructive cascade over WatchRule, Enrichment, RoutingDecision, Record, Clip; no schema change | 3 | 4 | 12 High | Ship behind cascade/idempotency fixtures and deploy approval |
+| Owner Collection deletion (`delete-collection`) | Let an owner permanently remove a Collection they no longer want, including every Item inside it | Delete action with two-step confirm in the Collection sidebar | New `delete-collection` function reusing the existing per-record cascade primitive over every owned Record in the Collection, then the Collection; no schema change | 3 | 4 | 12 High | Ship behind cascade/idempotency/pagination fixtures and deploy approval |
+| Owner Project deletion (`delete-mission`) | Let an owner permanently remove a Project they no longer want, including every Collection and Item inside it | Delete action with two-step confirm in the Project switcher | New `delete-mission` function cascading over every owned Collection scoped to the Mission (each via the `delete-collection` cascade), then the Mission; hint-only `needs_review` Clips are left untouched; no schema change | 3 | 5 | 15 High | Ship behind cascade/idempotency/pagination/scope fixtures and deploy approval |
 | Review dismissal and Project-scoped creation (`resolve-routing` extensions) | Dismiss an unwanted `needs_review` capture; choose or create a Project when approving a new Collection during review | Dismiss button and Project selector inside the Needs-review wizard | Additive `dismiss` action and optional validated `project_id` on the existing function; no schema change | 2 | 3 | 6 Moderate | Ship with fixtures alongside `delete-record` |
 | Blocked-watch auto-pause | Stop wasting scheduled checks on login-walled or bot-challenged sources | Blocked-state notice with pause/resume in Item detail | Pure pause-decision helper plus a `sweep-watches` update path setting `active: false` after 3 consecutive blocked checks; no schema change | 2 | 3 | 6 Moderate | Ship with sweep fixtures; rollback is redeploying the previous sweep |
 | Capture-time duplicate status | A re-clip of an already-saved capture says so instead of silently filing a twin | Toast copy plus a dashboard item deep link | `ingest-clip` checks owner + `content_hash` before creating and returns a safe `capture_status`; additive response field | 2 | 3 | 6 Moderate | Ship with the refresh release |
@@ -392,6 +402,64 @@ to "evidence travels with data" — the owner of the evidence may destroy it
 Risk is L=3, I=4, score 12 High. Required controls: cascade-count fixtures,
 cross-owner rejection, missing-row idempotent retry, and the hosted
 throwing-`get` fixture pattern.
+
+### Owner Collection/Project deletion (`delete-collection`, `delete-mission`)
+
+Owners can currently only delete one Item at a time. Deleting a whole
+Collection or Project one Item at a time is tedious and easy to abandon
+half-finished, leaving orphaned watches and history behind exactly the
+problem `delete-record` solved at the Item level. This extends the same
+full-delete semantic one and two levels up the existing hierarchy rather than
+introducing a new destructive concept.
+
+- **User value:** remove a Collection (with every Item inside it) or an entire
+  Project (with every Collection and Item inside it) in one confirmed action,
+  with no orphaned watches, update history, captures, or routing audit rows
+  left behind.
+- **Frontend surface:** a delete action with a two-step inline confirmation in
+  the Collection sidebar and in the Project switcher; no new view.
+- **Backend surface:** two new functions, signed-in owner only.
+  `delete-collection` reuses the exact per-record cascade `delete-record`
+  established (`base44/shared/record-removal.ts`'s extracted `cascadeRecord`)
+  over every owned Record in the Collection, then deletes the Collection.
+  `delete-mission` reuses `delete-collection`'s cascade over every owned
+  Collection scoped to the Mission (`Collection.mission_id`), then deletes the
+  Mission. Neither introduces a new relationship type or a new deletion
+  primitive — both are pure fan-out over the already-reviewed cascade. Listing
+  a Collection's Records or a Mission's Collections is paginated
+  (`listAllOwned` in `base44/shared/service-entities.ts`) so an owner with more
+  rows than one page still gets a complete cascade.
+- **Data compatibility:** no schema change; no backfill.
+- **Security/RLS:** every row is owner-checked before the cascade starts, same
+  as `delete-record`; the extension pairing principal has no path to either
+  function.
+- **Scope decision:** `delete-mission` deletes only Collections structurally
+  scoped to the Mission and their Records. It deliberately does not touch
+  `needs_review`/`failed` Clips that only carried the Mission as a routing
+  hint — see `docs/DECISIONS.md`.
+- **Failure behavior:** missing id `400`; unauthenticated `401`; cross-owner
+  `403`; already-fully-deleted row `404` (a retry `404` after success means
+  done). Missing child rows are skipped, never errors, so a mid-cascade
+  failure is completed by retrying. An implausibly large cascade (past
+  `listAllOwned`'s documented row bound) fails loud with `500` rather than
+  silently deleting a partial cascade.
+- **Migration/rollback:** none needed; the functions can be removed without
+  data impact beyond what a completed delete already did. Deleted data is
+  unrecoverable by design, same as `delete-record`.
+- **Release authority:** function deployment only.
+
+Risk for `delete-collection` is L=3, I=4, score 12 High — the same class as
+`delete-record`, just a wider fan-out over a proven primitive. Risk for
+`delete-mission` is L=3, I=5, score 15 High: worst-credible impact is losing an
+entire Project's structure in one action, the top impact band, but it stays
+High rather than Critical because the likelihood and control profile match the
+already-reviewed cascade primitive with no new relationship type or new attack
+surface — the same reasoning already used to score the RLS-bypass fix High
+rather than Critical. Required controls: cascade-count fixtures across
+multiple Collections/Records, cross-owner rejection before any delete,
+missing-row idempotent retry, a pagination fixture exceeding one page, and a
+fixture proving an unrelated global Collection and a hint-only `needs_review`
+Clip both survive Project deletion untouched.
 
 ### `resolve-routing` extensions: dismiss and Project-scoped creation
 
