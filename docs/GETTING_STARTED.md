@@ -4,8 +4,8 @@ Magpie turns pieces of the web you find — listings, products, jobs, recipes �
 into structured, comparable, self-updating collections. This guide takes you
 from nothing to your first organized, watched Item in about five minutes.
 
-**You need:** Google Chrome, a Google account, and a copy of this repository
-(for the extension).
+**You need:** Google Chrome, a Google account, and the
+[extension download](https://github.com/Bazingalol123/magpie/releases/latest).
 
 ## 1. Sign in to the dashboard
 
@@ -18,11 +18,13 @@ everything in it is visible only to you.
 The extension is not on the Chrome Web Store; it loads as an *unpacked*
 extension, which takes about a minute:
 
-1. Download this repository (**Code → Download ZIP** on GitHub, then unzip —
-   or `git clone`).
+1. Download the [extension zip](https://github.com/Bazingalol123/magpie/releases/latest)
+   from the latest GitHub release and unzip it (or get the full
+   [repository](https://github.com/Bazingalol123/magpie) if you want the
+   source too).
 2. In Chrome, open `chrome://extensions`.
 3. Turn on **Developer mode** (toggle in the top-right corner).
-4. Click **Load unpacked** and select the repository's **`extension/`** folder.
+4. Click **Load unpacked** and select the unzipped **`extension/`** folder.
 
 The Magpie icon appears in your toolbar (pin it via the puzzle-piece menu).
 Chrome shows a standard "developer mode extensions" notice on restart — that's
