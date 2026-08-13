@@ -611,6 +611,42 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   back to the pre-fix exact-`source_url` behavior) but means the fix isn't
   live.
 
+### 29.15 Show an AI summary instead of the raw capture (B1)
+
+- [x] **Build:** No code path anywhere generated a short, digestible summary
+  of a capture — `Clip.raw_text`/`raw_html` were the only content fields, and
+  the dashboard sidepanel (`RecordDetail`) and review panel rendered the raw
+  captured text verbatim and unbounded, contrary to the product's "structured
+  info, not a raw dump" charter. Rather than a second AI call, `summary` is
+  now a required field on the same `submit_route_proposal` tool call the
+  routing agent already makes per capture (`base44/shared/classification.ts`
+  — added to `ROUTING_RESPONSE_FORMAT`'s schema, the agent tool's schema, the
+  agent's system prompt instructions, `adaptRoutingProposal`, and the
+  rollback structured-classifier prompt/example for consistency): one or two
+  plain-language sentences, no markdown. `processStoredClip`
+  (`base44/shared/routing-persistence.ts`) writes it onto `Clip.summary`
+  right after the proposal succeeds, in its own try/catch so a summary-save
+  failure can never turn an otherwise-good capture into a false "review"
+  outcome — it's a best-effort cheap entity write riding an AI call that
+  already happened, not a second AI call. `Clip.review`/`ai_unavailable`
+  outcomes (the proposal call itself threw) have no summary, by design.
+  Frontend: added `CapturedContext` (`src/App.jsx`), used by both
+  `RecordDetail` and the review panel — shows `clip.summary` when present
+  (falling back to a 240-char preview of `raw_text` when it isn't, e.g. for
+  `ai_unavailable`/older clips), with the full `raw_text` always reachable
+  behind a "View full captured text" `<details>` toggle rather than gone.
+- **Files:** `base44/shared/classification.ts`,
+  `base44/shared/routing-persistence.ts`, `base44/entities/clip.jsonc`,
+  `src/App.jsx`, `src/index.css`, `tests/routing-agent.test.ts`
+- **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing.
+  `deno check` on every `base44/functions/**/entry.ts` passes. `npm run
+  build` passes. The new `Clip.summary` field has **not** been pushed to
+  Base44 yet (`npx base44 entities push` needs explicit owner approval) —
+  until then `clip.summary` reads as `undefined` on hosted data and
+  `CapturedContext` cleanly falls back to the raw-text preview, so this is
+  safe to leave un-pushed but isn't live. Not yet verified in a real browser
+  against a live capture — do that as part of the next manual pass.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

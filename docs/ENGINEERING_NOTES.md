@@ -500,3 +500,19 @@ rather than assuming), and every read of `record.canonical_url` on existing
 rows is `undefined`. `refresh-capture`'s canonical-then-fallback lookup
 (29.14) was written specifically so this half-deployed state degrades to the
 old exact-`source_url` behavior instead of breaking.
+
+## 2026-08-14 — a field that isn't part of RoutingResult still has to reach the Clip
+
+`summary` (Build Guide 29.15) doesn't fit the existing `RoutingResult` type
+(`base44/shared/routing.ts`) — that type exists to carry a *routing decision*
+(existing/new/review, confidence, schema, fields) through `routeCapture`'s
+deterministic validation, and threading an unrelated display field through
+every branch of that validator (and its `ExistingRoutingResult`/
+`NewRoutingResult`/`ReviewRoutingResult` variants) would have meant touching
+code whose whole job is routing correctness for a feature that has nothing to
+do with routing. Reading `summary` directly off the raw AI `proposal` object
+in `processStoredClip`, before it's handed to `routeCapture`, and writing it
+to `Clip` in one isolated try/catch kept the two concerns separate: routing
+outcome is unaffected by whether the summary write succeeds, and a summary
+exists (or doesn't) independently of whether the outcome was existing, new,
+or review.
