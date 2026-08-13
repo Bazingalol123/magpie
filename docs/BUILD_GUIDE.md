@@ -726,7 +726,9 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - [x] **Build:** `RecordTable`/`RecordCardGrid` (`src/App.jsx`) rendered
   every Record in the selected Collection at once — a Collection accumulates
   captures indefinitely with no bound, so the panel just grows forever as a
-  user adds Items. Added simple client-side pagination: 30 records per page,
+  user adds Items. Added simple client-side pagination: 30 records per page
+  in table mode, 8 per page in card mode (card tiles take much more vertical
+  space per item, so a smaller page keeps a page to roughly one screen),
   Previous/Next controls, only shown when a Collection has more than one
   page. Resets to page 1 when the selected Collection changes (via a
   `useEffect` keyed on `collection.id`) so switching collections never
