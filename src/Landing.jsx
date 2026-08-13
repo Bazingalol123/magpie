@@ -240,7 +240,7 @@ export default function Landing({ isSigningIn, onSignIn }) {
         <span>Built on Base44 · owner-scoped by design</span>
         <div className="ld-footer-links">
           <a className="ld-docs-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={13} /> LinkedIn</a>
-          <a className="ld-docs-link" href="https://github.com/Bazingalol123/magpie/issues/new" target="_blank" rel="noreferrer"><Bug size={13} /> Report a bug</a>
+          <a className="ld-docs-link" href="https://github.com/Bazingalol123/magpie/issues/new" target="_blank" rel="noreferrer"><Bug size={13} /> Found a bug?</a>
         </div>
       </footer>
     </main>
