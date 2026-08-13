@@ -531,3 +531,27 @@ A real capture on books.toscrape.com reproduced it exactly. General lesson
 for this codebase: `foo?.bar` passed into any `new URL(value, base)` call
 needs an explicit null check first — optional chaining's `undefined` is not
 the same as "no value" as far as the URL constructor is concerned.
+
+## 2026-08-14 — a tool-calling `required` array is advisory, not enforced, without `strict: true`
+
+Build Guide 29.15 (B1) added `summary` to `submit_route_proposal`'s
+`required` array expecting the model to always include it, the same way
+`ROUTING_RESPONSE_FORMAT`'s `required` array (used by the old
+`response_format`-based rollback path) does. It didn't work: live testing
+after deploying showed `Clip.summary` completely absent from captured
+records — not even an empty string, the key was never written at all,
+because `boundedSummary(proposal.summary)` was reading `undefined`. Root
+cause: `ROUTING_RESPONSE_FORMAT.json_schema` has `strict: true` at the
+top level, but the actual live path (`requestAgentRoutingProposal`, tool
+calling via `ROUTING_AGENT_TOOLS`) never set `strict: true` on the
+`submit_route_proposal` function definition itself — so its `required` list
+was descriptive only, and the model skipped `summary` despite the system
+prompt asking for it. Fixed by adding `strict: true` alongside
+`description` on the tool's `function` object (the same
+`additionalProperties: false` + `type: [x, "null"]` nullable pattern already
+used elsewhere in this schema is what strict mode requires, and was already
+in place). Confirmed via the actual entity data after redeploy: `summary` now
+populates with real, sensible content. Lesson: OpenAI-compatible **tool**
+schemas need their own `strict: true` — it does not inherit from a
+`response_format` used elsewhere in the same file, and a field merely being
+listed in `required` proves nothing without it.

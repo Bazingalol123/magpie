@@ -378,6 +378,7 @@ const ROUTING_AGENT_TOOLS = [
     function: {
       name: "submit_route_proposal",
       description: "Submit the final Project and Collection proposal. This tool does not write data.",
+      strict: true,
       parameters: {
         type: "object",
         additionalProperties: false,

@@ -661,12 +661,21 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   `src/App.jsx`, `src/index.css`, `tests/routing-agent.test.ts`
 - **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing.
   `deno check` on every `base44/functions/**/entry.ts` passes. `npm run
-  build` passes. The new `Clip.summary` field has **not** been pushed to
-  Base44 yet (`npx base44 entities push` needs explicit owner approval) —
-  until then `clip.summary` reads as `undefined` on hosted data and
-  `CapturedContext` cleanly falls back to the raw-text preview, so this is
-  safe to leave un-pushed but isn't live. Not yet verified in a real browser
-  against a live capture — do that as part of the next manual pass.
+  build` passes.
+- **Deployed 2026-08-14** (owner-approved): `npx base44 entities push` and
+  `npx base44 functions deploy ingest-clip refresh-capture classify-clip`.
+  First live check found `Clip.summary` completely absent from real captures
+  — the `submit_route_proposal` tool's `required` array doesn't force the
+  model to include a field without the tool also setting `strict: true`
+  (unlike `ROUTING_RESPONSE_FORMAT`, which already had it for the unrelated
+  rollback path). Added `strict: true` to the tool definition, redeployed,
+  re-verified against fresh captures on books.toscrape.com: `Clip.summary`
+  now populates with accurate, on-spec content (see
+  `docs/ENGINEERING_NOTES.md` 2026-08-14). Backend confirmed live and
+  working. **Frontend not yet deployed** — `src/App.jsx`'s `CapturedContext`
+  change needs `npm run build` + `npx base44 site deploy`, so the live
+  dashboard still renders the pre-fix raw-text dump even though the data now
+  has a summary to show.
 
 ### 30. Add bounded folder persistence
 

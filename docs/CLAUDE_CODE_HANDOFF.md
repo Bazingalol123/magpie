@@ -170,11 +170,11 @@ P0/P1 bugs top to bottom, one commit per bug:
   call) instead of the raw captured text, with the full text still reachable
   behind a toggle. **Not yet live**, same `entities push` gap as B8.
 
-**Two schema fields are waiting on one `npx base44 entities push`:**
-`Clip.canonical_url` (B8) and `Clip.summary` (B1). Both degrade safely if
-left un-pushed (old behavior / raw-text fallback respectively), but neither
-fix is actually live on hosted data until that push runs with explicit owner
-approval.
+**Deployed 2026-08-14** (owner-approved): `npx base44 entities push` (all 8
+entities, including `Clip.canonical_url` and `Clip.summary`) and
+`npx base44 functions deploy ingest-clip refresh-capture classify-clip` (the
+three functions importing the changed shared modules). No error-level
+function logs after deploy. B1 and B8 are now live.
 
 ## Immediate continuation
 
