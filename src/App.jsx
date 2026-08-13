@@ -134,6 +134,32 @@ function screenshotUrlFor(clip) {
   return clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url) || "";
 }
 
+function truncate(value, maxLength) {
+  return value.length > maxLength ? `${value.slice(0, maxLength).trimEnd()}…` : value;
+}
+
+// clip.summary is AI-generated at capture time; older/failed-routing clips
+// may not have one, so this falls back to a short raw-text preview with the
+// full captured text always reachable behind a toggle rather than dumping
+// the whole raw capture inline.
+function CapturedContext({ clip }) {
+  if (!clip?.raw_text) return null;
+  const preview = clip.summary || truncate(clip.raw_text, 240);
+  const hasMore = clip.summary || clip.raw_text.length > preview.length;
+  return (
+    <div className="clip-context">
+      <div><FileText size={14} /> {clip.summary ? "Summary" : "Captured context"}</div>
+      <p>{preview}</p>
+      {hasMore && (
+        <details className="clip-raw-toggle">
+          <summary>View full captured text</summary>
+          <p>{clip.raw_text}</p>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function MagpieMark({ size = 28 }) {
   return <img src={magpieMarkSrc} alt="" className="magpie-mark" width={size} height={size} />;
 }
@@ -522,7 +548,7 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
         </div>
         {record.mission_id && <div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
         {screenshotUrl && <img className="clip-screenshot" src={screenshotUrl} alt="Captured source page" />}
-        {clip?.raw_text && <div className="clip-context"><div><FileText size={14} /> Captured context</div><p>{clip.raw_text}</p></div>}
+        <CapturedContext clip={clip} />
         {isBlocked && (
           <div className="blocked-notice">
             <LockKeyhole size={15} />
@@ -664,7 +690,7 @@ function NeedsReviewPanel({ clips, decisionsByClip, collections, missions, selec
         )}
 
         <a className="source-link" href={selectedClip.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(selectedClip.source_url)}</a>
-        {selectedClip.raw_text && <div className="clip-context"><div><FileText size={14} /> Captured context</div><p>{selectedClip.raw_text}</p></div>}
+        <CapturedContext clip={selectedClip} />
 
         <div className="review-reasons">
           {(reasonCodes.length ? reasonCodes : [selectedClip.routing_reason_code]).filter(Boolean).map((code) => (

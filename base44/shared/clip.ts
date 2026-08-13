@@ -90,6 +90,30 @@ export function plainTextFromHtml(html: string) {
     .trim();
 }
 
+// Session ids and ad-click params (utm_*, gclid, fbclid, ...) commonly vary
+// between two visits to the same listing, which made content_hash/source_url
+// matching treat identical listings as distinct captures (Bug B8). Only used
+// for duplicate/refresh matching — never stored as the user-facing
+// source_url, so a wrong strip here can't corrupt the link the user needs to
+// get back to the page.
+const TRACKING_PARAM_DENYLIST = new Set([
+  "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "utm_name",
+  "gclid", "gclsrc", "dclid", "fbclid", "msclkid", "mc_cid", "mc_eid",
+  "_ga", "yclid", "twclid", "igshid", "si",
+]);
+
+export function canonicalizeUrl(value: string): string {
+  const url = new URL(value);
+  for (const key of [...url.searchParams.keys()]) {
+    if (TRACKING_PARAM_DENYLIST.has(key.toLowerCase())) url.searchParams.delete(key);
+  }
+  url.searchParams.sort();
+  if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+    url.pathname = url.pathname.slice(0, -1);
+  }
+  return url.toString();
+}
+
 function isHttpUrl(value: string) {
   try {
     const url = new URL(value);

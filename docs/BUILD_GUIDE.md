@@ -550,6 +550,133 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   the next `extension-v*` tag, the second requires a separate, explicit
   owner-approved run per `CLAUDE.md`.
 
+### 29.13 Fix element-picker capture saving the list page instead of the item
+
+- [x] **Build:** `captureElement` (`extension/content.js`) hardcoded
+  `source_url: window.location.href` for every picker capture (hover, click,
+  or the `C` shortcut). On list-style pages (e.g. rental listings) this saved
+  the *list* page's URL instead of the specific card's own detail link, and
+  because list pages are commonly client-rendered and reshuffle/refresh, the
+  captured item could vanish from the page the user is sent back to. Added
+  `resolveDetailUrl(element)`, which looks for the clicked element's nearest
+  detail link (`element.closest("a[href]")`, falling back to
+  `element.querySelector("a[href]")`), resolves it through the existing
+  `safeHttpUrl` helper, and falls back to `window.location.href` only if no
+  link is found. `captureElement` now uses this instead of the page URL
+  directly. Context-menu capture modes (`selection`, `link`, `image`, `page`)
+  and the visual snip flow were left unchanged — they weren't part of the
+  reported bug and already have (`link` mode) or don't need (whole-page
+  intent) this resolution.
+- **Files:** `extension/content.js`
+- **Verify:** `node --check extension/content.js` passes. Local-only change —
+  reload the unpacked extension to pick it up; no backend or site deploy
+  involved.
+- **Follow-up 2026-08-14 (found via manual Playwright testing against
+  books.toscrape.com):** the no-anchor-found fallback was itself broken.
+  `safeHttpUrl(anchor?.href)` passed `undefined` when no anchor was found;
+  `new URL(undefined, base)` coerces that to the literal string `"undefined"`
+  instead of throwing, so `safeHttpUrl` returned a bogus
+  `https://<origin>/undefined` URL instead of `""`, and the `||
+  window.location.href` fallback never ran — a real capture reproduced this
+  exactly (`https://books.toscrape.com/undefined`). Fixed by checking
+  `anchor` truthiness before calling `safeHttpUrl` at all. Re-verified live
+  post-fix: the same no-link scenario (hovering a book's price text, which
+  has no ancestor or descendant link) now correctly saves the list page URL.
+  Also confirmed live: the happy path (hovering a card's title/image link)
+  saves the specific item's detail URL, and the descendant-link case
+  (hovering a non-link card container whose only link is a child, e.g. the
+  image wrapper) resolves correctly per a direct DOM check
+  (`element.closest("a[href]") || element.querySelector("a[href]")`) against
+  real book.toscrape.com markup — an end-to-end capture of that exact case
+  wasn't cleanly reproducible in the test session (a prior capture was still
+  in flight, so the picker likely never activated for that attempt; see
+  `captureSubmitting`/`withCaptureLock` in `content.js`/`service-worker.js`),
+  but the DOM logic itself is confirmed sound.
+
+### 29.14 Normalize URLs for duplicate matching (B8)
+
+- [x] **Build:** Duplicate detection in `ingest-clip` (`content_hash` over
+  `capture_mode` + `source_url` + `context_url` + `raw_text`) and
+  `refresh-capture`'s revisit lookup both matched on the raw, unnormalized
+  `source_url`. Tracking/session query params that vary between two visits to
+  the same page (`utm_*`, `gclid`, `fbclid`, etc. — common on rental/listing
+  sites) produced a different hash each time, so the same listing captured
+  twice silently created two separate Clips/Records instead of being flagged
+  a duplicate. Added `canonicalizeUrl()` (`base44/shared/clip.ts`): strips a
+  denylist of known tracking params, sorts the remaining query params, and
+  trims a trailing slash — deliberately does **not** touch the URL fragment,
+  since list/detail pages can use hash-based routing to identify the specific
+  item (see Build Guide 29.13), and stripping it could wrongly merge two
+  different items. `ingest-clip` now hashes on the canonical URL and stores
+  it as `Clip.canonical_url` (new field); `routing-persistence.ts` copies it
+  onto the created `Record`; `refresh-capture` looks up by `canonical_url`
+  first and falls back to the old exact `source_url` match so Records created
+  before this change (which have no `canonical_url`) keep working.
+  `source_url` itself is never rewritten — it's still the exact link the user
+  needs to get back to the page.
+  Scope is forward-only per product decision: this does not retroactively
+  merge or flag duplicate Clips/Records that already exist in the database
+  from before this fix — that would be a separate, explicit cleanup task.
+- **Files:** `base44/shared/clip.ts`, `base44/functions/ingest-clip/entry.ts`,
+  `base44/shared/routing-persistence.ts`,
+  `base44/functions/refresh-capture/entry.ts`,
+  `base44/entities/clip.jsonc`, `base44/entities/record.jsonc`,
+  `tests/clip.test.ts`
+- **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing,
+  including 4 new `canonicalizeUrl` cases. `deno check` on every
+  `base44/functions/**/entry.ts` passes. The new `canonical_url` field on
+  `Clip`/`Record` has **not** been pushed to Base44 yet
+  (`npx base44 entities push` needs explicit owner approval per `CLAUDE.md`)
+  — until that runs, the code paths that read/write `canonical_url` will
+  just see it as `undefined` on the hosted entities, which is safe (falls
+  back to the pre-fix exact-`source_url` behavior) but means the fix isn't
+  live.
+
+### 29.15 Show an AI summary instead of the raw capture (B1)
+
+- [x] **Build:** No code path anywhere generated a short, digestible summary
+  of a capture — `Clip.raw_text`/`raw_html` were the only content fields, and
+  the dashboard sidepanel (`RecordDetail`) and review panel rendered the raw
+  captured text verbatim and unbounded, contrary to the product's "structured
+  info, not a raw dump" charter. Rather than a second AI call, `summary` is
+  now a required field on the same `submit_route_proposal` tool call the
+  routing agent already makes per capture (`base44/shared/classification.ts`
+  — added to `ROUTING_RESPONSE_FORMAT`'s schema, the agent tool's schema, the
+  agent's system prompt instructions, `adaptRoutingProposal`, and the
+  rollback structured-classifier prompt/example for consistency): one or two
+  plain-language sentences, no markdown. `processStoredClip`
+  (`base44/shared/routing-persistence.ts`) writes it onto `Clip.summary`
+  right after the proposal succeeds, in its own try/catch so a summary-save
+  failure can never turn an otherwise-good capture into a false "review"
+  outcome — it's a best-effort cheap entity write riding an AI call that
+  already happened, not a second AI call. `Clip.review`/`ai_unavailable`
+  outcomes (the proposal call itself threw) have no summary, by design.
+  Frontend: added `CapturedContext` (`src/App.jsx`), used by both
+  `RecordDetail` and the review panel — shows `clip.summary` when present
+  (falling back to a 240-char preview of `raw_text` when it isn't, e.g. for
+  `ai_unavailable`/older clips), with the full `raw_text` always reachable
+  behind a "View full captured text" `<details>` toggle rather than gone.
+- **Files:** `base44/shared/classification.ts`,
+  `base44/shared/routing-persistence.ts`, `base44/entities/clip.jsonc`,
+  `src/App.jsx`, `src/index.css`, `tests/routing-agent.test.ts`
+- **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing.
+  `deno check` on every `base44/functions/**/entry.ts` passes. `npm run
+  build` passes.
+- **Deployed 2026-08-14** (owner-approved): `npx base44 entities push` and
+  `npx base44 functions deploy ingest-clip refresh-capture classify-clip`.
+  First live check found `Clip.summary` completely absent from real captures
+  — the `submit_route_proposal` tool's `required` array doesn't force the
+  model to include a field without the tool also setting `strict: true`
+  (unlike `ROUTING_RESPONSE_FORMAT`, which already had it for the unrelated
+  rollback path). Added `strict: true` to the tool definition, redeployed,
+  re-verified against fresh captures on books.toscrape.com: `Clip.summary`
+  now populates with accurate, on-spec content (see
+  `docs/ENGINEERING_NOTES.md` 2026-08-14). Backend confirmed live and
+  working. **Frontend not yet deployed** — `src/App.jsx`'s `CapturedContext`
+  change needs `npm run build` + `npx base44 site deploy`, so the live
+  dashboard still renders the pre-fix raw-text dump even though the data now
+  has a summary to show.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

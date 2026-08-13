@@ -472,3 +472,103 @@ GitHub Actions checkout. The Base44 CLI resolves the app id from a
 lets `deploy-base44.yml` work from a plain `actions/checkout` without ever
 committing the id — see `docs/DECISIONS.md` for why the deploy workflow
 still requires a manual approval click rather than running unattended.
+
+## 2026-08-14 — every capture path but `link` mode used the page URL, not the target's URL
+
+Only the context-menu `link` capture mode (`extension/content.js`,
+`buildContextPayload`'s `link` branch) ever resolved a specific link out of
+the DOM (`lastContextTarget.closest("a[href]")`). Every other capture path —
+picker/`captureElement`, the visual snip flow, and the `selection`/`image`
+context-menu modes — used `window.location.href` unconditionally. That's
+correct for whole-page or free-text captures, but wrong for
+`captureElement`, since a user picking one element out of many (list cards,
+grids) usually means the element itself has its own destination. Fixed by
+adding `resolveDetailUrl()` and using it in `captureElement` only (Build
+Guide 29.13) — the other paths weren't part of the reported bug and changing
+them risks altering intentional whole-page-capture behavior.
+
+## 2026-08-14 — a schema field can be committed and coded against before it exists on the hosted entity
+
+Adding `canonical_url` to `base44/entities/clip.jsonc`/`record.jsonc` (Build
+Guide 29.14) is a local file edit only — Base44 doesn't see it until
+`npx base44 entities push` runs, which needs explicit owner approval per
+`CLAUDE.md`. Until that push happens, `base44.asServiceRole.entities.Clip.create({..., canonical_url: ...})`
+in `ingest-clip` just writes a field the hosted schema doesn't declare (Base44
+appears to accept and store undeclared properties rather than rejecting the
+write — worth confirming explicitly during the next `entities push` cycle
+rather than assuming), and every read of `record.canonical_url` on existing
+rows is `undefined`. `refresh-capture`'s canonical-then-fallback lookup
+(29.14) was written specifically so this half-deployed state degrades to the
+old exact-`source_url` behavior instead of breaking.
+
+## 2026-08-14 — a field that isn't part of RoutingResult still has to reach the Clip
+
+`summary` (Build Guide 29.15) doesn't fit the existing `RoutingResult` type
+(`base44/shared/routing.ts`) — that type exists to carry a *routing decision*
+(existing/new/review, confidence, schema, fields) through `routeCapture`'s
+deterministic validation, and threading an unrelated display field through
+every branch of that validator (and its `ExistingRoutingResult`/
+`NewRoutingResult`/`ReviewRoutingResult` variants) would have meant touching
+code whose whole job is routing correctness for a feature that has nothing to
+do with routing. Reading `summary` directly off the raw AI `proposal` object
+in `processStoredClip`, before it's handed to `routeCapture`, and writing it
+to `Clip` in one isolated try/catch kept the two concerns separate: routing
+outcome is unaffected by whether the summary write succeeds, and a summary
+exists (or doesn't) independently of whether the outcome was existing, new,
+or review.
+
+## 2026-08-14 — `new URL(undefined, base)` doesn't throw, it produces `"<origin>/undefined"`
+
+Caught during manual Playwright testing of Build Guide 29.13 (B4):
+`resolveDetailUrl`'s no-anchor-found path called `safeHttpUrl(anchor?.href)`,
+and when `anchor` is `null`, `anchor?.href` is `undefined` — not a missing
+argument. `new URL(undefined, "https://example.com/")` coerces `undefined` to
+the string `"undefined"` via `ToString` and happily resolves it as a relative
+path, returning `https://example.com/undefined` instead of throwing. Because
+`safeHttpUrl` only returns `""` on a thrown exception, this bogus URL came
+back as a truthy string and defeated the `|| window.location.href` fallback.
+A real capture on books.toscrape.com reproduced it exactly. General lesson
+for this codebase: `foo?.bar` passed into any `new URL(value, base)` call
+needs an explicit null check first — optional chaining's `undefined` is not
+the same as "no value" as far as the URL constructor is concerned.
+
+## 2026-08-14 — a tool-calling `required` array is advisory, not enforced, without `strict: true`
+
+Build Guide 29.15 (B1) added `summary` to `submit_route_proposal`'s
+`required` array expecting the model to always include it, the same way
+`ROUTING_RESPONSE_FORMAT`'s `required` array (used by the old
+`response_format`-based rollback path) does. It didn't work: live testing
+after deploying showed `Clip.summary` completely absent from captured
+records — not even an empty string, the key was never written at all,
+because `boundedSummary(proposal.summary)` was reading `undefined`. Root
+cause: `ROUTING_RESPONSE_FORMAT.json_schema` has `strict: true` at the
+top level, but the actual live path (`requestAgentRoutingProposal`, tool
+calling via `ROUTING_AGENT_TOOLS`) never set `strict: true` on the
+`submit_route_proposal` function definition itself — so its `required` list
+was descriptive only, and the model skipped `summary` despite the system
+prompt asking for it. Fixed by adding `strict: true` alongside
+`description` on the tool's `function` object (the same
+`additionalProperties: false` + `type: [x, "null"]` nullable pattern already
+used elsewhere in this schema is what strict mode requires, and was already
+in place). Confirmed via the actual entity data after redeploy: `summary` now
+populates with real, sensible content. Lesson: OpenAI-compatible **tool**
+schemas need their own `strict: true` — it does not inherit from a
+`response_format` used elsewhere in the same file, and a field merely being
+listed in `required` proves nothing without it.
+
+## 2026-08-14 — `workflow_dispatch` builds whatever `--ref` you give it, not `main`
+
+First real use of `deploy-base44.yml`'s `site` target (Build Guide 29.15,
+via `gh workflow run "Deploy to Base44" --ref <branch> -f target=site`)
+mis-fired once: dispatched with `--ref main` out of habit, which silently
+would have built and deployed the *old* site bundle, since the frontend fix
+lived on `fix/p0-bugfix-pass` and hadn't been merged — `workflow_dispatch`
+checks out whatever ref you tell it to, not the default branch, and the
+`verify`/`deploy` jobs have no way to know that isn't what you meant. Caught
+before approval (the `production-deploy` environment gate held it), cancelled,
+re-dispatched with `--ref fix/p0-bugfix-pass`. Confirmed working end to end:
+release gates passed against the feature branch, the environment approval
+gate held the `deploy` job until a manual click, and the deployed site was
+owner-verified live afterward. Lesson for next time: when deploying via this
+workflow from a branch that hasn't merged to `main`, double check `--ref`
+before dispatching, and before approving in the GitHub UI.

@@ -209,3 +209,23 @@ The extension-packaging workflow (`extension-release.yml`) is the one
 exception allowed to run unattended on a tag push: it only ever touches this
 GitHub repo (zip + Release), never Base44, so it carries none of the same
 risk.
+
+## URL canonicalization for duplicate matching is forward-only, and keeps the fragment
+
+`canonicalizeUrl()` (Build Guide 29.14) fixes duplicate Clips/Records caused
+by tracking-param variance (`utm_*`, `gclid`, `fbclid`, ...) going forward,
+but does not retroactively scan and merge/flag duplicate rows that already
+exist from before this change. A retroactive cleanup would need its own
+explicit design (what counts as a safe auto-merge vs. something that needs
+owner review, what happens to a Collection left with zero Records if its only
+Record was a duplicate) rather than riding along with this fix, and the user
+explicitly scoped this pass to new captures only.
+
+The function deliberately does **not** strip the URL fragment (`#...`), even
+though a generic canonicalizer normally would. List/detail sites can use
+hash-based client-side routing where the fragment is the only thing
+distinguishing one listing from another (the same class of page this release
+already had to handle carefully for Build Guide 29.13's link-resolution fix).
+Stripping it here would risk the opposite failure mode from the bug being
+fixed: two genuinely different items silently merging into one duplicate
+instead of two real duplicates staying unmerged.

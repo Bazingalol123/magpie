@@ -80,6 +80,18 @@ export async function processStoredClip(
       projects,
       collections,
     });
+    // Best-effort: the routing agent already produces a summary in this same
+    // call (Build Guide 29.15), so this is one cheap entity write, not a
+    // second AI call. Failing to save it must not send an otherwise-good
+    // capture to review, so it's isolated from the routing try/catch above.
+    const summary = boundedSummary((proposal as any)?.summary);
+    if (summary) {
+      try {
+        clip = await service.Clip.update(clip.id, { summary });
+      } catch (summaryError) {
+        console.warn("Saving clip summary failed; continuing without it", summaryError);
+      }
+    }
     projectRouting = resolveProjectRouting({
       ownerId: clip.owner_id,
       explicitProject: explicitMission,
@@ -166,6 +178,7 @@ export async function processStoredClip(
     clip_id: clip.id,
     fields_json: JSON.stringify(result.fields),
     source_url: clip.source_url,
+    canonical_url: clip.canonical_url,
     mission_id: mission?.id,
     schema_version: Number(collection.schema_version ?? 1),
     decision_status: "inbox",
@@ -418,4 +431,8 @@ function parseReasons(value: unknown): string[] {
 
 function safeError(error: unknown) {
   return error instanceof Error ? error.message.slice(0, 240) : "Organization failed unexpectedly";
+}
+
+function boundedSummary(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, 500) : undefined;
 }

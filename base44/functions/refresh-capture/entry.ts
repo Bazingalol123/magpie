@@ -1,5 +1,6 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 import { requireExtensionPrincipal } from "../../shared/auth.ts";
+import { canonicalizeUrl } from "../../shared/clip.ts";
 import {
   reactivateWatchesAfterRefresh,
   refreshRecordFromEvidence,
@@ -24,11 +25,22 @@ Deno.serve(async (req) => {
     const text = input.raw_text.trim().slice(0, MAX_TEXT_LENGTH);
 
     const service = base44.asServiceRole.entities;
-    const records = await service.Record.filter(
-      { owner_id: ownerId, source_url: sourceUrl },
+    // canonical_url absorbs tracking/session query-param drift between visits
+    // to the same page; older Records predate that field, so fall back to the
+    // exact source_url match those rows were created with.
+    const canonicalUrl = canonicalizeUrl(sourceUrl);
+    let records = await service.Record.filter(
+      { owner_id: ownerId, canonical_url: canonicalUrl },
       "-created_date",
       1,
     );
+    if (!records[0]) {
+      records = await service.Record.filter(
+        { owner_id: ownerId, source_url: sourceUrl },
+        "-created_date",
+        1,
+      );
+    }
     const record = records[0];
     if (!record || record.owner_id !== ownerId) {
       return json({ outcome: "no_match" });

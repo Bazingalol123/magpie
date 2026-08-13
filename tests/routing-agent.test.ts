@@ -45,6 +45,7 @@ function submittedProposal() {
     existing_collection_id: null,
     collection_name: "Cameras",
     collection_description: "Camera bodies being compared",
+    summary: "A Nikon D500 DSLR camera body listed for comparison.",
     schema_fields: [
       { name: "model", label: "Model", type: "string" },
       { name: "camera_type", label: "Camera type", type: "string" },
@@ -111,6 +112,7 @@ Deno.test("routing agent inspects bounded context then returns a proposal withou
   assertEquals(proposal.project_id, "project-camera", "expected Project proposal");
   assertEquals(proposal.schema[0].name, "model", "expected canonical Collection schema");
   assertEquals(proposal.fields.model, "Nikon D500", "expected extracted visible value");
+  assertEquals(proposal.summary, "A Nikon D500 DSLR camera body listed for comparison.", "expected summary to carry through");
   const toolMessages = bodies[1].messages.filter((message: any) => message.role === "tool");
   assert(toolMessages.some((message: any) => message.name === "list_projects"), "Projects tool result missing");
   assert(toolMessages.some((message: any) => message.name === "list_collections"), "Collections tool result missing");

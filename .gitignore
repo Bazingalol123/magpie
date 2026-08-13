@@ -9,6 +9,9 @@ dist
 .env.*
 *.local
 
+# Local working notes (not committed)
+*.local.md
+
 # Editor
 .vscode
 .idea
@@ -23,3 +26,6 @@ dist
 .claude/
 .agents/
 skills-lock.json
+
+# Playwright MCP session output (snapshots/screenshots from manual test runs)
+.playwright-mcp/
