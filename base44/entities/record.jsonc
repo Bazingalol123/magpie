@@ -8,6 +8,7 @@
     "clip_id": { "type": "string", "description": "Original captured clip" },
     "fields_json": { "type": "string", "description": "JSON-encoded values conforming to the collection schema" },
     "source_url": { "type": "string", "format": "uri", "description": "Copied source URL for detail and enrichment" },
+    "canonical_url": { "type": "string", "format": "uri", "description": "Copied from the originating Clip; source_url with tracking query params stripped, used only for duplicate/refresh matching" },
     "last_check_at": { "type": "string", "format": "date-time", "description": "Most recent completed enrichment attempt" },
     "last_enriched_at": { "type": "string", "format": "date-time", "description": "Most recent trusted successful enrichment check" },
     "enrichment_status": {

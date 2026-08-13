@@ -572,6 +572,45 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   reload the unpacked extension to pick it up; no backend or site deploy
   involved.
 
+### 29.14 Normalize URLs for duplicate matching (B8)
+
+- [x] **Build:** Duplicate detection in `ingest-clip` (`content_hash` over
+  `capture_mode` + `source_url` + `context_url` + `raw_text`) and
+  `refresh-capture`'s revisit lookup both matched on the raw, unnormalized
+  `source_url`. Tracking/session query params that vary between two visits to
+  the same page (`utm_*`, `gclid`, `fbclid`, etc. — common on rental/listing
+  sites) produced a different hash each time, so the same listing captured
+  twice silently created two separate Clips/Records instead of being flagged
+  a duplicate. Added `canonicalizeUrl()` (`base44/shared/clip.ts`): strips a
+  denylist of known tracking params, sorts the remaining query params, and
+  trims a trailing slash — deliberately does **not** touch the URL fragment,
+  since list/detail pages can use hash-based routing to identify the specific
+  item (see Build Guide 29.13), and stripping it could wrongly merge two
+  different items. `ingest-clip` now hashes on the canonical URL and stores
+  it as `Clip.canonical_url` (new field); `routing-persistence.ts` copies it
+  onto the created `Record`; `refresh-capture` looks up by `canonical_url`
+  first and falls back to the old exact `source_url` match so Records created
+  before this change (which have no `canonical_url`) keep working.
+  `source_url` itself is never rewritten — it's still the exact link the user
+  needs to get back to the page.
+  Scope is forward-only per product decision: this does not retroactively
+  merge or flag duplicate Clips/Records that already exist in the database
+  from before this fix — that would be a separate, explicit cleanup task.
+- **Files:** `base44/shared/clip.ts`, `base44/functions/ingest-clip/entry.ts`,
+  `base44/shared/routing-persistence.ts`,
+  `base44/functions/refresh-capture/entry.ts`,
+  `base44/entities/clip.jsonc`, `base44/entities/record.jsonc`,
+  `tests/clip.test.ts`
+- **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing,
+  including 4 new `canonicalizeUrl` cases. `deno check` on every
+  `base44/functions/**/entry.ts` passes. The new `canonical_url` field on
+  `Clip`/`Record` has **not** been pushed to Base44 yet
+  (`npx base44 entities push` needs explicit owner approval per `CLAUDE.md`)
+  — until that runs, the code paths that read/write `canonical_url` will
+  just see it as `undefined` on the hosted entities, which is safe (falls
+  back to the pre-fix exact-`source_url` behavior) but means the fix isn't
+  live.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

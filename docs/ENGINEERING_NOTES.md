@@ -486,3 +486,17 @@ grids) usually means the element itself has its own destination. Fixed by
 adding `resolveDetailUrl()` and using it in `captureElement` only (Build
 Guide 29.13) — the other paths weren't part of the reported bug and changing
 them risks altering intentional whole-page-capture behavior.
+
+## 2026-08-14 — a schema field can be committed and coded against before it exists on the hosted entity
+
+Adding `canonical_url` to `base44/entities/clip.jsonc`/`record.jsonc` (Build
+Guide 29.14) is a local file edit only — Base44 doesn't see it until
+`npx base44 entities push` runs, which needs explicit owner approval per
+`CLAUDE.md`. Until that push happens, `base44.asServiceRole.entities.Clip.create({..., canonical_url: ...})`
+in `ingest-clip` just writes a field the hosted schema doesn't declare (Base44
+appears to accept and store undeclared properties rather than rejecting the
+write — worth confirming explicitly during the next `entities push` cycle
+rather than assuming), and every read of `record.canonical_url` on existing
+rows is `undefined`. `refresh-capture`'s canonical-then-fallback lookup
+(29.14) was written specifically so this half-deployed state degrades to the
+old exact-`source_url` behavior instead of breaking.

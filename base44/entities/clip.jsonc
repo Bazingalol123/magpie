@@ -5,6 +5,7 @@
   "properties": {
     "owner_id": { "type": "string", "description": "Dashboard user that owns this capture" },
     "source_url": { "type": "string", "format": "uri", "description": "Page where the capture originated" },
+    "canonical_url": { "type": "string", "format": "uri", "description": "source_url with tracking query params stripped and remaining params sorted, used only for duplicate matching" },
     "context_url": { "type": "string", "format": "uri", "description": "Optional containing page when source_url is a clicked link target" },
     "capture_mode": {
       "type": "string",

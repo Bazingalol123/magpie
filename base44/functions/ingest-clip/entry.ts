@@ -1,6 +1,6 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 import { requireExtensionPrincipal } from "../../shared/auth.ts";
-import { screenshotFile, validateCapture } from "../../shared/clip.ts";
+import { canonicalizeUrl, screenshotFile, validateCapture } from "../../shared/clip.ts";
 import { getOrNull } from "../../shared/service-entities.ts";
 import { corsHeaders, errorResponse, json, readJson, requirePost } from "../../shared/http.ts";
 import { markRoutingFailed, processStoredClip } from "../../shared/routing-persistence.ts";
@@ -35,8 +35,9 @@ Deno.serve(async (req) => {
         }, 202);
       }
     }
+    const canonicalUrl = canonicalizeUrl(capture.source_url);
     const contentHash = await sha256(
-      `${capture.capture_mode}\n${capture.source_url}\n${capture.context_url ?? ""}\n${capture.raw_text.replace(/\s+/g, " ").trim()}`,
+      `${capture.capture_mode}\n${canonicalUrl}\n${capture.context_url ?? ""}\n${capture.raw_text.replace(/\s+/g, " ").trim()}`,
     );
     const identicalClips = await base44.asServiceRole.entities.Clip.filter({
       owner_id: ownerId,
@@ -66,6 +67,7 @@ Deno.serve(async (req) => {
     const clip = await base44.asServiceRole.entities.Clip.create({
       owner_id: ownerId,
       ...clipData,
+      canonical_url: canonicalUrl,
       screenshot_id: screenshotUrl,
       content_hash: contentHash,
       attempt_count: 0,

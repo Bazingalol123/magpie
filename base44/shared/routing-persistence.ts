@@ -166,6 +166,7 @@ export async function processStoredClip(
     clip_id: clip.id,
     fields_json: JSON.stringify(result.fields),
     source_url: clip.source_url,
+    canonical_url: clip.canonical_url,
     mission_id: mission?.id,
     schema_version: Number(collection.schema_version ?? 1),
     decision_status: "inbox",

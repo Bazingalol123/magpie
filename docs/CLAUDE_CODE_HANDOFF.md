@@ -148,6 +148,27 @@ Environment (with a required reviewer) and the `BASE44_API_KEY` /
 workflow will fail cleanly until both exist. Local manual deploys via `npx
 base44 ...` are unaffected and remain the fallback until then.
 
+## Bug-fix pass (added 2026-08-14, in progress on `fix/p0-bugfix-pass`)
+
+Working a local, gitignored triage list (`BUGS.local.md`, not committed) of
+P0/P1 bugs top to bottom, one commit per bug:
+
+- **B4 (done, Build Guide 29.13):** element-picker captures now resolve the
+  clicked element's own link instead of always saving `location.href`, fixing
+  captures on list-style pages (e.g. rental listings) saving the list page
+  instead of the specific item.
+- **B8 (done, Build Guide 29.14):** duplicate detection now canonicalizes
+  URLs (strips tracking params, sorts query params) before hashing/matching,
+  fixing false-negative duplicate detection caused by session/tracking query
+  string drift. **Not yet live** — adds `canonical_url` to `Clip`/`Record`,
+  which needs `npx base44 entities push` (explicit owner approval required
+  per this file's Base44 workflow section) before it takes effect on hosted
+  data. Until pushed, behavior silently degrades to the pre-fix exact-match
+  lookup (see `docs/ENGINEERING_NOTES.md`).
+- **B1 (in progress):** sidepanel shows raw captured text instead of a
+  summary — needs a new `summary` field and an AI call inside
+  `processStoredClip` (`base44/shared/routing-persistence.ts`).
+
 ## Immediate continuation
 
 Build Guide 29.2–29.4 are complete and deployed. The remaining manual check is
