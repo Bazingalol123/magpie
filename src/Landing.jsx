@@ -7,6 +7,7 @@ import {
   Camera,
   Check,
   ChefHat,
+  Download,
   Eye,
   Home,
   Layers3,
@@ -82,7 +83,10 @@ export default function Landing({ isSigningIn, onSignIn }) {
             {isSigningIn ? <LoaderCircle className="spin" size={17} /> : <ArrowUpRight size={17} />}
             Continue with Google
           </button>
-          <a className="ld-docs-link" href="/?docs=getting-started">How it works, and how to install the extension →</a>
+          <div className="ld-hero-links">
+            <a className="ld-docs-link" href="/?docs=getting-started">How it works, and how to install the extension →</a>
+            <a className="ld-docs-link" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={13} /> Download extension</a>
+          </div>
           <div className="ld-hero-trust"><ShieldCheck size={14} /> The extension can write clips — it can never read your data.</div>
         </div>
 

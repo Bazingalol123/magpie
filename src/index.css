@@ -232,7 +232,8 @@ button:disabled { cursor: wait; opacity: .7; }
 .ld-hero-copy h1 em { display: block; color: #477552; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-style: italic; }
 .ld-hero-copy > p { max-width: 460px; margin: 22px 0 30px; color: #5b6b60; font-size: 16.5px; line-height: 1.6; }
 .ld-cta { width: auto; padding: 0 22px; }
-.ld-docs-link { display: inline-block; margin-top: 14px; color: #3e6848; font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.ld-hero-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 14px; }
+.ld-docs-link { display: inline-flex; align-items: center; gap: 5px; color: #3e6848; font-size: 12.5px; font-weight: 600; text-decoration: none; }
 .ld-docs-link:hover { text-decoration: underline; }
 .ld-hero-trust { margin-top: 18px; display: flex; align-items: center; gap: 7px; color: #68766d; font-size: 12px; }
 .ld-hero-trust svg { color: #4d8a5b; }

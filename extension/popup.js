@@ -8,6 +8,22 @@ const connectionPill = document.getElementById("connection-pill");
 const setupCallout = document.getElementById("setup-callout");
 const connectionSettings = document.getElementById("connection-settings");
 const autoRefresh = document.getElementById("auto-refresh");
+const captureButtons = [
+  document.getElementById("start-picker"),
+  document.getElementById("start-visual"),
+  document.getElementById("save-page"),
+];
+
+function setCaptureButtonsBusy(busy) {
+  captureButtons.forEach((button) => { button.disabled = busy; });
+}
+
+chrome.runtime.sendMessage({ type: "magpie:capture-status" }, (response) => {
+  if (response?.inFlight) {
+    setCaptureButtonsBusy(true);
+    status.textContent = "A capture is already running — wait a moment.";
+  }
+});
 
 chrome.storage.local.get({ autoRefreshEnabled: true }).then((config) => {
   autoRefresh.checked = config.autoRefreshEnabled;
@@ -57,6 +73,8 @@ document.getElementById("start-visual").addEventListener("click", async () => {
 document.getElementById("save-page").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
+  setCaptureButtonsBusy(true);
+  status.textContent = "Capturing…";
   try {
     const response = await chrome.runtime.sendMessage({ type: "magpie:capture-tab", tabId: tab.id, mode: "page" });
     if (!response?.ok) throw new Error(response?.error || "Capture failed.");
@@ -64,17 +82,20 @@ document.getElementById("save-page").addEventListener("click", async () => {
     window.setTimeout(() => window.close(), 450);
   } catch (error) {
     status.textContent = error.message || "Magpie cannot run on this page.";
+    setCaptureButtonsBusy(false);
   }
 });
 
 async function startPicker(mode) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
+  setCaptureButtonsBusy(true);
   try {
     await startPickerInTab(tab.id, mode);
     window.close();
   } catch (error) {
     status.textContent = error.message || "Magpie cannot run on this page.";
+    setCaptureButtonsBusy(false);
   }
 }
 

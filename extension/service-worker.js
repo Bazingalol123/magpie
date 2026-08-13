@@ -7,16 +7,37 @@ const DEFAULT_CONFIG = {
 const REFRESH_MIN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const MAX_REMEMBERED_URLS = 500;
 
+// Every capture path (picker/snip in content.js, popup buttons, the right-click
+// menu) funnels through here before hitting the network. One in-flight capture
+// at a time keeps a double-click or a stacked right-click from firing two
+// overlapping ingest requests and tripping the backend rate limit.
+let captureInFlight = false;
+
+async function withCaptureLock(run) {
+  if (captureInFlight) {
+    throw new Error("A capture is already in progress — wait a moment and try again.");
+  }
+  captureInFlight = true;
+  try {
+    return await run();
+  } finally {
+    captureInFlight = false;
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "magpie:capture-status") {
+    sendResponse({ inFlight: captureInFlight });
+    return undefined;
+  }
   if (message?.type === "magpie:capture") {
-    addViewportScreenshot(message.payload, sender)
-      .then((payload) => submitCapture(payload))
+    withCaptureLock(() => addViewportScreenshot(message.payload, sender).then((payload) => submitCapture(payload)))
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
   if (message?.type === "magpie:capture-tab") {
-    captureFromTab(message.tabId, message.mode)
+    withCaptureLock(() => captureFromTab(message.tabId, message.mode))
       .then((result) => sendResponse({ ok: true, result }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -55,12 +76,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   };
   const mode = modes[info.menuItemId];
   if (!mode || !tab?.id) return;
-  captureFromTab(tab.id, mode, {
+  withCaptureLock(() => captureFromTab(tab.id, mode, {
     selectionText: info.selectionText,
     linkUrl: info.linkUrl,
     srcUrl: info.srcUrl,
     pageUrl: info.pageUrl,
-  }).catch((error) => notifyTab(tab.id, { message: error.message || "Capture failed.", state: "error" }));
+  })).catch((error) => notifyTab(tab.id, { message: error.message || "Capture failed.", state: "error" }));
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
@@ -152,6 +173,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 async function maybeAutoRefresh(tabId, url) {
+  if (captureInFlight) return;
   const key = refreshUrlKey(url);
   if (!key) return;
   const { savedUrls, autoRefreshEnabled, ingestUrl, extensionToken } = await chrome.storage.local.get({
