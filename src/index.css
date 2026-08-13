@@ -333,9 +333,11 @@ button:disabled { cursor: wait; opacity: .7; }
 .ld-final { padding: clamp(50px, 10vh, 110px) 20px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
 .ld-final .magpie-mark { animation: ld-float-a 6s ease-in-out infinite; }
 .ld-final h2 { margin: 6px 0 8px; font-size: clamp(28px, 4vw, 44px); letter-spacing: -.045em; }
-.ld-footer { padding: 22px clamp(20px, 5vw, 56px); display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2e9df; color: #7a887d; font-size: 12px; }
+.ld-footer { padding: 22px clamp(20px, 5vw, 56px); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 24px; border-top: 1px solid #e2e9df; color: #7a887d; font-size: 12px; }
+.ld-footer-links { display: flex; align-items: center; gap: 6px 18px; }
 
 @media (max-width: 900px) {
+  .ld-footer { flex-direction: column; align-items: flex-start; text-align: left; }
   .ld-hero { grid-template-columns: 1fr; padding-bottom: 60px; min-height: 0; }
   .ld-scene { height: 420px; margin-top: 8px; }
   .ld-steps { grid-template-columns: 1fr; }
