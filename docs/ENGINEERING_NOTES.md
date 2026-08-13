@@ -472,3 +472,17 @@ GitHub Actions checkout. The Base44 CLI resolves the app id from a
 lets `deploy-base44.yml` work from a plain `actions/checkout` without ever
 committing the id — see `docs/DECISIONS.md` for why the deploy workflow
 still requires a manual approval click rather than running unattended.
+
+## 2026-08-14 — every capture path but `link` mode used the page URL, not the target's URL
+
+Only the context-menu `link` capture mode (`extension/content.js`,
+`buildContextPayload`'s `link` branch) ever resolved a specific link out of
+the DOM (`lastContextTarget.closest("a[href]")`). Every other capture path —
+picker/`captureElement`, the visual snip flow, and the `selection`/`image`
+context-menu modes — used `window.location.href` unconditionally. That's
+correct for whole-page or free-text captures, but wrong for
+`captureElement`, since a user picking one element out of many (list cards,
+grids) usually means the element itself has its own destination. Fixed by
+adding `resolveDetailUrl()` and using it in `captureElement` only (Build
+Guide 29.13) — the other paths weren't part of the reported bug and changing
+them risks altering intentional whole-page-capture behavior.

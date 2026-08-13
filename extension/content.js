@@ -219,7 +219,7 @@ function selectElement(event) {
 async function captureElement(element) {
   const rect = element.getBoundingClientRect();
   const payload = {
-    source_url: window.location.href,
+    source_url: resolveDetailUrl(element),
     capture_mode: pickerMode,
     raw_html: pickerMode === "element" ? element.outerHTML.slice(0, 12_000) : "",
     raw_text: evidenceText(element, pickerMode === "visual" ? "Visual capture" : "Selected element"),
@@ -364,6 +364,16 @@ function safeHttpUrl(value) {
   } catch {
     return "";
   }
+}
+
+// List-style pages (e.g. rental listings) often put the clicked card's own
+// detail link on an ancestor or nested <a>. Falling back to location.href
+// unconditionally saved the *list* page, which can reshuffle/refresh and
+// lose the specific item the user meant to capture (Bug B4).
+function resolveDetailUrl(element) {
+  if (!(element instanceof Element)) return window.location.href;
+  const anchor = element.closest("a[href]") || element.querySelector("a[href]");
+  return safeHttpUrl(anchor?.href) || window.location.href;
 }
 
 function describeCaptureResult(result) {

@@ -550,6 +550,28 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   the next `extension-v*` tag, the second requires a separate, explicit
   owner-approved run per `CLAUDE.md`.
 
+### 29.13 Fix element-picker capture saving the list page instead of the item
+
+- [x] **Build:** `captureElement` (`extension/content.js`) hardcoded
+  `source_url: window.location.href` for every picker capture (hover, click,
+  or the `C` shortcut). On list-style pages (e.g. rental listings) this saved
+  the *list* page's URL instead of the specific card's own detail link, and
+  because list pages are commonly client-rendered and reshuffle/refresh, the
+  captured item could vanish from the page the user is sent back to. Added
+  `resolveDetailUrl(element)`, which looks for the clicked element's nearest
+  detail link (`element.closest("a[href]")`, falling back to
+  `element.querySelector("a[href]")`), resolves it through the existing
+  `safeHttpUrl` helper, and falls back to `window.location.href` only if no
+  link is found. `captureElement` now uses this instead of the page URL
+  directly. Context-menu capture modes (`selection`, `link`, `image`, `page`)
+  and the visual snip flow were left unchanged — they weren't part of the
+  reported bug and already have (`link` mode) or don't need (whole-page
+  intent) this resolution.
+- **Files:** `extension/content.js`
+- **Verify:** `node --check extension/content.js` passes. Local-only change —
+  reload the unpacked extension to pick it up; no backend or site deploy
+  involved.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.
