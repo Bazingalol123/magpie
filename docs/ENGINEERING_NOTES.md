@@ -572,3 +572,37 @@ gate held the `deploy` job until a manual click, and the deployed site was
 owner-verified live afterward. Lesson for next time: when deploying via this
 workflow from a branch that hasn't merged to `main`, double check `--ref`
 before dispatching, and before approving in the GitHub UI.
+
+## 2026-08-14 — B9: the sidebar Collection dot color was positional, not identity-based
+
+Investigating "Collection dot color is inconsistent between the Library view
+and a single Collection's detail view" (`BUGS.local.md` B9) found two
+separate issues, not one:
+
+1. The sidebar's dot (`CollectionSidebar`, `src/App.jsx`) picked a color with
+   `dot-${index % 4}` — the collection's position in whichever (possibly
+   filtered-by-Project) array was being rendered, not anything tied to the
+   collection itself. The same Collection could render a different dot color
+   after a Project switch or a reorder, since its index shifts.
+2. The detail view's panel header (`RecordTable`) never rendered a
+   per-collection color at all. Its `CircleDot` icon next to "live
+   collection" is the same static green used by the topbar/footer "live"
+   indicators elsewhere in the app — an app-wide sync-status color, not a
+   per-collection identifier, despite sitting next to the collection name in
+   a way that reads like one.
+
+Fix: added `collectionDotIndex(collectionId)`, a small string hash of the
+collection's own `id` mod 4, and used it in both the sidebar dot and a new
+dot added next to the collection name in the detail panel header. The
+"live collection" eyebrow's green `CircleDot` was left untouched — it's
+correctly consistent with the app's other live-status indicators and isn't
+what B9 was actually describing once the two dots were traced to different
+code paths.
+
+## 2026-08-14 — B10: LinkedIn link added to the dashboard footer
+
+`BUGS.local.md` B10 asked for a "Follow on LinkedIn" CTA in the dashboard,
+distinct from the one already on the landing page footer (a separate,
+already-shipped PR). Added the same `linkedin.com/company/magpie-or-else`
+link to `workspace-footer` in `src/App.jsx`, styled to match the existing
+footer text.
