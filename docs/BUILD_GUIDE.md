@@ -760,4 +760,25 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 ### 31. Add folder UI and harden V3.1
 
 - [ ] **Build:** Add explicit folder controls, then drag-and-drop with rollback; complete accessibility, responsive, migration, rollback, and demo checks.
+
+### 32. Stable per-Collection dot color and dashboard LinkedIn link (B9, B10)
+
+- [x] **Build:** B9 — the sidebar's `collection-dot` color (`CollectionSidebar`,
+  `src/App.jsx`) was `dot-${index % 4}`: a function of the collection's
+  position in whichever array was rendered, not the collection itself, so the
+  same Collection could show a different color after a Project switch or
+  reorder. Added `collectionDotIndex(collectionId)`, a stable hash of the
+  collection's own `id` mod 4, and used it for the sidebar dot and a new
+  matching dot added next to the collection name in the detail panel header
+  (`RecordTable`). The detail view's "live collection" eyebrow icon was left
+  as-is — tracing both render paths showed it's the same static green used by
+  the topbar/footer live-status indicators app-wide, not an attempted
+  per-collection color, so it wasn't actually the source of the reported
+  inconsistency (see `docs/ENGINEERING_NOTES.md` 2026-08-14).
+  B10 — added a "Follow on LinkedIn" link to the dashboard's
+  `workspace-footer`, matching the one already shipped on the landing page
+  footer (separate PR).
+- **Files:** `src/App.jsx`, `src/index.css`
+- **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing
+  (no backend touched). `npm run build` passes.
 - **Verify:** Users can organize Collections without changing Mission scope or routing, and the complete V3 flow remains testable from Chrome.

@@ -17,6 +17,7 @@ import {
   Inbox,
   Key,
   Layers3,
+  Linkedin,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -70,6 +71,15 @@ function parseJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+// Stable per-collection color: derived from the collection's own id, not its
+// position in whichever (possibly filtered/reordered) list is being rendered,
+// so the same Collection always gets the same dot color everywhere.
+function collectionDotIndex(collectionId) {
+  let hash = 0;
+  for (let i = 0; i < collectionId.length; i++) hash = (hash * 31 + collectionId.charCodeAt(i)) | 0;
+  return Math.abs(hash) % 4;
 }
 
 // A spinner alone reads as stuck once a wait crosses a few seconds. Cycling
@@ -346,7 +356,7 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
         <span className="collection-total">{collections.length}</span>
       </div>
       <div className="collection-list">
-        {collections.map((collection, index) => {
+        {collections.map((collection) => {
           const count = records.filter((record) => record.collection_id === collection.id).length;
           const isActive = collection.id === activeCollectionId;
           const isConfirming = confirmingId === collection.id;
@@ -354,7 +364,7 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
           return (
             <div className={`collection-item ${isActive ? "active" : ""}`} key={collection.id}>
               <button className="collection-select" onClick={() => onSelect(collection.id)}>
-                <span className={`collection-dot dot-${index % 4}`} />
+                <span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />
                 <span className="collection-name">{collection.name}</span>
                 <span className="collection-count">{count}</span>
               </button>
@@ -425,7 +435,7 @@ function RecordTable({ collection, records, clips, onSelect }) {
       <div className="panel-header">
         <div>
           <div className="eyebrow"><CircleDot size={13} /> live collection</div>
-          <h2>{collection.name}</h2>
+          <h2><span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />{collection.name}</h2>
         </div>
         <div className="live-indicator"><span /> live</div>
       </div>
@@ -1348,7 +1358,7 @@ export default function App() {
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
-      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span></footer>
+      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><a className="footer-linkedin" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}
