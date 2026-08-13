@@ -65,6 +65,26 @@ After each completed step:
 Do not deploy, push entities, synchronize Agents, or deploy the site without
 explicit owner approval. `npx base44 agents push` is a full synchronization.
 
+## CI/CD
+
+Three GitHub Actions workflows exist under `.github/workflows/`:
+
+- `ci.yml` — runs the release gates below automatically on every push and PR.
+  No manual action needed; nothing to trigger.
+- `extension-release.yml` — packages and publishes a GitHub Release when a
+  tag matching `extension-v*` is pushed (bump `extension/manifest.json`
+  first; the workflow fails if the tag and manifest version disagree).
+- `deploy-base44.yml` — the only path that touches Base44. `workflow_dispatch`
+  only, with a `target` input (`all | entities | functions | agents | site`).
+  Gated by the `production-deploy` GitHub Environment, which requires manual
+  reviewer approval before the deploy step runs.
+
+Claude Code must not run `gh workflow run deploy-base44.yml` (or trigger it
+via the API) without the owner's explicit go-ahead in the current
+conversation, even though the environment approval gate would still block
+the actual `npx base44` call. This is the same rule as "no deploy without
+explicit owner approval" below, applied to the automated path too.
+
 ## Base44 workflow
 
 This is an existing linked Base44 project. Use the locally installed CLI only:
@@ -78,6 +98,10 @@ Before using Base44 SDK or CLI behavior, read the matching skill/reference in
 `.agents/skills/`. Do not guess SDK method names.
 
 ## Release gates
+
+`ci.yml` (see CI/CD above) now runs all of this automatically on every push
+and PR. Still run it locally before pushing when practical, for a faster
+signal than waiting on Actions.
 
 PowerShell:
 
