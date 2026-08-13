@@ -229,3 +229,19 @@ already had to handle carefully for Build Guide 29.13's link-resolution fix).
 Stripping it here would risk the opposite failure mode from the bug being
 fixed: two genuinely different items silently merging into one duplicate
 instead of two real duplicates staying unmerged.
+
+## B7 pagination is UI-only; the 200-record fetch cap is a separate, larger gap
+
+Build Guide 29.18 paginates the rendered per-Collection Record table/card
+grid, but `loadDashboard` (`src/App.jsx`) still fetches at most 200 rows per
+entity (`Record`, `Clip`, `Enrichment`, `RoutingDecision`, `WatchRule`) in a
+single `list()` call. A user whose total Record count exceeds 200 across all
+Collections combined would have older Records silently absent from the
+dashboard entirely — no error, no indication, they just never load. UI
+pagination cannot fix this; it only helps once the data is already fetched.
+Fixing the fetch cap itself needs its own scoping pass (cursor vs. offset
+pagination, per-entity vs. global page size, whether `loadDashboard`'s
+single-shot-everything pattern should change at all) and was intentionally
+left out of this pass, which was scoped to "the page keeps growing" UX
+complaint, not data completeness at scale. Worth revisiting if this project
+gets meaningfully more usage per owner.

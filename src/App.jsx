@@ -404,15 +404,31 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
   );
 }
 
+const RECORDS_PAGE_SIZE = 30;
+const RECORDS_PAGE_SIZE_CARDS = 8;
+
 function RecordTable({ collection, records, clips, onSelect }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
+  const [page, setPage] = useState(0);
+  // A Collection can accumulate hundreds of Items with no bound otherwise,
+  // making the panel grow indefinitely (Bug B7). Reset to page 1 whenever
+  // the selected Collection changes so switching collections never leaves
+  // the user stranded on an out-of-range page.
+  useEffect(() => { setPage(0); }, [collection?.id]);
 
   if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
   const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
   const showCards = records.length > 0 && withImageCount / records.length > 0.5;
+  // Card tiles take much more vertical space per item than table rows, so
+  // they use a smaller page size to keep a page to roughly one screen.
+  const pageSize = showCards ? RECORDS_PAGE_SIZE_CARDS : RECORDS_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(records.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * pageSize;
+  const pageRecords = records.slice(pageStart, pageStart + pageSize);
 
   return (
     <section className="table-panel">
@@ -424,7 +440,7 @@ function RecordTable({ collection, records, clips, onSelect }) {
         <div className="live-indicator"><span /> live</div>
       </div>
       {showCards ? (
-        <RecordCardGrid records={records} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+        <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
       ) : (
         <div className="table-scroll">
           <table>
@@ -436,7 +452,7 @@ function RecordTable({ collection, records, clips, onSelect }) {
               </tr>
             </thead>
             <tbody>
-              {records.length ? records.map((record) => {
+              {pageRecords.length ? pageRecords.map((record) => {
                 const fields = parseJson(record.fields_json, {});
                 return (
                   <tr key={record.id} onClick={() => onSelect(record)}>
@@ -452,6 +468,13 @@ function RecordTable({ collection, records, clips, onSelect }) {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+      {records.length > pageSize && (
+        <div className="table-pagination">
+          <button className="secondary-button" disabled={safePage === 0} onClick={() => setPage((current) => current - 1)}>Previous</button>
+          <span>{pageStart + 1}–{Math.min(pageStart + pageSize, records.length)} of {records.length}</span>
+          <button className="secondary-button" disabled={safePage >= pageCount - 1} onClick={() => setPage((current) => current + 1)}>Next</button>
         </div>
       )}
     </section>

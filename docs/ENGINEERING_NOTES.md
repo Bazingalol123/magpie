@@ -606,3 +606,19 @@ distinct from the one already on the landing page footer (a separate,
 already-shipped PR). Added the same `linkedin.com/company/magpie-or-else`
 link to `workspace-footer` in `src/App.jsx`, styled to match the existing
 footer text.
+
+## 2026-08-14 — a flex item's default `min-height: auto` can silently override `aspect-ratio`
+
+Investigating B5 (Build Guide 29.17): `.record-card-media { aspect-ratio: 4/3 }`
+looked correct in isolation, but `.record-card-media` is a flex item inside
+`.record-card`'s `display:flex; flex-direction:column`. Flex items get an
+implied `min-height: auto` on the cross/main axis that resolves to the
+content's size unless overridden, and that content-based minimum won more
+than the `aspect-ratio` did — the box grew to match whatever image it
+contained instead of holding a fixed 4:3 tile. Confirmed with a standalone
+repro: without `min-height: 0`, a 200px-wide card measured 339px tall (the
+image's own natural aspect at that width); with `min-height: 0` added, it
+measured the intended 150px. General lesson for this codebase: `aspect-ratio`
+on any element that is also a flex item needs `min-height: 0` (or
+`min-width: 0` for a row-direction flex item) alongside it, or the ratio is
+only advisory.

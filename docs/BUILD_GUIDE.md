@@ -672,10 +672,84 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   re-verified against fresh captures on books.toscrape.com: `Clip.summary`
   now populates with accurate, on-spec content (see
   `docs/ENGINEERING_NOTES.md` 2026-08-14). Backend confirmed live and
-  working. **Frontend not yet deployed** — `src/App.jsx`'s `CapturedContext`
-  change needs `npm run build` + `npx base44 site deploy`, so the live
-  dashboard still renders the pre-fix raw-text dump even though the data now
-  has a summary to show.
+  working.
+- **Follow-up 2026-08-14:** frontend (`CapturedContext`) deployed via the
+  `Deploy to Base44` GitHub Actions workflow (`site` target, dispatched
+  against `fix/p0-bugfix-pass`, approved through the `production-deploy`
+  environment gate). Owner-verified against the live dashboard.
+
+### 29.16 Wait for repaint before screenshotting a picker capture (B2)
+
+- [x] **Build:** `captureElement` (`extension/content.js`) removed the green
+  picker highlight overlay (`stopPicker()`) and immediately sent the capture
+  message to the service worker, which calls
+  `chrome.tabs.captureVisibleTab`. Removing the DOM element doesn't
+  guarantee the browser has repainted before that screenshot call runs, so
+  the highlight could still be in the captured frame — the same race the
+  visual snip flow (`onSnipUp`) already guards against with a documented
+  double-`requestAnimationFrame` + short timeout before screenshotting.
+  `captureElement` now awaits the same wait pattern after `stopPicker()` and
+  before `submitCapturePayload()`.
+- **Files:** `extension/content.js`
+- **Verify:** `node --check extension/content.js` passes. Owner-tested
+  manually against a live capture (Camera Listings) — the captured
+  screenshot no longer includes the green highlight overlay.
+
+### 29.17 Fix card image cropping (B5)
+
+- [x] **Build:** `.record-card-media img` used `object-fit: cover`, so any
+  captured screenshot whose aspect ratio didn't match the card's fixed 4:3
+  tile got cropped to fill it — for portrait images (e.g. book covers) this
+  cropped out the top and bottom, often removing the title entirely.
+  Switched to `object-fit: contain` so the whole image is always visible,
+  letterboxed against the card's background instead of cropped. While
+  verifying this (a standalone HTML repro of `.record-card`/`.record-card-media`,
+  since local dev has no session and the deployed site wasn't touched yet)
+  also found the 4:3 tile wasn't actually being enforced at all:
+  `.record-card-media` is a flex item inside `.record-card`'s
+  `display:flex; flex-direction:column`, and flex items default to
+  `min-height: auto`, which lets content (the image's own intrinsic height)
+  override the `aspect-ratio` sizing entirely — cards were sizing to
+  whatever image they happened to contain instead of a uniform tile. Added
+  `min-height: 0` to `.record-card-media` to make `aspect-ratio` authoritative
+  again, confirmed via the same repro (200×150 tile, matching 4:3, regardless
+  of image shape).
+- **Files:** `src/index.css`
+- **Verify:** `npm run build` passes. Visually confirmed via a standalone
+  HTML page reproducing the exact card CSS with a real portrait book cover
+  image (books.toscrape.com) — before: title cropped out entirely; after:
+  full cover visible, correctly letterboxed. Not yet deployed to the live
+  site — bundling with Build Guide 29.18 (B7) into one site deploy.
+
+### 29.18 Paginate the per-Collection Item table/card grid (B7)
+
+- [x] **Build:** `RecordTable`/`RecordCardGrid` (`src/App.jsx`) rendered
+  every Record in the selected Collection at once — a Collection accumulates
+  captures indefinitely with no bound, so the panel just grows forever as a
+  user adds Items. Added simple client-side pagination: 30 records per page
+  in table mode, 8 per page in card mode (card tiles take much more vertical
+  space per item, so a smaller page keeps a page to roughly one screen),
+  Previous/Next controls, only shown when a Collection has more than one
+  page. Resets to page 1 when the selected Collection changes (via a
+  `useEffect` keyed on `collection.id`) so switching collections never
+  leaves the view on an out-of-range page; also clamps the current page down
+  if the record count shrinks (e.g. after a delete) so it can't get stuck
+  past the end. The `showCards` vs. table-mode decision still looks at the
+  *full* record set, not just the current page, so paginating doesn't cause
+  the view to flip modes as the user pages through.
+  Deliberately scoped to the rendering layer only — `loadDashboard`
+  (`src/App.jsx`) still fetches up to 200 Records/Clips/etc. per entity in
+  one shot (`base44.entities.Record.list("-created_date", 200)` and
+  similar). A user with more than 200 Records total across all Collections
+  would still have older ones silently absent from the fetched set entirely,
+  which pagination-in-the-UI cannot fix — that's a separate, larger
+  server-side pagination change (cursor vs. offset, page size per entity)
+  that needs its own scoping pass, not bundled into this fix.
+- **Files:** `src/App.jsx`, `src/index.css`
+- **Verify:** `npm run build` passes. Pagination math (page count, clamping,
+  slice bounds) reviewed by hand; not yet live-verified in a real browser
+  against a Collection with more than 30 Items — do that as part of the next
+  manual pass alongside B5.
 
 ### 30. Add bounded folder persistence
 
