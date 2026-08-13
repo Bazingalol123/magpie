@@ -515,6 +515,41 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   disables them itself for the duration of its own "Save page" / picker-start
   requests, re-enabling on error.
 
+### 29.12 CI/CD pipeline
+
+- [x] **Build:** Automated the release gates instead of running them by hand
+  from PowerShell before every commit, while keeping every remote mutation
+  behind an explicit, human-approved trigger:
+  - `.github/workflows/ci.yml` — runs on every push to `main`/`feature/**`
+    and every PR into `main`. `backend` job: `deno test --allow-env
+    --allow-read tests` then `deno check` over every
+    `base44/functions/**/entry.ts`, pinned to Deno 2.9.4 (the version this
+    project has always run locally; there is no `deno.json`/lockfile to pin
+    it otherwise). `frontend-extension` job: `node --check` on every
+    `extension/**/*.js`, the `@base44/sdk`-in-`extension/` grep from the
+    architecture boundary, `npm ci`, `npm run build`.
+  - `.github/workflows/extension-release.yml` — triggers on an
+    `extension-v*` tag push. Confirms the tag matches
+    `extension/manifest.json`'s `version`, re-runs the extension-only gates,
+    zips `extension/`, and publishes a GitHub Release with the zip attached
+    — replacing the fully manual process used for `extension-v0.2.0`.
+  - `.github/workflows/deploy-base44.yml` — `workflow_dispatch` only, never
+    triggered by push or merge. A `target` input picks `all | entities |
+    functions | agents | site`. A `verify` job re-runs the full gate suite;
+    the `deploy` job that actually calls `npx base44 <command>` only runs
+    after `verify` passes and requires manual approval via the
+    `production-deploy` GitHub Environment. Reads `BASE44_API_KEY` and
+    `BASE44_APP_ID` from repository secrets (never committed — Base44's CLI
+    accepts both as env vars ahead of the local `base44/.app.jsonc` file).
+- **Files:** `.github/workflows/ci.yml`,
+  `.github/workflows/extension-release.yml`,
+  `.github/workflows/deploy-base44.yml`
+- **Verify:** YAML reviewed by hand; `ci.yml` exercised end-to-end via a real
+  push/PR. `extension-release.yml` and `deploy-base44.yml` were reviewed but
+  deliberately not fired for real during this change — the first ships with
+  the next `extension-v*` tag, the second requires a separate, explicit
+  owner-approved run per `CLAUDE.md`.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.

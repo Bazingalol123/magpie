@@ -183,3 +183,29 @@ seeing another owner's data) has no matching code path in RLS or in any
 backend function's ownership check; every non-admin path is a strict
 `owner_id == caller.id` check with no alternative. This was not treated as a
 second bug to fix — see `docs/API_AND_FAILURE_MAP.md` for the reasoning.
+
+## CI/CD: automate the gates, never auto-deploy to Base44
+
+`.github/workflows/ci.yml` runs the full release-gate suite (Deno tests and
+type check, extension `node --check`, the `@base44/sdk` import grep, `npm
+run build`) automatically on every push and PR. That much is pure signal —
+nothing it does can mutate Base44 or ship anything, so there was no reason
+to keep it manual.
+
+Deploying is different. `CLAUDE.md` requires explicit owner approval before
+any deploy, entity push, or Agent sync, and the risk plan says the same for
+"any remote mutation... regardless of risk rating." An auto-deploy-on-merge
+pipeline would violate that outright, so `deploy-base44.yml` is
+`workflow_dispatch`-only — it never fires from a push or a merged PR — and
+its `deploy` job additionally sits behind the `production-deploy` GitHub
+Environment's required-reviewer approval. That gives a real audit trail
+(who triggered it, who approved it, which target) without ever letting CI
+itself decide to touch production. The `agents` target specifically prints
+the existing "full synchronization" warning from `CLAUDE.md` before running,
+since `npx base44 agents push` deletes any remote Agent absent from
+`base44/agents/*.jsonc`.
+
+The extension-packaging workflow (`extension-release.yml`) is the one
+exception allowed to run unattended on a tag push: it only ever touches this
+GitHub repo (zip + Release), never Base44, so it carries none of the same
+risk.
