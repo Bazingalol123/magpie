@@ -10,6 +10,7 @@ let snipActive = false;
 let snipOverlay = null;
 let snipRect = null;
 let snipStart = null;
+let captureSubmitting = false;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "magpie:start-picker") {
@@ -67,6 +68,10 @@ function startPicker(mode = "element") {
     return;
   }
   if (pickerActive || snipActive) return;
+  if (captureSubmitting) {
+    showToast("A capture is still running — wait for it to finish.", "hint");
+    return;
+  }
   pickerMode = "element";
   pickerActive = true;
   document.documentElement.classList.add("magpie-picker-active");
@@ -80,6 +85,10 @@ function startPicker(mode = "element") {
 
 function startSnip() {
   if (snipActive || pickerActive) return;
+  if (captureSubmitting) {
+    showToast("A capture is still running — wait for it to finish.", "hint");
+    return;
+  }
   snipActive = true;
   snipOverlay = document.createElement("div");
   snipOverlay.id = SNIP_OVERLAY_ID;
@@ -229,8 +238,10 @@ async function captureElement(element) {
 }
 
 function submitCapturePayload(payload) {
+  captureSubmitting = true;
   showToast("Capturing…", "loading");
   chrome.runtime.sendMessage({ type: "magpie:capture", payload }, (response) => {
+    captureSubmitting = false;
     if (chrome.runtime.lastError) {
       showToast(chrome.runtime.lastError.message, "error");
       return;
