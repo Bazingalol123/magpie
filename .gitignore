@@ -9,6 +9,9 @@ dist
 .env.*
 *.local
 
+# Local working notes (not committed)
+*.local.md
+
 # Editor
 .vscode
 .idea
