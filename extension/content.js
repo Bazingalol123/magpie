@@ -373,7 +373,12 @@ function safeHttpUrl(value) {
 function resolveDetailUrl(element) {
   if (!(element instanceof Element)) return window.location.href;
   const anchor = element.closest("a[href]") || element.querySelector("a[href]");
-  return safeHttpUrl(anchor?.href) || window.location.href;
+  // anchor?.href would pass `undefined` to safeHttpUrl when no anchor is
+  // found; new URL(undefined, base) coerces that to the literal string
+  // "undefined" instead of throwing, producing a bogus "<origin>/undefined"
+  // URL instead of falling back to location.href. Guard on anchor first.
+  if (!anchor) return window.location.href;
+  return safeHttpUrl(anchor.href) || window.location.href;
 }
 
 function describeCaptureResult(result) {

@@ -516,3 +516,18 @@ to `Clip` in one isolated try/catch kept the two concerns separate: routing
 outcome is unaffected by whether the summary write succeeds, and a summary
 exists (or doesn't) independently of whether the outcome was existing, new,
 or review.
+
+## 2026-08-14 — `new URL(undefined, base)` doesn't throw, it produces `"<origin>/undefined"`
+
+Caught during manual Playwright testing of Build Guide 29.13 (B4):
+`resolveDetailUrl`'s no-anchor-found path called `safeHttpUrl(anchor?.href)`,
+and when `anchor` is `null`, `anchor?.href` is `undefined` — not a missing
+argument. `new URL(undefined, "https://example.com/")` coerces `undefined` to
+the string `"undefined"` via `ToString` and happily resolves it as a relative
+path, returning `https://example.com/undefined` instead of throwing. Because
+`safeHttpUrl` only returns `""` on a thrown exception, this bogus URL came
+back as a truthy string and defeated the `|| window.location.href` fallback.
+A real capture on books.toscrape.com reproduced it exactly. General lesson
+for this codebase: `foo?.bar` passed into any `new URL(value, base)` call
+needs an explicit null check first — optional chaining's `undefined` is not
+the same as "no value" as far as the URL constructor is concerned.

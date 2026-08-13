@@ -571,6 +571,27 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Verify:** `node --check extension/content.js` passes. Local-only change —
   reload the unpacked extension to pick it up; no backend or site deploy
   involved.
+- **Follow-up 2026-08-14 (found via manual Playwright testing against
+  books.toscrape.com):** the no-anchor-found fallback was itself broken.
+  `safeHttpUrl(anchor?.href)` passed `undefined` when no anchor was found;
+  `new URL(undefined, base)` coerces that to the literal string `"undefined"`
+  instead of throwing, so `safeHttpUrl` returned a bogus
+  `https://<origin>/undefined` URL instead of `""`, and the `||
+  window.location.href` fallback never ran — a real capture reproduced this
+  exactly (`https://books.toscrape.com/undefined`). Fixed by checking
+  `anchor` truthiness before calling `safeHttpUrl` at all. Re-verified live
+  post-fix: the same no-link scenario (hovering a book's price text, which
+  has no ancestor or descendant link) now correctly saves the list page URL.
+  Also confirmed live: the happy path (hovering a card's title/image link)
+  saves the specific item's detail URL, and the descendant-link case
+  (hovering a non-link card container whose only link is a child, e.g. the
+  image wrapper) resolves correctly per a direct DOM check
+  (`element.closest("a[href]") || element.querySelector("a[href]")`) against
+  real book.toscrape.com markup — an end-to-end capture of that exact case
+  wasn't cleanly reproducible in the test session (a prior capture was still
+  in flight, so the picker likely never activated for that attempt; see
+  `captureSubmitting`/`withCaptureLock` in `content.js`/`service-worker.js`),
+  but the DOM logic itself is confirmed sound.
 
 ### 29.14 Normalize URLs for duplicate matching (B8)
 
