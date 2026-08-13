@@ -105,8 +105,8 @@ button:disabled { cursor: wait; opacity: .7; }
 .card-grid { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .record-card { display: flex; flex-direction: column; text-align: left; background: #fff; border: 1px solid #e5ebe2; border-radius: 12px; overflow: hidden; transition: transform .15s, box-shadow .15s, border-color .15s; }
 .record-card:hover { transform: translateY(-2px); border-color: #cfdccc; box-shadow: 0 10px 24px rgba(28,56,36,.08); }
-.record-card-media { position: relative; aspect-ratio: 4 / 3; background: #edf1eb; }
-.record-card-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.record-card-media { position: relative; aspect-ratio: 4 / 3; min-height: 0; background: #edf1eb; }
+.record-card-media img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .record-card-fallback { width: 100%; height: 100%; display: grid; place-items: center; color: #6f8873; font: 22px "DM Mono", monospace; }
 .record-card-badge { position: absolute; top: 8px; right: 8px; display: inline-grid; place-items: center; width: 22px; height: 22px; color: #ad8434; background: #fdf3e3; border-radius: 6px; box-shadow: 0 3px 8px rgba(0,0,0,.12); }
 .record-card-body { padding: 12px 13px 13px; display: grid; gap: 6px; }

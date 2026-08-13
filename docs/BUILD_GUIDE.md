@@ -695,6 +695,32 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   manually against a live capture (Camera Listings) — the captured
   screenshot no longer includes the green highlight overlay.
 
+### 29.17 Fix card image cropping (B5)
+
+- [x] **Build:** `.record-card-media img` used `object-fit: cover`, so any
+  captured screenshot whose aspect ratio didn't match the card's fixed 4:3
+  tile got cropped to fill it — for portrait images (e.g. book covers) this
+  cropped out the top and bottom, often removing the title entirely.
+  Switched to `object-fit: contain` so the whole image is always visible,
+  letterboxed against the card's background instead of cropped. While
+  verifying this (a standalone HTML repro of `.record-card`/`.record-card-media`,
+  since local dev has no session and the deployed site wasn't touched yet)
+  also found the 4:3 tile wasn't actually being enforced at all:
+  `.record-card-media` is a flex item inside `.record-card`'s
+  `display:flex; flex-direction:column`, and flex items default to
+  `min-height: auto`, which lets content (the image's own intrinsic height)
+  override the `aspect-ratio` sizing entirely — cards were sizing to
+  whatever image they happened to contain instead of a uniform tile. Added
+  `min-height: 0` to `.record-card-media` to make `aspect-ratio` authoritative
+  again, confirmed via the same repro (200×150 tile, matching 4:3, regardless
+  of image shape).
+- **Files:** `src/index.css`
+- **Verify:** `npm run build` passes. Visually confirmed via a standalone
+  HTML page reproducing the exact card CSS with a real portrait book cover
+  image (books.toscrape.com) — before: title cropped out entirely; after:
+  full cover visible, correctly letterboxed. Not yet deployed to the live
+  site — bundling with Build Guide 29.18 (B7) into one site deploy.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.
