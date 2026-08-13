@@ -26,6 +26,9 @@ jobs:
         with:
           deno-version: "2.9.4"
 
+      - name: "deno install (populate node_modules for npm: specifiers)"
+        run: deno install
+
       - name: deno test
         run: deno test --allow-env --allow-read tests
 
