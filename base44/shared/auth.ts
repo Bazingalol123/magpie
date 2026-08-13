@@ -2,6 +2,7 @@ import { HttpError } from "./http.ts";
 
 type AuthenticatedUser = {
   id: string;
+  email?: string;
   role?: string;
   data?: Record<string, unknown>;
 };

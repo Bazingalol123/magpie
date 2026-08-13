@@ -297,6 +297,28 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Auto-pause:** a `blocked` result that brings the consecutive failure count to 3 sets the watch to `active: false` with `last_error_code: "AUTO_PAUSED_BLOCKED"`. The owner resumes it through `agent-configure-monitoring`; a successful check still resets the counter.
 - **Batch invariant:** each watch is isolated; one unexpected exception is recorded and processing continues.
 
+### `report-bug` — V3.1 (Build Guide 34)
+
+- **Caller:** signed-in owner only. Not reachable from the landing page or
+  the extension — a deliberate scope decision, since the landing page has no
+  owner identity to attach a report to.
+- **Semantics:** validates a `{ title, description, page_context? }` form
+  submission (`base44/shared/bug-report.ts`), then creates a GitHub issue on
+  `Bazingalol123/magpie` server-side via a repo-scoped fine-grained PAT
+  (`GITHUB_ISSUES_TOKEN` secret, Issues read/write only). The reporter never
+  needs their own GitHub account or credentials.
+- **Success:** `200` with `{ issue_url, issue_number }`.
+- **Expected cases:** missing/short/oversized `title` or `description` `400`;
+  unauthenticated `401`; missing `GITHUB_ISSUES_TOKEN` secret `500`
+  (misconfiguration, not a user error); a non-2xx GitHub API response `502`
+  with a generic retry message (the raw GitHub response is logged
+  server-side, never returned to the client).
+- **Security invariant:** the GitHub token lives only in `Deno.env` inside
+  this function; it never reaches the frontend bundle or the extension.
+- **Not persisted in Base44:** no entity stores bug reports — GitHub Issues
+  is the single source of truth, consistent with not adding state that has
+  no reader.
+
 ## Entity state map
 
 ### Record

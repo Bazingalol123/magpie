@@ -226,6 +226,40 @@ function ProjectDialog({ onClose, onCreate, isCreating }) {
   );
 }
 
+function BugReportDialog({ onClose, onSubmit, isSubmitting, error, result }) {
+  const [form, setForm] = useState({ title: "", description: "" });
+  const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+  const submit = (event) => {
+    event.preventDefault();
+    onSubmit(form);
+  };
+
+  if (result) {
+    return (
+      <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
+        <div className="pairing-dialog mission-dialog" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="detail-head"><div><div className="eyebrow"><Check size={13} /> report sent</div><h2>Thanks — we've got it.</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
+          <p>Your report is filed as <a href={result.issue_url} target="_blank" rel="noreferrer">issue #{result.issue_number} <ExternalLink size={12} /></a>. No GitHub account needed on your end — we filed it for you.</p>
+          <div className="pairing-actions"><span /><button type="button" className="primary-button" onClick={onClose}>Done</button></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
+      <form className="pairing-dialog mission-dialog" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-head"><div><div className="eyebrow"><Bug size={13} /> found a bug</div><h2>What went wrong?</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
+        <p>This goes straight to the team — you don't need a GitHub account to send it.</p>
+        <label>Summary<input name="title" placeholder="Card images look stretched on Collection cards" value={form.title} onChange={update} required minLength={4} maxLength={120} /></label>
+        <label>What happened<textarea name="description" placeholder="What you did, what you expected, and what happened instead." value={form.description} onChange={update} rows="4" required minLength={10} maxLength={4000} /></label>
+        {error && <div className="error-banner">{error}</div>}
+        <div className="pairing-actions"><span>Sent with your account email so we can follow up.</span><button className="primary-button" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={15} /> : <Bug size={15} />} Send report</button></div>
+      </form>
+    </div>
+  );
+}
+
 function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, onDelete, deletingId, collections }) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
@@ -1060,6 +1094,10 @@ export default function App() {
   const [isTogglingWatch, setIsTogglingWatch] = useState(false);
   const [deletingCollectionId, setDeletingCollectionId] = useState(null);
   const [deletingMissionId, setDeletingMissionId] = useState(null);
+  const [isBugReportOpen, setIsBugReportOpen] = useState(false);
+  const [isReportingBug, setIsReportingBug] = useState(false);
+  const [bugReportError, setBugReportError] = useState("");
+  const [bugReportResult, setBugReportResult] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     const [missions, collections, records, clips, enrichments, routingDecisions, watchRules] = await Promise.all([
@@ -1197,6 +1235,29 @@ export default function App() {
     } finally {
       setIsCreatingMission(false);
     }
+  };
+
+  const reportBug = async (form) => {
+    setIsReportingBug(true);
+    setBugReportError("");
+    try {
+      const response = await base44.functions.invoke("report-bug", {
+        ...form,
+        page_context: activeCollection ? `Collection: ${activeCollection.name}` : "Library",
+        user_agent: navigator.userAgent,
+      });
+      setBugReportResult(response.data);
+    } catch (error) {
+      setBugReportError(error.response?.data?.error || error.message || "Could not send this report.");
+    } finally {
+      setIsReportingBug(false);
+    }
+  };
+
+  const closeBugReport = () => {
+    setIsBugReportOpen(false);
+    setBugReportResult(null);
+    setBugReportError("");
   };
 
   const updateCandidateStatus = async (decisionStatus) => {
@@ -1359,10 +1420,19 @@ export default function App() {
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
-      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><a className="footer-link" href="https://github.com/Bazingalol123/magpie/issues/new" target="_blank" rel="noreferrer"><Bug size={12} /> Found a bug?</a></div></footer>
+      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}
+      {isBugReportOpen && (
+        <BugReportDialog
+          onClose={closeBugReport}
+          onSubmit={reportBug}
+          isSubmitting={isReportingBug}
+          error={bugReportError}
+          result={bugReportResult}
+        />
+      )}
       {isAgentOpen && <MagpieAgentPanel project={activeMission} collection={activeCollection} record={selectedRecord} onClose={() => setIsAgentOpen(false)} />}
       {isReviewOpen && (
         <NeedsReviewPanel

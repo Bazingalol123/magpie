@@ -245,3 +245,22 @@ single-shot-everything pattern should change at all) and was intentionally
 left out of this pass, which was scoped to "the page keeps growing" UX
 complaint, not data completeness at scale. Worth revisiting if this project
 gets meaningfully more usage per owner.
+
+## The in-app bug report form is dashboard-only and has no rate limit
+
+`report-bug` (Build Guide 34) deliberately does not extend to the landing
+page or the extension, even though "someone hits a bug before ever signing
+in" is a real gap the raw GitHub link (checkpoint 33) doesn't cover either.
+Reachable-when-signed-out would mean an unauthenticated endpoint that writes
+to a public GitHub repo, which needs its own abuse-protection scoping
+(rate limiting, minimum-content heuristics) before it's safe to expose —
+explicitly deferred rather than built ahead of that conversation, same
+posture as the rest of B11's original triage note.
+
+Within the dashboard-only scope that shipped, there is also no per-owner
+rate limit on report submissions. This was a deliberate simplification, not
+an oversight: the caller is authenticated (unlike a public endpoint), GitHub
+enforces its own API rate limit on the token (5,000 req/hr), and the token
+is scoped to Issues-only on a single repo, so the worst case of a signed-in
+owner submitting many reports is GitHub issue noise, not a security or data
+exposure. Revisit if this ever becomes reachable from a signed-out surface.
