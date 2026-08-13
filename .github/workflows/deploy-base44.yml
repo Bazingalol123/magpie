@@ -1,0 +1,103 @@
+name: Deploy to Base44
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to deploy"
+        required: true
+        type: choice
+        default: "functions"
+        options:
+          - all
+          - entities
+          - functions
+          - agents
+          - site
+
+jobs:
+  verify:
+    name: Release gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.9.4"
+
+      - name: deno test
+        run: deno test --allow-env --allow-read tests
+
+      - name: deno check (every function entry.ts)
+        run: deno check $(find base44/functions -name entry.ts)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: node --check on every extension script
+        run: |
+          find extension -name "*.js" -print0 | xargs -0 -n1 node --check
+
+      - name: forbid @base44/sdk in the extension
+        run: |
+          if grep -rn "@base44/sdk" extension; then
+            echo "::error::extension files must not import @base44/sdk (see CLAUDE.md architecture boundary)"
+            exit 1
+          fi
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run build
+        run: npm run build
+
+  deploy:
+    name: "Deploy: ${{ github.event.inputs.target }}"
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production-deploy
+    env:
+      BASE44_API_KEY: ${{ secrets.BASE44_API_KEY }}
+      BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Warn on full agent sync
+        if: github.event.inputs.target == 'agents'
+        run: |
+          echo "::warning::npx base44 agents push is a FULL synchronization — it deletes any remote agent not present in base44/agents/*.jsonc."
+
+      - name: Build site
+        if: github.event.inputs.target == 'all' || github.event.inputs.target == 'site'
+        run: npm run build
+
+      - name: Deploy everything
+        if: github.event.inputs.target == 'all'
+        run: npx base44 deploy -y
+
+      - name: Push entities
+        if: github.event.inputs.target == 'entities'
+        run: npx base44 entities push
+
+      - name: Deploy functions
+        if: github.event.inputs.target == 'functions'
+        run: npx base44 functions deploy --force
+
+      - name: Sync agents
+        if: github.event.inputs.target == 'agents'
+        run: npx base44 agents push
+
+      - name: Deploy site
+        if: github.event.inputs.target == 'site'
+        run: npx base44 site deploy -y

@@ -451,3 +451,24 @@ immediately, since those need to resolve before updating local selection
 state. Site-only change (`src/App.jsx`), no entity or function impact;
 `npm run build` passed and it was deployed via `npx base44 site deploy -y`,
 smoke-checked `200`.
+
+## 2026-08-13 — CI pins Deno 2.9.4 with no lockfile to anchor it
+
+The repo has never had a `deno.json`/`deno.lock` — the only record of which
+Deno version this project actually runs on is prose in this file and in
+`docs/BUILD_GUIDE.md` ("Deno 2.9.4 was restored with the official Windows
+installer"). GitHub Actions' `denoland/setup-deno@v2` needs an explicit
+`deno-version` input, so `.github/workflows/ci.yml` and
+`deploy-base44.yml` both hardcode `"2.9.4"` to match local dev rather than
+floating on `2.x`, so a Deno minor release can't silently change CI behavior
+out from under a still-unpinned local install. If a `deno.json` is ever
+added, switch the workflow to read the version from it instead of
+duplicating the string in three places.
+
+Also worth knowing: `base44/.app.jsonc` (the Base44 app id) and the
+`.agents/skills/` docs are both gitignored and therefore invisible to any
+GitHub Actions checkout. The Base44 CLI resolves the app id from a
+`BASE44_APP_ID` env var before it looks at that local file, which is what
+lets `deploy-base44.yml` work from a plain `actions/checkout` without ever
+committing the id — see `docs/DECISIONS.md` for why the deploy workflow
+still requires a manual approval click rather than running unattended.

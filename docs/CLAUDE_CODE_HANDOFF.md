@@ -133,6 +133,21 @@ sign-in click-through (actually deleting a Collection/Project in the browser)
 still has not been performed — do that next. No entities or Agents changed
 or were pushed this round.
 
+## CI/CD (added 2026-08-13)
+
+`.github/workflows/ci.yml` now runs the full release-gate suite automatically
+on every push to `main`/`feature/**` and every PR into `main`.
+`extension-release.yml` packages and publishes a GitHub Release on an
+`extension-v*` tag push. `deploy-base44.yml` is a manual, approval-gated
+"deploy button" (`workflow_dispatch`) — see Build Guide 29.12 and
+`docs/DECISIONS.md` for why it stays manual rather than auto-deploying.
+
+**Outstanding setup action (not yet done):** the `production-deploy` GitHub
+Environment (with a required reviewer) and the `BASE44_API_KEY` /
+`BASE44_APP_ID` repository secrets haven't been created yet — the deploy
+workflow will fail cleanly until both exist. Local manual deploys via `npx
+base44 ...` are unaffected and remain the fallback until then.
+
 ## Immediate continuation
 
 Build Guide 29.2–29.4 are complete and deployed. The remaining manual check is
