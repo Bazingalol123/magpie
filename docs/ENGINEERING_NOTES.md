@@ -555,3 +555,20 @@ populates with real, sensible content. Lesson: OpenAI-compatible **tool**
 schemas need their own `strict: true` — it does not inherit from a
 `response_format` used elsewhere in the same file, and a field merely being
 listed in `required` proves nothing without it.
+
+## 2026-08-14 — `workflow_dispatch` builds whatever `--ref` you give it, not `main`
+
+First real use of `deploy-base44.yml`'s `site` target (Build Guide 29.15,
+via `gh workflow run "Deploy to Base44" --ref <branch> -f target=site`)
+mis-fired once: dispatched with `--ref main` out of habit, which silently
+would have built and deployed the *old* site bundle, since the frontend fix
+lived on `fix/p0-bugfix-pass` and hadn't been merged — `workflow_dispatch`
+checks out whatever ref you tell it to, not the default branch, and the
+`verify`/`deploy` jobs have no way to know that isn't what you meant. Caught
+before approval (the `production-deploy` environment gate held it), cancelled,
+re-dispatched with `--ref fix/p0-bugfix-pass`. Confirmed working end to end:
+release gates passed against the feature branch, the environment approval
+gate held the `deploy` job until a manual click, and the deployed site was
+owner-verified live afterward. Lesson for next time: when deploying via this
+workflow from a branch that hasn't merged to `main`, double check `--ref`
+before dispatching, and before approving in the GitHub UI.
