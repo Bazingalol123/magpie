@@ -721,6 +721,34 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   full cover visible, correctly letterboxed. Not yet deployed to the live
   site — bundling with Build Guide 29.18 (B7) into one site deploy.
 
+### 29.18 Paginate the per-Collection Item table/card grid (B7)
+
+- [x] **Build:** `RecordTable`/`RecordCardGrid` (`src/App.jsx`) rendered
+  every Record in the selected Collection at once — a Collection accumulates
+  captures indefinitely with no bound, so the panel just grows forever as a
+  user adds Items. Added simple client-side pagination: 30 records per page,
+  Previous/Next controls, only shown when a Collection has more than one
+  page. Resets to page 1 when the selected Collection changes (via a
+  `useEffect` keyed on `collection.id`) so switching collections never
+  leaves the view on an out-of-range page; also clamps the current page down
+  if the record count shrinks (e.g. after a delete) so it can't get stuck
+  past the end. The `showCards` vs. table-mode decision still looks at the
+  *full* record set, not just the current page, so paginating doesn't cause
+  the view to flip modes as the user pages through.
+  Deliberately scoped to the rendering layer only — `loadDashboard`
+  (`src/App.jsx`) still fetches up to 200 Records/Clips/etc. per entity in
+  one shot (`base44.entities.Record.list("-created_date", 200)` and
+  similar). A user with more than 200 Records total across all Collections
+  would still have older ones silently absent from the fetched set entirely,
+  which pagination-in-the-UI cannot fix — that's a separate, larger
+  server-side pagination change (cursor vs. offset, page size per entity)
+  that needs its own scoping pass, not bundled into this fix.
+- **Files:** `src/App.jsx`, `src/index.css`
+- **Verify:** `npm run build` passes. Pagination math (page count, clamping,
+  slice bounds) reviewed by hand; not yet live-verified in a real browser
+  against a Collection with more than 30 Items — do that as part of the next
+  manual pass alongside B5.
+
 ### 30. Add bounded folder persistence
 
 - [ ] **Build:** Write tree fixtures, add Folder plus optional `Collection.folder_id`, and implement server-owned folder/move workflows.
