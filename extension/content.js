@@ -234,6 +234,13 @@ async function captureElement(element) {
     showToast("Choose an element with visible text.", "error");
     return;
   }
+  // Let the page repaint without the highlight overlay before the worker
+  // screenshots it — without this, chrome.tabs.captureVisibleTab can still
+  // grab a frame with the green hover highlight baked in (Bug B2), the same
+  // race the visual snip flow already guards against in onSnipUp.
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => window.setTimeout(resolve, 80)));
+  });
   submitCapturePayload(payload);
 }
 
