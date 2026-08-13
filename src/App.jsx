@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   Book,
+  Bug,
   Check,
   ChevronDown,
   ChevronRight,
@@ -1358,7 +1359,7 @@ export default function App() {
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
-      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><a className="footer-linkedin" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a></footer>
+      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><a className="footer-link" href="https://github.com/Bazingalol123/magpie/issues/new" target="_blank" rel="noreferrer"><Bug size={12} /> Found a bug?</a></div></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}

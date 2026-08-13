@@ -782,3 +782,17 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Verify:** `deno test --allow-env --allow-read tests` — 127/127 passing
   (no backend touched). `npm run build` passes.
 - **Verify:** Users can organize Collections without changing Mission scope or routing, and the complete V3 flow remains testable from Chrome.
+
+### 33. Add dashboard bug-report link, align landing page wording (B11)
+
+- [x] **Build:** B11 asked for a "Found a bug? Report here" affordance in the
+  dashboard, discussed with the owner as a GitHub-issue link (the landing
+  page already had one from an earlier PR, worded "Report a bug"). Added a
+  matching link to the dashboard's `workspace-footer`
+  (`https://github.com/Bazingalol123/magpie/issues/new`), styled to match
+  the existing "Follow on LinkedIn" link — both now sit in a shared
+  `.footer-links` wrapper instead of a single hardcoded LinkedIn anchor.
+  Also renamed the landing page's link text from "Report a bug" to
+  "Found a bug?" so the wording matches across both surfaces.
+- **Files:** `src/App.jsx`, `src/Landing.jsx`, `src/index.css`
+- **Verify:** `npm run build` passes. Not yet deployed/owner-verified live.
