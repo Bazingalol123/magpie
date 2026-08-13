@@ -672,10 +672,28 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   re-verified against fresh captures on books.toscrape.com: `Clip.summary`
   now populates with accurate, on-spec content (see
   `docs/ENGINEERING_NOTES.md` 2026-08-14). Backend confirmed live and
-  working. **Frontend not yet deployed** — `src/App.jsx`'s `CapturedContext`
-  change needs `npm run build` + `npx base44 site deploy`, so the live
-  dashboard still renders the pre-fix raw-text dump even though the data now
-  has a summary to show.
+  working.
+- **Follow-up 2026-08-14:** frontend (`CapturedContext`) deployed via the
+  `Deploy to Base44` GitHub Actions workflow (`site` target, dispatched
+  against `fix/p0-bugfix-pass`, approved through the `production-deploy`
+  environment gate). Owner-verified against the live dashboard.
+
+### 29.16 Wait for repaint before screenshotting a picker capture (B2)
+
+- [x] **Build:** `captureElement` (`extension/content.js`) removed the green
+  picker highlight overlay (`stopPicker()`) and immediately sent the capture
+  message to the service worker, which calls
+  `chrome.tabs.captureVisibleTab`. Removing the DOM element doesn't
+  guarantee the browser has repainted before that screenshot call runs, so
+  the highlight could still be in the captured frame — the same race the
+  visual snip flow (`onSnipUp`) already guards against with a documented
+  double-`requestAnimationFrame` + short timeout before screenshotting.
+  `captureElement` now awaits the same wait pattern after `stopPicker()` and
+  before `submitCapturePayload()`.
+- **Files:** `extension/content.js`
+- **Verify:** `node --check extension/content.js` passes. Owner-tested
+  manually against a live capture (Camera Listings) — the captured
+  screenshot no longer includes the green highlight overlay.
 
 ### 30. Add bounded folder persistence
 
