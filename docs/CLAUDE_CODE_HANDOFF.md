@@ -228,9 +228,15 @@ Four real `needs_review` Captures exist in production data for this.
 
 ## Known gaps, in priority order
 
-1. **Chrome integration matrix:** right-click capture modes, real crop geometry,
-   hosted multimodal routing, semantic Project assignment, and the new review,
-   deletion, and landing surfaces still need manual browser verification.
+1. **Chrome integration matrix:** Phase 1 (issue #19) landed 2026-08-15 — a
+   real Playwright suite (`npm run test:e2e`, `tests-e2e/`) drives the real
+   unpacked extension against a real local `npx base44 dev` backend for all
+   6 capture modes and passes 6/6; see `docs/BUGS_AND_BEHAVIORS.md`'s G3/G8
+   and `docs/BUILD_GUIDE.md` checkpoint 36. Still open: CI wiring,
+   non-English keyboard layouts, tab-already-open-after-reload, worker
+   sleep/wake, hosted multimodal routing, semantic Project assignment, and
+   the review/deletion/landing surfaces (still need manual browser
+   verification, or a later phase of this same suite).
 2. **Concurrent ingest serialization:** sequential retries are idempotent, but
    simultaneous-request behavior remains an explicit gate.
 3. **Owner/RLS integration fixtures:** pure ownership tests exist, and live

@@ -856,6 +856,206 @@ record. If a future change makes either field security-relevant (e.g. if
 owner-visible surface), this call should move to a small backend function at
 that point.
 
+## 2026-08-15 — Issue #19 Phase 1 / G8: building the Playwright Chrome capture harness
+
+Real findings from building `tests-e2e/` (the first Playwright suite in this
+repo), in the order they were hit.
+
+### `npx base44 dev` runs the frontend too, when `site.serveCommand` is set
+
+`base44/config.jsonc` already has `site.serveCommand: "npm run dev"`, and the
+installed CLI's `base44 dev` reference doc (`.claude/skills/base44-cli/references/dev.md`)
+confirms: when that field is set, `base44 dev` starts the frontend dev server
+too, from the project root, and injects `VITE_BASE44_APP_ID` and
+`VITE_BASE44_APP_BASE_URL` into that frontend process automatically. This
+meant `tests-e2e/global-setup.ts` only has to spawn one process
+(`npx base44 dev --port <pinned>`) to get both a live local backend and a
+dashboard already wired to it — no separate `vite` invocation or manual env
+file needed. The backend port is pinned (`--port`); the frontend port is not
+(vite auto-increments past a busy 5173/5174), so global-setup parses the
+actual port out of the combined `[base44 dev]` stdout stream instead of
+assuming one.
+
+### The gitignored `base44/.app.jsonc` link file is worktree-local
+
+`npx base44 dev` requires a linked project (`base44/.app.jsonc`, containing
+only `{"id": "<app id>"}`), and that file is intentionally gitignored
+(`base44-cli` skill: "Do not commit this file"). A fresh `git worktree add`
+checkout does not inherit it — `npx base44 dev` fails outright without it.
+This is not a secret (the app id is also the public default baked into
+`src/api/base44Client.js`), so the fix for a new worktree is just copying the
+file from an already-linked checkout, which `tests-e2e/helpers/config.ts`'s
+`readAppId()` now says explicitly in its error message if the file is
+missing, instead of failing with an opaque CLI error.
+
+### Local `/auth/register` + `/verify-otp` mechanics (used for the test owner)
+
+Confirmed by reading `node_modules/base44/dist/cli/index.js`'s dev-server
+`createAuthRouter`, same mechanism the 2026-08-14 G4 entry above already
+documented: `POST /api/apps/:appId/auth/register` with `{email, password}`
+(password must be >= 8 chars) creates a pending local user and prints
+`In order to complete registration use this verification code: NNNNNN` to
+the `base44 dev` process's own stdout — never sent anywhere. `POST
+.../auth/verify-otp` with `{email, otp_code}` both creates the real local
+`User` row and returns `{id, access_token}` in the same response — `id` here
+*is* the row's real `owner_id` value, so no separate `auth.me()`/`User/me`
+call is needed to learn the test owner's id. `global-setup.ts` extracts the
+OTP by counting regex matches in the buffered stdout before/after each
+register call rather than parsing the email out of the log line, since the
+CLI's OTP log line doesn't include which email it's for.
+
+### `headless: true` silently cannot load extensions — needs `--headless=new` instead
+
+The single biggest surprise. Playwright 1.62's Chromium `headless: true`
+launches a separate, lighter **"chromium-headless-shell"** binary (confirmed
+present as its own download, `chromium_headless_shell-1234`, alongside the
+full `chromium-1234` binary after `npx playwright install chromium`) — and
+that shell binary does not support `--load-extension` at all. There is no
+error: `chromium.launchPersistentContext(dir, {headless: true, args:
+["--load-extension=..."]})` returns a context whose `serviceWorkers()` stays
+empty forever and `waitForEvent("serviceworker")` just times out. Confirmed
+by isolating it: the identical launch with `headless: false` registers the
+service worker within a second.
+
+The fix (now in `tests-e2e/helpers/browser.ts`) is to pass `headless: false`
+(so Playwright launches the real, full Chromium binary, not the shell) plus
+an explicit `--headless=new` argument, which makes that same full binary run
+itself headless. This still requires no Xvfb/virtual display in this Windows
+sandbox — confirmed working end to end, including real mouse drags
+(visual-mode snip) and keyboard shortcuts (element-mode picker). This
+appears to be specific to how Playwright 1.62 selects a browser binary for
+`headless: true`, not a documented Chromium extension limitation, so it is
+worth re-checking against future Playwright releases rather than assumed
+permanent.
+
+### `@base44/sdk` cannot be imported from a Playwright-loaded `.ts` file (but plain Node is fine)
+
+Any spec/helper file that Playwright's test runner loads (even a one-line
+`import { createClient } from "@base44/sdk"`) crashes at collection time:
+
+```text
+TypeError: debug_1.default is not a function
+    at Object.<anonymous> (node_modules/agent-base/src/index.ts:9:26)
+    at Object.<anonymous> (node_modules/https-proxy-agent/src/agent.ts:7:1)
+```
+
+Isolated with a minimal repro spec (just the one import line) — same crash.
+The identical import works fine under plain Node (`node -e
+"import('@base44/sdk').then(...)"` prints `OK function`), and dynamically
+`import()`-ing a separate `.mjs` file that does the same import from inside
+a Playwright spec crashes identically, so this is not specific to Playwright
+transforming `.ts` syntax — it is something about the Playwright *test
+worker's* module/runtime environment specifically, most likely related to
+`debug@4.4.3`'s package.json declaring both `"main": "./src/index.js"` and
+`"browser": "./src/browser.js"` (a real, if unconfirmed in full depth, lead:
+axios 1.18.1 -> `https-proxy-agent` -> `agent-base` -> `debug`, and the
+compiled `agent-base` code's `__importDefault(require("debug"))` pattern
+only breaks under Playwright's worker, not plain Node, for that same
+resolved `debug` version). Not pursued further given the fix below.
+
+Fix: `tests-e2e/helpers/backend.ts` does not use `@base44/sdk` at all. It
+calls the local dev server's own entities REST API directly with `fetch()`
+(`GET /api/apps/:appId/entities/Clip?q=<json filter>&sort=&limit=` and
+`GET .../entities/Clip/:id`, both confirmed against the same CLI dev-server
+source used for the auth mechanics above), authenticated with the test
+owner's real `access_token` from `/verify-otp`. This is arguably a closer
+match to the issue's own wording ("poll the local backend's entities API")
+than going through the SDK would have been, and the entities route still
+enforces `clip.jsonc`'s real `read` RLS (`data.owner_id ===
+{{user.id}}`) server-side per row, so it is not a lower-fidelity check.
+
+### Local AI-routing calls proxy to real production, and can be slow or 401
+
+`base44 dev`'s local backend does not run AI Gateway calls locally: every
+`classify-clip` routing call during this suite logged `"/api/apps/.../ai/
+openai/v1/chat/completions" is not supported in local development, passing
+call to production`, and several runs also logged a `[Base44 SDK Error]
+401: Request failed with status code 401` around that same call (visible in
+`base44 dev`'s own backend log, not surfaced to the extension/test). Two
+consequences worth flagging for anyone extending this harness:
+
+- The extension's own `fetch()` to `ingest-clip` does not resolve until the
+  *entire* server-side handler finishes, including this proxied AI call —
+  the `Clip` row is created and visible over the entities API well before
+  that response comes back (`ingest-clip/entry.ts` creates the row, then
+  calls `processStoredClip`). A test that treats "the Clip exists in the
+  backend" as "the extension's request is done" and immediately fires a
+  second capture can find `extension/service-worker.js`'s single-flight
+  `captureInFlight` lock still held, disabling `popup.js`'s buttons for the
+  whole 90s test timeout. `tests-e2e/helpers/capture.ts`'s
+  `waitForCaptureIdle()` (poll the real `magpie:capture-status` message
+  until `inFlight` is false) is the fix, used by `capture-page.spec.ts`
+  before its retry.
+- A capture whose AI routing throws all the way up still lands as
+  `routing_status: "failed"`, and `ingest-clip`'s own dedupe check
+  deliberately skips matching against a `"failed"` row
+  (`identicalClips[0] && identicalClips[0].routing_status !== "failed"` in
+  `base44/functions/ingest-clip/entry.ts`) so a genuinely failed capture can
+  be retried instead of being permanently un-retriable. This did not end up
+  mattering for the final passing runs (both retried captures in every
+  passing run got a real `routed_existing`/`created_collection` outcome,
+  never `failed`), but it is a real, occasionally-observed source of
+  content_hash mismatch between "identical" captures in this environment,
+  separate from the toast-pollution finding below, and worth knowing about
+  if this harness ever runs against a slower or more rate-limited network.
+
+### Product finding: the capture-result toast pollutes a same-page "page" mode re-capture (not fixed, per scope)
+
+While debugging why `capture-page.spec.ts`'s duplicate-retry check kept
+seeing a second `Clip` (`content_hash` differed between the two "identical"
+captures even with `routing_status` healthy on both), the actual cause
+turned out to be real and worth recording as its own finding, distinct from
+the AI-Gateway flakiness above: `extension/content.js`'s own result toast
+(`#magpie-capture-toast`, id `content.css`'s `position: fixed; right: 20px;
+bottom: 20px`) is appended to `document.body` and stays there for its
+`showToast()` lifetime (9 seconds when the result includes a
+`dashboard_url`, which most successful captures do) before it removes
+itself. **Page mode** builds `raw_text` from `document.body?.innerText`
+wholesale (`buildContextPayload("page", ...)` in `content.js`) — so a second
+page-mode capture of the same page fired while the first capture's own
+result toast is still on screen captures the toast's own text
+("Saved — Magpie created a new Collection for this. Open Magpie →" or
+similar) as part of `raw_text`, producing a different `content_hash` than a
+"clean" capture of the same page and silently defeating the B8 dedupe check
+for that narrow case.
+
+Confirmed the other five modes are not affected, and why: `element` reads
+`element.innerText` on the specific clicked node (a different DOM subtree
+from the toast, which lives directly under `<body>`); `selection` reads the
+explicit selection range; `link`/`image` read `anchor`/`figure`-scoped text;
+`visual` samples `document.elementFromPoint()` at fixed pixel offsets inside
+the user's drawn rect, which in this suite's fixture never geometrically
+overlaps the toast's bottom-right corner. Only `page` mode's
+"whole-body-innerText" approach is exposed to this.
+
+Per this task's scope (do not fix a surfaced product bug silently in this
+PR), `capture-page.spec.ts` instead waits for the toast to be fully removed
+from the DOM (`waitForToastGone()` in `tests-e2e/helpers/capture.ts`) before
+firing its retry, so the test verifies the real dedupe contract under normal
+conditions rather than being confounded by this gap. The gap itself — a
+user who captures the same page twice within roughly 9 seconds gets a
+polluted, non-deduped second `Clip` — is a real, narrow, low-severity
+product bug that should be scoped as its own follow-up (candidate fix:
+either exclude the toast subtree from `document.body.innerText` collection,
+e.g. by temporarily detaching it before reading text, or move the toast
+outside `document.body` into a dedicated container the capture path
+explicitly ignores).
+
+### The known worker-keep-alive gap, confirmed still present (not touched this pass)
+
+Per this task's scoping conversation: `captureInFlight` in
+`extension/service-worker.js` is an in-memory `let` with no
+`chrome.alarms`/keep-alive mechanism backing it, so it silently resets to
+`false` if the MV3 service worker is terminated and restarted mid-capture by
+Chrome (worker sleep/wake is explicitly deferred out of this Phase 1 pass,
+per the prompt). Re-reading `service-worker.js` for this task confirms the
+gap is still exactly as described and untouched by anything in this
+harness — noting it here again only because this was the closest this pass
+came to touching that code path (the same `withCaptureLock`/`captureInFlight`
+mechanism this harness's `waitForCaptureIdle()` polls from the outside).
+Not tested or fixed here; still open for a dedicated worker-sleep/wake test
+in a later phase.
+
 ## 2026-08-15 — B13: cascade delete's single-page child fetch, found by code audit
 
 Proactive P0 hunt (no user report) targeted the destructive-delete cascade

@@ -372,16 +372,36 @@ passes.
 
 ## G3 — Full Chrome integration matrix
 
-The following need repeatable browser verification:
+**Status:** Phase 1 (issue #19) landed 2026-08-15 — see `docs/BUILD_GUIDE.md`'s
+checkpoint and `docs/ENGINEERING_NOTES.md` for the full writeup. A real
+Playwright suite (`tests-e2e/`) drives the actual unpacked extension against
+a real local `npx base44 dev` backend + dashboard and passes 6/6 for all six
+capture modes (element, selection, page, link, visual, image), each
+asserting `capture_mode`, `source_url`/`context_url`, bounded `raw_html`/
+`raw_text`, and a real duplicate-retry check against the local entities API.
+Element and link mode specifically reproduce the B4 regression shape (a
+card-grid list page) and assert the captured URL is the clicked card's own
+detail URL, not the list page's URL.
 
-- every right-click capture mode;
-- real crop geometry;
-- hosted multimodal routing;
-- semantic Project assignment;
-- review actions;
-- deletion flows;
-- landing and pairing flows;
-- image/card rendering on real data.
+Still open, deliberately deferred to a later phase (`docs/DECISIONS.md`):
+
+- non-English keyboard layouts;
+- an already-open tab surviving an extension reload;
+- worker sleep/wake between captures (see G8's note on the
+  `captureInFlight` gap below);
+- hosted multimodal routing and a hosted smoke test (this phase is local-only,
+  per the issue's own verification order);
+- real crop geometry beyond this phase's fixed test rectangle (portrait vs.
+  landscape vs. arbitrary-aspect element crops are not separately exercised
+  yet);
+- semantic Project assignment, review actions, deletion flows, landing and
+  pairing-flow *UI* coverage (pairing itself is exercised as plumbing in
+  `tests-e2e/global-setup.ts`, but not as its own asserted spec), and
+  image/card rendering on real data;
+- CI wiring — the suite runs locally only for now (`docs/DECISIONS.md`).
+
+Do not treat this as G3 fully closed; it is a real first slice, not the
+whole matrix.
 
 ## G4 — Live cross-owner integration fixtures
 
@@ -454,19 +474,31 @@ similarly documented exception applies.
 
 ## G8 — Local verification harness
 
-The repository supports local Base44 development through `npx base44 dev`,
-but the complete local browser harness is not yet a single reproducible command.
-The desired workflow is:
+**Status:** Phase 1 (issue #19) landed 2026-08-15. `npm run test:e2e`
+(`playwright test --config=playwright.config.ts`) is now a single
+reproducible command that does the first three steps of the desired
+workflow below end to end: `tests-e2e/global-setup.ts` spawns
+`npx base44 dev` on a pinned port (which also starts the wired-up local
+Vite dashboard, per `docs/ENGINEERING_NOTES.md`), registers a real local
+test owner through the local `/auth/register` + `/verify-otp` flow, drives
+the real dashboard login and "Pair extension" dialog to pair a real
+unpacked-extension Chromium profile, then runs the 6 capture-mode specs
+under `tests-e2e/specs/` against it — see `docs/BUILD_GUIDE.md`'s checkpoint
+for the full file list.
 
 ```text
-local Base44 + local Vite
-  → saved local auth state
-  → targeted Playwright tests
-  → CI gates
-  → one approved Production smoke test
+local Base44 + local Vite         <- done (npx base44 dev, one process)
+  → saved local auth state        <- done (real login + real pairing dialog,
+                                      not hand-injected)
+  → targeted Playwright tests     <- done for the 6 capture modes (G3)
+  → CI gates                      <- NOT done yet, deliberate fast-follow
+  → one approved Production smoke test   <- NOT done, out of scope this phase
 ```
 
-Do not deploy merely to test a UI change that can be verified locally.
+CI wiring and the hosted smoke test remain explicitly open — see
+`docs/DECISIONS.md` for why both were deliberately deferred rather than
+attempted in this pass. Do not deploy merely to test a UI change that can be
+verified locally.
 
 ## G9 — Website first-run onboarding is not yet a complete UI contract
 
@@ -652,10 +684,10 @@ A bug is not complete merely because a patch exists. The agent must report:
 | D1 | Docs deep-link anchor scroll | Open PR #12 |
 | G1 | Server-side pagination beyond 200 | Fixed, not yet deployed |
 | G2 | Concurrent ingest serialization | Open verification gate |
-| G3 | Complete Chrome matrix | Open verification gate |
+| G3 | Complete Chrome matrix | Phase 1 (6 core modes) automated and passing 2026-08-15; CI wiring + 3 deferred edge cases + hosted smoke remain open |
 | G4 | Live cross-owner fixtures | Live-verified locally 2026-08-14; hosted spot-check not re-run |
 | G5 | Bug-report quota/rate limiting | Known gap |
 | G6 | Bounded folders | Not built |
 | G7 | Direct Dashboard entity writes | Audited 2026-08-14; one accepted low-risk exception |
-| G8 | Local Base44 + Playwright harness | Not yet packaged as one command |
+| G8 | Local Base44 + Playwright harness | `npm run test:e2e` is one reproducible command as of 2026-08-15; CI gate + hosted smoke still open |
 | G9 | Website first-run onboarding UI contract | Partially built (Build Guide 36); pairing checklist and first-capture status done, signed-out landing/full recovery states/tests still open |
