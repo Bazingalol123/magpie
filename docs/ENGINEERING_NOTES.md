@@ -1055,3 +1055,49 @@ came to touching that code path (the same `withCaptureLock`/`captureInFlight`
 mechanism this harness's `waitForCaptureIdle()` polls from the outside).
 Not tested or fixed here; still open for a dedicated worker-sleep/wake test
 in a later phase.
+
+## 2026-08-15 — B13: cascade delete's single-page child fetch, found by code audit
+
+Proactive P0 hunt (no user report) targeted the destructive-delete cascade
+because it's the one write path where a silent truncation is unrecoverable
+by design: the parent row is deleted last specifically so a retry that finds
+it missing reads as "already done" and stops. That property is exactly what
+makes a partial child-row delete permanent instead of self-healing.
+
+`cascadeRecord` (`base44/shared/record-removal.ts`) fetched WatchRule/
+Enrichment/RoutingDecision children with:
+
+```ts
+await service.Enrichment.filter({ owner_id: ownerId, record_id: record.id }, "-created_date", 200)
+```
+
+— a single page, hardcoded limit, no `skip`. Meanwhile `collection-removal.ts`
+and `mission-removal.ts`, one cascade level up, already call `listAllOwned`
+(`base44/shared/service-entities.ts`) to page Records/Collections to
+completion, with a code comment explicitly about destructive cascades. The
+per-record cascade — the thing every one of those outer loops calls once per
+row — never got the same treatment. Same shape of bug as G1 (a single
+hardcoded-limit `list()`/`filter()` call silently dropping rows past the
+cap), but on a write path instead of a read path, which is worse: G1 degrades
+to a truncated dashboard view; this one leaves orphaned rows nothing will
+ever revisit.
+
+**Why no existing fixture caught it:** the shared test mock's `filter()` in
+`tests/record-removal.test.ts` accepted a `skip` parameter but ignored it —
+`.slice(0, limit ?? length)` regardless of the fourth argument. Had someone
+already written a >200-row Enrichment fixture against the old mock, it
+wouldn't have exposed the bug — it would have made `listAllOwned`'s
+pagination loop (which relies on `skip` advancing) request the same first
+page forever, since `page.length` never drops below `pageSize`. That's an
+infinite loop, not a clean assertion failure, which is a worse failure mode
+for a test suite than "no coverage." Fixed the mock to slice on
+`skip`/`skip + limit` before adding the regression fixture, and confirmed
+(by reverting just the source fix) that the fixture fails cleanly — 200/100
+deleted instead of 250/150 — rather than hanging.
+
+**Verification of the fix itself:** `deno test` 143/143 (net +1 fixture over
+the prior 142), `deno check` clean across all 16 entry points, `npm run
+build` clean. No entity/schema change — the fix is pure logic inside an
+already-deployed shared module, so it only needs a targeted
+`functions deploy delete-record delete-collection delete-mission` (owner
+approval required, not yet run).

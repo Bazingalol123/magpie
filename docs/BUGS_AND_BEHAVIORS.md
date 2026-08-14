@@ -106,6 +106,38 @@ legacy rows.
 **Deliberate limitation:** Existing duplicates are not merged retroactively.
 Do not add automatic merging without an explicit data-reconciliation design.
 
+## B13 — Cascade delete permanently orphaned child rows past one fetch page
+
+**Status:** Fixed, not yet deployed (source-only, `fix/p0-cascade-delete-pagination`).
+
+**Symptom:** `cascadeRecord` (`base44/shared/record-removal.ts`), shared by
+`delete-record`, `delete-collection`, and `delete-mission`, fetched child
+WatchRule/Enrichment/RoutingDecision rows with a single hardcoded-limit
+`.filter()` call (100/200/10) instead of paging to completion. A Record with
+more than 200 Enrichment rows or more than 100 WatchRules — realistic for a
+long-lived, actively-watched candidate, since `persistFieldDiff` appends one
+Enrichment row per changed field per check — only had its newest page
+deleted. The Record itself is deleted last, so a retry 404s immediately and
+never revisits the leftovers: the older child rows are permanently orphaned,
+silently violating the documented "permanent full delete, not an archive"
+guarantee below.
+
+**Fix:** `cascadeRecord` now calls the existing `listAllOwned` pagination
+helper (`base44/shared/service-entities.ts`) for all three child entities,
+matching the pattern `collection-removal.ts`/`mission-removal.ts` already use
+one level up for Records/Collections. The `tests/record-removal.test.ts` mock
+`filter()` also had a latent bug — it ignored the `skip` parameter entirely,
+which would have made `listAllOwned` infinite-loop against a >page-size
+fixture and is why this was undetected: no existing fixture seeded more than
+a handful of child rows. Fixed the mock and added a regression fixture
+seeding 250 Enrichment + 150 WatchRule rows.
+
+**Invariant:** Any cascade delete over child rows must page to completion
+with `listAllOwned`, never a single bounded `.filter()` call — the same rule
+`docs/BUGS_AND_BEHAVIORS.md`'s G1 entry established for read paths applies
+equally to destructive writes, arguably more so since a partial destructive
+cascade cannot self-heal on retry once the parent row is gone.
+
 ## B2 — Picker highlight could be baked into screenshots
 
 **Status:** Fixed and merged to `main`.
@@ -642,6 +674,7 @@ A bug is not complete merely because a patch exists. The agent must report:
 
 | ID | Topic | Status |
 |---|---|---|
+| B13 | Cascade delete orphaned child rows past one fetch page | Fixed, not yet deployed |
 | B1 | Raw capture text replaced by bounded summary | Fixed and merged |
 | B2 | Picker highlight captured in screenshot | Fixed and merged |
 | B4 | Element capture saved list-page URL | Fixed and merged |

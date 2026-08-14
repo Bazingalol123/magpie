@@ -1,5 +1,5 @@
 import { HttpError } from "./http.ts";
-import { deleteIfPresent, getOrNull } from "./service-entities.ts";
+import { deleteIfPresent, getOrNull, listAllOwned } from "./service-entities.ts";
 
 /**
  * Owner-requested permanent removal of one Item and everything derived from or
@@ -47,17 +47,20 @@ export async function cascadeRecord(
     throw new HttpError(403, "Capture belongs to another owner");
   }
 
-  const watchRules = ownedOnly(
-    await service.WatchRule.filter({ owner_id: ownerId, record_id: record.id }, "-created_date", 100),
+  const watchRules = await listAllOwned<{ id: string; owner_id: string }>(
+    service.WatchRule,
+    { owner_id: ownerId, record_id: record.id },
     ownerId,
   );
-  const enrichments = ownedOnly(
-    await service.Enrichment.filter({ owner_id: ownerId, record_id: record.id }, "-created_date", 200),
+  const enrichments = await listAllOwned<{ id: string; owner_id: string }>(
+    service.Enrichment,
+    { owner_id: ownerId, record_id: record.id },
     ownerId,
   );
   const decisions = record.clip_id
-    ? ownedOnly(
-      await service.RoutingDecision.filter({ owner_id: ownerId, clip_id: record.clip_id }, "-created_date", 10),
+    ? await listAllOwned<{ id: string; owner_id: string }>(
+      service.RoutingDecision,
+      { owner_id: ownerId, clip_id: record.clip_id },
       ownerId,
     )
     : [];
@@ -82,8 +85,4 @@ export function requireOwned<T extends { owner_id: string }>(row: T | null | und
   if (!row) throw new HttpError(404, `${label} not found`);
   if (row.owner_id !== ownerId) throw new HttpError(403, `${label} belongs to another owner`);
   return row;
-}
-
-export function ownedOnly(rows: Array<{ id: string; owner_id: string }>, ownerId: string) {
-  return rows.filter((row) => row.owner_id === ownerId);
 }

@@ -194,6 +194,30 @@ verified — owner-tested live against the deployed dashboard:
 three functions, and the site bundle built from that branch have been
 deployed. Merge/PR is still pending, at the owner's discretion.
 
+## P0 code audit (2026-08-15, `fix/p0-cascade-delete-pagination`, not merged)
+
+Proactive audit (no user report) found B13: `cascadeRecord`
+(`base44/shared/record-removal.ts`, shared by `delete-record`/
+`delete-collection`/`delete-mission`) fetched WatchRule/Enrichment/
+RoutingDecision children with a single hardcoded-limit `.filter()` call
+instead of paging to completion via the existing `listAllOwned` helper —
+unlike the Collection/Mission cascades one level up, which already page
+correctly. A Record with more than 200 Enrichment rows or 100 WatchRules
+(realistic for a long-lived watched candidate) only had its newest page
+deleted; since the Record is deleted last as the retry anchor, the leftover
+rows are permanently orphaned. Fixed by routing all three child fetches
+through `listAllOwned`. Also fixed a latent test-mock gap that had been
+hiding this: `tests/record-removal.test.ts`'s fake `filter()` ignored the
+`skip` parameter. Full writeup: Build Guide checkpoint 37,
+`docs/BUGS_AND_BEHAVIORS.md` B13, `docs/ENGINEERING_NOTES.md` (2026-08-15),
+`BUGS.local.md` B13.
+
+`deno test` 143/143, `deno check` clean on all 16 entry points, `npm run
+build` passes. No entity/schema change. Not deployed — needs
+`npx base44 functions deploy delete-record delete-collection delete-mission`
+with explicit owner approval, and PR/merge is pending at the owner's
+discretion.
+
 ## Immediate continuation
 
 Build Guide 29.2–29.4 are complete and deployed. The remaining manual check is
