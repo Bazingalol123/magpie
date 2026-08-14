@@ -796,3 +796,42 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   "Found a bug?" so the wording matches across both surfaces.
 - **Files:** `src/App.jsx`, `src/Landing.jsx`, `src/index.css`
 - **Verify:** `npm run build` passes. Not yet deployed/owner-verified live.
+
+### 34. In-app bug report form — no GitHub account required (B11 follow-up)
+
+- [x] **Build:** Checkpoint 33's raw GitHub-issues link still required the
+  reporter to have their own GitHub account. Replaced the dashboard's "Found
+  a bug?" link with a button that opens an in-app form
+  (`BugReportDialog`, `src/App.jsx`); a new authenticated backend function,
+  `report-bug`, files the GitHub issue server-side using a repo-scoped
+  fine-grained PAT (`GITHUB_ISSUES_TOKEN` secret, configured via `npx base44
+  secrets set`, permission: Issues read/write on this repo only), so the
+  reporter never needs their own GitHub credentials. Scoped to the signed-in
+  dashboard only (not the landing page or extension) per product decision —
+  keeps the endpoint authenticated rather than public, which matters since
+  it writes to a public repo. Validation
+  (`base44/shared/bug-report.ts`: `validateBugReport`, `buildIssuePayload`)
+  is pure and covered by fixtures; the issue body includes the reporter's
+  email, the active Collection/Library view, and the browser user agent as
+  context for triage. The landing page's link (checkpoint 32/33) is
+  unchanged — it's pre-sign-in and has no owner identity to attach a form
+  submission to.
+- **Risk:** L=2, I=3, score 6, Moderate (`docs/V3_1_PRODUCT_AND_RISK_PLAN.md`
+  change matrix). New but fully isolated code path; worst-case impact is a
+  contained, revocable token (Issues-only, single repo) rather than any
+  Magpie data or owner-isolation exposure.
+- **Files:** `base44/shared/bug-report.ts`, `base44/functions/report-bug/entry.ts`,
+  `base44/shared/auth.ts` (added `email` to the authenticated-user type),
+  `src/App.jsx`, `src/index.css`, `tests/bug-report.test.ts`
+- **Verify:** `deno test --allow-env --allow-read tests` — 135/135 passing,
+  including 8 new fixture cases. `deno check` passes on every
+  `base44/functions/**/entry.ts` including the new one. `npm run build`
+  passes. Dev server boots and serves `200` with no console errors on the
+  pre-auth landing page. The authenticated dialog open/submit flow itself
+  has **not** been click-tested live — this environment has no browser
+  automation and the dashboard sits behind Google sign-in, so that pass
+  needs the owner, same as every other authenticated-flow fix in this
+  project's history.
+- **Not yet deployed:** the `report-bug` function needs `npx base44
+  functions deploy report-bug`, and the frontend needs a site deploy. Both
+  require explicit owner approval per `CLAUDE.md`.
