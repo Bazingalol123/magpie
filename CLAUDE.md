@@ -4,6 +4,25 @@ Magpie is a Chrome MV3 extension plus a Base44 backend and dashboard. It turns
 selected web evidence into structured, owner-scoped information users can
 organize, compare, and keep current.
 
+## Check for concurrent work before starting
+
+This repo is worked concurrently by multiple tools/agents — Claude Code
+sessions across branches and `.claude/worktrees/*`, and other assistants
+(e.g. a remote personal-assistant tool that opens its own PRs). Before
+starting any new task, run:
+
+```powershell
+git fetch origin
+git branch -vv
+git worktree list
+gh pr list --state open
+```
+
+Never assume the currently checked-out branch or local `main` is
+up to date or the only work in flight. If the branch you're on is already
+merged, or another branch/worktree/PR overlaps with the task at hand, say so
+before proceeding rather than silently working around it.
+
 ## Required reading
 
 Before planning or editing, read:
