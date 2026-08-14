@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /?review=
+
+Sitemap: https://magpieorelse.base44.app/sitemap.xml
