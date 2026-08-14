@@ -623,6 +623,116 @@ on any element that is also a flex item needs `min-height: 0` (or
 `min-width: 0` for a row-direction flex item) alongside it, or the ratio is
 only advisory.
 
+## 2026-08-14 — G1: `loadDashboard`'s 200-row fetch cap, and what Base44's pagination actually looks like
+
+**Backend contract note, written before production code, per the High-risk
+gate in `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`.**
+
+### What the SDK actually supports (verified, not assumed)
+
+Per `.agents/skills/base44-sdk/references/entities.md` (do not guess SDK
+method names — CLAUDE.md): `EntityHandler.list(sort?, limit?, skip?, fields?)`
+and `.filter(query, sort?, limit?, skip?, fields?)` are **offset-based**.
+There is no cursor field anywhere in the returned array, no `hasMore` flag,
+and no separate count/aggregate method — a `list()`/`filter()` call returns a
+plain array and nothing else. The documented maximum is **5,000 rows per
+single request**. So: offset (`skip`) is the only pagination mode to choose,
+because it's the only one that exists; there was no cursor-vs-offset decision
+to make once the reference was actually checked.
+
+This is the identical contract `base44/shared/service-entities.ts`'s
+`listAllOwned` already relies on server-side for `delete-collection` and
+`delete-mission`'s cascades: page with `(query, sort, pageSize, skip)`, keep
+going while a page comes back exactly `pageSize` long, stop on a short page.
+
+### What changed
+
+`loadDashboard` (`src/App.jsx`) used to issue one `list(sort, cap, )` call per
+entity with a hardcoded cap (20 Missions, 100 Collections, 200 each for
+Record/Clip/Enrichment/RoutingDecision/WatchRule) and silently drop everything
+past that cap — the exact gap tracked as G1 in
+`docs/BUGS_AND_BEHAVIORS.md` and previously called out as future work in
+`docs/DECISIONS.md` ("B7 pagination is UI-only"). It now calls a new
+`fetchAllPages` helper (`src/dashboard-pagination.js`) per entity, which pages
+with `skip` in 200-row increments (matching `listAllOwned`'s own default
+page size) until a short page is returned, up to a 5,000-row ceiling per
+entity per load (25x the old largest single-entity cap). Every entity fetch
+still runs in parallel via `Promise.all`, same as before — only each
+individual entity fetch became a bounded loop instead of one request.
+
+### Failure behavior on a partial/failed paginated fetch
+
+If any page request for any entity throws, `fetchAllPages`'s rejection
+propagates out of the `Promise.all` in `loadDashboard` before `setData`/
+`setDataMeta` run — so a fetch that fails on, say, page 3 of Records never
+partially overwrites the dashboard's state with an incomplete set silently
+presented as complete. This is unchanged from before: `loadDashboard`'s only
+caller (the effect in `App`) already wraps the call in `try/catch` and sets
+`loadError` on any rejection, leaving the last successfully loaded `data`/
+`dataMeta` in place rather than clearing the screen. No new failure state was
+introduced; the existing one now also covers a failure on page 2+ of an
+entity, not just page 1.
+
+Read-only vs. destructive divergence from `listAllOwned`: the server helper
+**throws** once it exceeds its row ceiling, because completing a partial
+delete cascade would be actively wrong. A dashboard load is read-only, so
+`fetchAllPages` instead returns `{ hasMore: true, total: null }` and keeps the
+first 5,000 rows — a truncated-but-usable view beats an unusable error
+screen for a browsing surface, and the truncation is now visible instead of
+silent (`dataMeta.records.hasMore` drives a `+` suffix and tooltip on the
+Items count in `src/App.jsx`; the other six entities carry the same
+`hasMore`/`total` metadata for future UI, per G1's "surface hasMore" ask, but
+aren't yet rendered anywhere else because nothing else currently displays a
+raw count for those entities).
+
+### No regression for the common case (owner under the old caps)
+
+For any owner whose row count in an entity is still under the old cap (the
+overwhelming common case today), `fetchAllPages` makes exactly **one**
+request for that entity, identical request count to before — the loop's exit
+condition (`page.length < pageSize`) is satisfied on the first page, same as
+a plain `list()` call would have returned everything the old code showed.
+The only owners who now issue more than one request per entity are exactly
+the owners the old code was silently failing (more than 200/100/20 rows) —
+i.e. more requests only happen when they fix a real, previously-silent bug.
+
+### Scoping decision: Records stayed a full paginated fetch, not scoped to the active Collection
+
+G1's task note suggested scoping Record queries to the active Collection
+"where that's a reasonable design." Checked every consumer of `data.records`
+in `src/App.jsx` before deciding: the Items count in `workspace-heading`
+sums records across the whole Mission/owner, `CollectionSidebar` needs
+per-collection counts across every Collection to render its list,
+`ActivityPanel` shows recent activity across all Collections, and
+`missionRecords`/`missionCollectionIds` derive Mission-level aggregates that
+need every Record, not just the active Collection's. Scoping the fetch to
+only the active Collection would break all four without a larger restructure
+of those components into their own scoped queries — out of scope for a
+data-completeness fix. Recorded as a deliberate decision in
+`docs/DECISIONS.md` rather than silently doing the larger refactor.
+
+### Risk
+
+L=2 (mechanically mirrors the already-shipped, already-tested `listAllOwned`
+pattern; purely additive/read-path; 6 new unit fixtures plus the full
+existing suite green), I=5 (this is the single call gating every
+authenticated page view for every owner — the highest-impact "core demo"
+consequence the risk model has, per "impact uses the highest applicable
+consequence rather than averaging," even though nothing here is destructive
+or write-path). Score 10, High — same reasoning shape as the RLS-admin-bypass
+fix (`docs/V3_1_PRODUCT_AND_RISK_PLAN.md`): a well-understood, low-likelihood
+change whose blast radius alone crosses into the High band.
+
+### Verification
+
+`deno test --allow-env --allow-read tests` — 142/142 (136 previous + 6 new
+`tests/dashboard-pagination.test.ts` fixtures, including one with 250 fake
+rows in a single entity — the literal ">200 rows" fixture G1 asked for).
+`deno check` on every `base44/functions/**/entry.ts` — unaffected, unchanged.
+`node --check` on every extension script and the `@base44/sdk`-in-extension
+grep — unaffected; this change is dashboard-only. `npm run build` — passes.
+No entity, function, or Agent changes; nothing to deploy or push.
+
 ## 2026-08-14 — G4: live cross-owner verification against local `base44 dev`
 
 `npx base44 dev` is not a thin proxy to hosted Base44 for entities/auth: the

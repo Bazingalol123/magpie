@@ -38,6 +38,7 @@ import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
 import Docs from "./Docs.jsx";
+import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
 const markdownComponents = {
@@ -46,6 +47,20 @@ const markdownComponents = {
 };
 
 const emptyData = { missions: [], collections: [], records: [], clips: [], enrichments: [], routingDecisions: [], watchRules: [] };
+const emptyPageMeta = { hasMore: false, total: 0 };
+const emptyDataMeta = {
+  missions: emptyPageMeta,
+  collections: emptyPageMeta,
+  records: emptyPageMeta,
+  clips: emptyPageMeta,
+  enrichments: emptyPageMeta,
+  routingDecisions: emptyPageMeta,
+  watchRules: emptyPageMeta,
+};
+
+/** Pages an entity handler's `list(sort, limit, skip)` through every row (see src/dashboard-pagination.js). */
+const listAllForDashboard = (entityHandler, sort) =>
+  fetchAllPages((skip, limit) => entityHandler.list(sort, limit, skip));
 
 const REASON_LABELS = {
   ai_unavailable: "Organization was temporarily unavailable",
@@ -1075,6 +1090,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [data, setData] = useState(emptyData);
+  const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeCollectionId, setActiveCollectionId] = useState(null);
   const [activeMissionId, setActiveMissionId] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -1100,19 +1116,45 @@ export default function App() {
   const [bugReportResult, setBugReportResult] = useState(null);
 
   const loadDashboard = useCallback(async () => {
-    const [missions, collections, records, clips, enrichments, routingDecisions, watchRules] = await Promise.all([
-      base44.entities.Mission.list("-created_date", 20),
-      base44.entities.Collection.list("name", 100),
-      base44.entities.Record.list("-created_date", 200),
-      base44.entities.Clip.list("-captured_at", 200),
-      base44.entities.Enrichment.list("-checked_at", 200),
-      base44.entities.RoutingDecision.list("-decided_at", 200),
-      base44.entities.WatchRule.list("-created_date", 200),
+    // Each entity is paged to completion (src/dashboard-pagination.js)
+    // instead of a single hardcoded-limit list() call, so an owner with more
+    // rows than the old 20/100/200 caps no longer has older rows silently
+    // missing (docs/BUGS_AND_BEHAVIORS.md G1). If any page fetch fails, this
+    // rejects before setData/setDataMeta run, so a partial fetch never
+    // overwrites the last good `data`/`dataMeta` -- the existing catch block
+    // in the calling effect surfaces `loadError` and leaves prior state
+    // in place, unchanged from before this change.
+    const [missionsPage, collectionsPage, recordsPage, clipsPage, enrichmentsPage, routingDecisionsPage, watchRulesPage] = await Promise.all([
+      listAllForDashboard(base44.entities.Mission, "-created_date"),
+      listAllForDashboard(base44.entities.Collection, "name"),
+      listAllForDashboard(base44.entities.Record, "-created_date"),
+      listAllForDashboard(base44.entities.Clip, "-captured_at"),
+      listAllForDashboard(base44.entities.Enrichment, "-checked_at"),
+      listAllForDashboard(base44.entities.RoutingDecision, "-decided_at"),
+      listAllForDashboard(base44.entities.WatchRule, "-created_date"),
     ]);
-    const next = { missions, collections, records, clips, enrichments, routingDecisions, watchRules };
+    const next = {
+      missions: missionsPage.items,
+      collections: collectionsPage.items,
+      records: recordsPage.items,
+      clips: clipsPage.items,
+      enrichments: enrichmentsPage.items,
+      routingDecisions: routingDecisionsPage.items,
+      watchRules: watchRulesPage.items,
+    };
+    const meta = {
+      missions: { hasMore: missionsPage.hasMore, total: missionsPage.total },
+      collections: { hasMore: collectionsPage.hasMore, total: collectionsPage.total },
+      records: { hasMore: recordsPage.hasMore, total: recordsPage.total },
+      clips: { hasMore: clipsPage.hasMore, total: clipsPage.total },
+      enrichments: { hasMore: enrichmentsPage.hasMore, total: enrichmentsPage.total },
+      routingDecisions: { hasMore: routingDecisionsPage.hasMore, total: routingDecisionsPage.total },
+      watchRules: { hasMore: watchRulesPage.hasMore, total: watchRulesPage.total },
+    };
     setData(next);
-    setActiveCollectionId((current) => current && collections.some((item) => item.id === current) ? current : collections[0]?.id ?? null);
-    setActiveMissionId((current) => current && missions.some((item) => item.id === current) ? current : "");
+    setDataMeta(meta);
+    setActiveCollectionId((current) => current && next.collections.some((item) => item.id === current) ? current : next.collections[0]?.id ?? null);
+    setActiveMissionId((current) => current && next.missions.some((item) => item.id === current) ? current : "");
     return next;
   }, []);
 
@@ -1412,7 +1454,7 @@ export default function App() {
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span>{activeMission ? `${missionRecords.length} Items` : `${data.records.length} Items`}</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
+        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <section className="workspace-grid">

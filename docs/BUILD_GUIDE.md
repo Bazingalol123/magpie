@@ -835,3 +835,61 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Not yet deployed:** the `report-bug` function needs `npx base44
   functions deploy report-bug`, and the frontend needs a site deploy. Both
   require explicit owner approval per `CLAUDE.md`.
+
+### 35. Paginate `loadDashboard` beyond the 200-row fetch cap (G1)
+
+- [x] **Build:** `loadDashboard` (`src/App.jsx`) fetched every owner-scoped
+  entity with a single hardcoded-limit `list()` call (20 Missions, 100
+  Collections, 200 each for Record/Clip/Enrichment/RoutingDecision/
+  WatchRule) and silently dropped everything past that cap — the gap tracked
+  as G1 in `docs/BUGS_AND_BEHAVIORS.md` and previously flagged as
+  out-of-scope future work in `docs/DECISIONS.md` ("B7 pagination is
+  UI-only"). Verified Base44's actual `list()`/`filter()` signature against
+  `.agents/skills/base44-sdk/references/entities.md` instead of assuming:
+  it's offset-based (`sort, limit, skip, fields`), max 5,000 rows per
+  request, no cursor and no `hasMore`/count field returned — the same
+  contract `base44/shared/service-entities.ts`'s `listAllOwned` already uses
+  server-side for cascade deletes. Added `fetchAllPages`
+  (`src/dashboard-pagination.js`), a pure offset-pagination helper that pages
+  in 200-row increments (`listAllOwned`'s own default page size) until a
+  short page is returned or a 5,000-row-per-entity ceiling is hit, returning
+  `{ items, hasMore, total }`. `loadDashboard` now calls it once per entity
+  (still in parallel via `Promise.all`, same shape as before) and stores the
+  `hasMore`/`total` metadata in a new `dataMeta` state; the Items count in
+  `workspace-heading` shows a `+` suffix and tooltip when
+  `dataMeta.records.hasMore` is true, so truncation is visible instead of
+  silent. Checked every `data.records`/`data.clips`/etc. consumer in
+  `src/App.jsx` before deciding whether to scope Record queries to the
+  active Collection instead (G1's suggested alternative): the Items count,
+  `CollectionSidebar`, `ActivityPanel`, and Mission-level aggregates all need
+  cross-Collection data, so scoping would have broken all four without a
+  larger restructure — kept the full paginated fetch instead and recorded
+  the decision in `docs/DECISIONS.md`. Unlike `listAllOwned` (which throws
+  once it exceeds its ceiling, because a destructive cascade must never
+  complete partially), this read-only helper degrades to a
+  truncated-but-usable view with `hasMore: true` rather than failing the
+  whole dashboard load. Full backend-contract/failure-behavior writeup:
+  `docs/ENGINEERING_NOTES.md`, 2026-08-14.
+- **Risk:** L=2, I=5, score 10, High (`docs/V3_1_PRODUCT_AND_RISK_PLAN.md`
+  risk model) — mirrors an already-shipped, already-tested pattern with low
+  regression likelihood, but this is the single call gating every
+  authenticated page view for every owner, the highest-impact "core demo"
+  consequence in the model.
+- **Files:** `src/dashboard-pagination.js` (new),
+  `tests/dashboard-pagination.test.ts` (new), `src/App.jsx`,
+  `docs/BUGS_AND_BEHAVIORS.md`, `docs/DECISIONS.md`,
+  `docs/ENGINEERING_NOTES.md`.
+- **Verify:** `deno test --allow-env --allow-read tests` — 142/142 passing,
+  including 6 new fixtures, one of which seeds 250 fake rows in a single
+  entity (the literal ">200 rows" fixture G1 asked for) and asserts it takes
+  exactly two requests (200 + 50) and returns all 250. `deno check` passes
+  on every `base44/functions/**/entry.ts` (unaffected; no backend files
+  touched). `node --check` on every extension script and the
+  `@base44/sdk`-in-extension grep both pass (unaffected; dashboard-only
+  change). `npm run build` passes. Not yet live-browser-verified against a
+  real owner with more than 200 rows — do that as part of the next manual
+  pass, same caveat as checkpoint 29.18's B7 pagination.
+- **Not yet deployed:** frontend-only change; needs a site deploy
+  (`npx base44 site deploy` or equivalent target), which requires explicit
+  owner approval per `CLAUDE.md`. No entity or function changes, nothing
+  else to push.
