@@ -38,6 +38,8 @@ import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
 import Docs from "./Docs.jsx";
+import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
+import { deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
@@ -46,7 +48,7 @@ const markdownComponents = {
   a: (props) => <a {...props} target="_blank" rel="noreferrer" />,
 };
 
-const emptyData = { missions: [], collections: [], records: [], clips: [], enrichments: [], routingDecisions: [], watchRules: [] };
+const emptyData = { missions: [], collections: [], records: [], clips: [], enrichments: [], routingDecisions: [], watchRules: [], extensionInstalls: [] };
 const emptyPageMeta = { hasMore: false, total: 0 };
 const emptyDataMeta = {
   missions: emptyPageMeta,
@@ -56,6 +58,7 @@ const emptyDataMeta = {
   enrichments: emptyPageMeta,
   routingDecisions: emptyPageMeta,
   watchRules: emptyPageMeta,
+  extensionInstalls: emptyPageMeta,
 };
 
 /** Pages an entity handler's `list(sort, limit, skip)` through every row (see src/dashboard-pagination.js). */
@@ -1114,6 +1117,9 @@ export default function App() {
   const [isReportingBug, setIsReportingBug] = useState(false);
   const [bugReportError, setBugReportError] = useState("");
   const [bugReportResult, setBugReportResult] = useState(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(
+    () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
+  );
 
   const loadDashboard = useCallback(async () => {
     // Each entity is paged to completion (src/dashboard-pagination.js)
@@ -1124,7 +1130,7 @@ export default function App() {
     // overwrites the last good `data`/`dataMeta` -- the existing catch block
     // in the calling effect surfaces `loadError` and leaves prior state
     // in place, unchanged from before this change.
-    const [missionsPage, collectionsPage, recordsPage, clipsPage, enrichmentsPage, routingDecisionsPage, watchRulesPage] = await Promise.all([
+    const [missionsPage, collectionsPage, recordsPage, clipsPage, enrichmentsPage, routingDecisionsPage, watchRulesPage, extensionInstallsPage] = await Promise.all([
       listAllForDashboard(base44.entities.Mission, "-created_date"),
       listAllForDashboard(base44.entities.Collection, "name"),
       listAllForDashboard(base44.entities.Record, "-created_date"),
@@ -1132,6 +1138,7 @@ export default function App() {
       listAllForDashboard(base44.entities.Enrichment, "-checked_at"),
       listAllForDashboard(base44.entities.RoutingDecision, "-decided_at"),
       listAllForDashboard(base44.entities.WatchRule, "-created_date"),
+      listAllForDashboard(base44.entities.ExtensionInstall, "-created_at"),
     ]);
     const next = {
       missions: missionsPage.items,
@@ -1141,6 +1148,7 @@ export default function App() {
       enrichments: enrichmentsPage.items,
       routingDecisions: routingDecisionsPage.items,
       watchRules: watchRulesPage.items,
+      extensionInstalls: extensionInstallsPage.items,
     };
     const meta = {
       missions: { hasMore: missionsPage.hasMore, total: missionsPage.total },
@@ -1150,6 +1158,7 @@ export default function App() {
       enrichments: { hasMore: enrichmentsPage.hasMore, total: enrichmentsPage.total },
       routingDecisions: { hasMore: routingDecisionsPage.hasMore, total: routingDecisionsPage.total },
       watchRules: { hasMore: watchRulesPage.hasMore, total: watchRulesPage.total },
+      extensionInstalls: { hasMore: extensionInstallsPage.hasMore, total: extensionInstallsPage.total },
     };
     setData(next);
     setDataMeta(meta);
@@ -1195,6 +1204,7 @@ export default function App() {
       base44.entities.Enrichment.subscribe(debouncedLoad),
       base44.entities.RoutingDecision.subscribe(debouncedLoad),
       base44.entities.WatchRule.subscribe(debouncedLoad),
+      base44.entities.ExtensionInstall.subscribe(debouncedLoad),
     ];
     return () => {
       cancelled = true;
@@ -1436,6 +1446,22 @@ export default function App() {
     () => new Map(data.routingDecisions.map((decision) => [decision.clip_id, decision])),
     [data.routingDecisions],
   );
+  const onboardingStage = useMemo(
+    () => deriveOnboardingStage({
+      extensionInstalls: data.extensionInstalls,
+      clips: data.clips,
+      dismissed: onboardingDismissed,
+    }),
+    [data.extensionInstalls, data.clips, onboardingDismissed],
+  );
+  const dismissOnboarding = () => {
+    window.localStorage.setItem("magpie.onboarding.dismissed", "true");
+    setOnboardingDismissed(true);
+  };
+  const openOnboardingReview = (clipId) => {
+    setSelectedReviewClipId(clipId);
+    setIsReviewOpen(true);
+  };
 
   const docsParams = new URLSearchParams(window.location.search);
   if (docsParams.has("docs")) {
@@ -1457,6 +1483,18 @@ export default function App() {
         <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
+      <OnboardingPanel
+        stage={onboardingStage}
+        extensionInstalls={data.extensionInstalls}
+        mostRecentClip={deriveMostRecentClip(data.clips)}
+        collections={data.collections}
+        isPairing={isPairing}
+        onPair={handleCreatePairing}
+        onDismiss={dismissOnboarding}
+        onViewCollection={setActiveCollectionId}
+        onOpenReview={openOnboardingReview}
+        onReportIssue={() => setIsBugReportOpen(true)}
+      />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} onDelete={deleteCollection} deletingId={deletingCollectionId} />
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
