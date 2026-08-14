@@ -29,3 +29,4 @@ skills-lock.json
 
 # Playwright MCP session output (snapshots/screenshots from manual test runs)
 .playwright-mcp/
+APIFY_ENRICHMENT_PLAN.md

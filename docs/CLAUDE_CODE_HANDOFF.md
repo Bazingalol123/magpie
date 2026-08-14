@@ -222,6 +222,13 @@ Four real `needs_review` Captures exist in production data for this.
    documentation is done: refreshed `README.md`, `docs/GETTING_STARTED.md`
    (including unpacked-extension install), `docs/PRODUCT_GUIDE.md`, and the
    public `docs/API.md`.
+6. **G9 onboarding, partially built:** Build Guide 36 adds `src/onboarding/`
+   (pairing checklist + first-capture status banner, dashboard-only, no
+   entity/function changes — reads the already-deployed `ExtensionInstall`
+   entity). Not yet deployed or browser-verified. Still open: signed-out
+   landing changes, a distinct "paired and ready" state, the wider
+   recovery-state set, and fixture/Playwright tests — see
+   `docs/DECISIONS.md` and the G9 entry in `docs/BUGS_AND_BEHAVIORS.md`.
 
 Undo for deletions and resolutions is a recorded omission, not a gap
 (`docs/DECISIONS.md`).
