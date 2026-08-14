@@ -81,9 +81,9 @@ export default function Landing({ isSigningIn, onSignIn }) {
           <div className="eyebrow"><Sparkles size={13} /> web intelligence, kept alive</div>
           <h1>Turn the messy web into <em>living, structured collections.</em></h1>
           <p>Clip any listing, product, job, or recipe. Magpie understands what it is, files it with its siblings, and keeps watching the source so your research never goes stale.</p>
-          <button className="primary-button ld-cta" onClick={onSignIn} disabled={isSigningIn}>
+          <button className="primary-button ld-cta" onClick={onSignIn} disabled={isSigningIn} aria-label="Sign in to start using Magpie">
             {isSigningIn ? <LoaderCircle className="spin" size={17} /> : <ArrowUpRight size={17} />}
-            Continue with Google
+            Sign in to start
           </button>
           <div className="ld-hero-links">
             <a className="ld-docs-link" href="/?docs=getting-started">How it works, and how to install the extension →</a>
@@ -120,18 +120,18 @@ export default function Landing({ isSigningIn, onSignIn }) {
       <section className="ld-steps">
         <div className="ld-step" data-reveal style={{ "--d": "0ms" }}>
           <span className="ld-step-number"><MousePointerClick size={19} /></span>
-          <h3>1 · Clip anything</h3>
-          <p>Point at the part of the page that matters — an element, selection, image, or the whole page — and press one key. No folders, no forms.</p>
+          <h3>1 · Install and sign in</h3>
+          <p>Install the Chrome extension, then sign in to create your private workspace. Magpie never assumes pairing or installation is already complete.</p>
         </div>
         <div className="ld-step" data-reveal style={{ "--d": "110ms" }}>
           <span className="ld-step-number"><Wand2 size={19} /></span>
-          <h3>2 · Magpie organizes</h3>
-          <p>The backend understands what you captured, extracts comparable fields, and files it into the right Collection — or asks you when it isn't sure.</p>
+          <h3>2 · Clip anything</h3>
+          <p>Point at the part of the page that matters — an element, selection, image, or the whole page — and press one key. No folders, no forms.</p>
         </div>
         <div className="ld-step" data-reveal style={{ "--d": "220ms" }}>
           <span className="ld-step-number"><RefreshCw size={19} /></span>
-          <h3>3 · Changes stay visible</h3>
-          <p>Prices, availability, deadlines: Magpie re-checks the sources you care about and shows every change with evidence and history.</p>
+          <h3>3 · Organize and review</h3>
+          <p>Magpie organizes what you captured, asks when it is unsure, and keeps changes visible with evidence and history.</p>
         </div>
       </section>
 
