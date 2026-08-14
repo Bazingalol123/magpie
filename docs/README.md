@@ -10,6 +10,7 @@ but must not silently change the product model or trust boundary.
 | [`GETTING_STARTED.md`](GETTING_STARTED.md) | Sign in, install the unpacked extension, pair, and first capture |
 | [`PRODUCT_GUIDE.md`](PRODUCT_GUIDE.md) | Every feature in depth: capture modes, organization, review, watches, refresh-on-revisit, the Agent, and the trust model |
 | [`API.md`](API.md) | Public API reference: principals, endpoints, typed outcomes, reason codes |
+| [`RELEASE_NOTES.md`](RELEASE_NOTES.md) | Current draft release notes and verified limitations |
 | [`PROJECT_WRITEUP.md`](PROJECT_WRITEUP.md) | Submission write-up: decisions defended, what went wrong, what's not done |
 
 ## Continue development
