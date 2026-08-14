@@ -327,3 +327,73 @@ status toggle would be additive complexity without closing a real gap. If
 either field ever becomes security-relevant (gates a notification, a share
 link, another owner-visible surface, etc.), move this call to a small backend
 function at that point — not before.
+
+## Issue #19 / G8: Phase 1 scope, local fixtures over a live site, CI wiring deferred
+
+Issue #19 ("Complete and automate the Chrome capture integration matrix") and
+its G8 dependency ("local verification harness") are both large — the full
+issue also covers non-English keyboard layouts, tab-already-open-before-
+reload, worker sleep/wake, and a hosted smoke test. This was deliberately
+scoped down before implementation, in a plan-mode conversation with the
+repo owner, to avoid either silently shrinking the issue's acceptance
+criteria or attempting all of it in one unreviewable pass. Recording the
+three scoping decisions here so a future session does not re-litigate or
+silently re-expand them.
+
+**Phase 1 = all 6 capture modes, nothing else.** Element, selection, page,
+link, visual, and image are the whole multi-mode capture contract
+(`docs/V3_1_PRODUCT_AND_RISK_PLAN.md`) and share one Clip/routing pipeline,
+so a matrix that skipped any of them would not actually prove the pipeline
+works end to end. Non-English keyboard layouts, tab-reopen-after-extension-
+reload, and worker sleep/wake are each a narrow edge case orthogonal to the
+6-mode matrix — deferring them keeps this pass reviewable and still ships a
+real, running harness. The hosted smoke test is explicitly the very last
+step of the issue's own "Verification" section ("Hosted smoke verifies only
+the final release path after approval") and requires a production deploy
+approval this task was not given — deferring it is not a scope reduction, it
+is respecting the issue's own stated order.
+
+**Local static HTML fixtures instead of a live external site.** Issue #19's
+own "Verification" section calls for "Local Base44 + local Vite + unpacked
+Extension" and this repo's whole existing test philosophy
+(`tests/*.test.ts`) is pure/deterministic fixtures, not live external
+dependencies. A live site can change layout, get rate-limited, add its own
+bot/CAPTCHA defenses (ironic, given B8/refresh-capture's guardrails exist
+because of exactly that class of site), or simply go offline, turning a
+regression suite into a source of unrelated flakiness. The chosen fixtures
+(`tests-e2e/fixtures/index.html` + 3 listing detail pages + an article page)
+are deliberately shaped to reproduce the real B4 regression (a card-grid
+list page where element/link capture must resolve to the clicked card's own
+detail URL, not the list page's URL) rather than being arbitrary placeholder
+markup.
+
+**CI wiring is a deliberate fast-follow, not part of this change.** Getting
+`tests-e2e/` running green and stable locally first, before adding a new job
+to `.github/workflows/ci.yml`, avoids landing a flaky new gate on every push/
+PR before its stability profile is understood (extension/Chromium E2E tests
+are a materially different reliability class than the existing pure Deno
+unit tests `ci.yml` already runs). This also sidesteps deciding CI-specific
+concerns — headless Chromium install caching, a CI-only pinned-port
+collision story, secrets/OTP handling in a shared runner — that this pass
+did not need to resolve to deliver a working local harness. Wiring it into
+`ci.yml` is the natural next step, not rejected, just sequenced after this.
+
+## Issue #19 / G8: a dev-only `window.__magpieBase44` hook in `base44Client.js`
+
+The issue's own auth-strategy decision requires Playwright tests to log the
+dashboard in through the real `base44.auth.loginViaEmailPassword(email,
+password)` SDK method, called via `page.evaluate(...)`, rather than
+hand-injecting a session into `localStorage`. `src/api/base44Client.js`'s
+`base44` client singleton was not reachable from outside React's module
+graph before this change — nothing in `src/App.jsx` exposes it — so
+satisfying that requirement literally needed one new handle.
+
+Added `if (import.meta.env.DEV) { window.__magpieBase44 = base44; }` right
+after the client is constructed. `import.meta.env.DEV` is statically `false`
+in a `vite build` production bundle (confirmed: `grep -c __magpieBase44
+dist/assets/*.js` is `0` after a real build in this pass), so this branch and
+the global it creates are dead-code eliminated and never exist outside a
+local `vite`/`base44 dev` session. This is a narrow, additive, dev-gated
+change to a shared frontend file — scored Low (L=1, I=1) since it has no
+runtime effect in the shipped product at all — not a new production auth
+surface.

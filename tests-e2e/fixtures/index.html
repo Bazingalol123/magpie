@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Apartments for rent — Magpie E2E fixture</title>
+<meta name="description" content="Three furnished apartments available now, from a studio in the old town to a two-bedroom near the river." />
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }
+  .listing-grid { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; padding: 0; }
+  .listing-card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; }
+  .listing-card a { color: inherit; text-decoration: none; display: block; }
+  .listing-card img { width: 100%; height: 120px; object-fit: cover; border-radius: 4px; }
+  .price { font-weight: 600; color: #2a6f4a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Apartments for rent</h1>
+  <p>Three current listings from the same landlord, updated weekly.</p>
+
+  <!--
+    This index/card-grid shape intentionally mirrors the real B4 regression
+    (docs/BUGS_AND_BEHAVIORS.md): a rental listing site where clicking a
+    card must resolve to that card's own detail page, not silently save
+    this index page's URL. The element-mode spec captures listing-card-2's
+    heading (nested inside its <a href>) and asserts the captured
+    source_url is /listing-2.html, not /index.html.
+  -->
+  <ul class="listing-grid">
+    <li class="listing-card" data-testid="listing-card-1">
+      <a href="/listing-1.html" class="card-link">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" alt="Exterior of a two-bedroom apartment near the river" />
+        <h2>2BR near the river</h2>
+        <p class="price">EUR 1,450 / month</p>
+      </a>
+    </li>
+    <li class="listing-card" data-testid="listing-card-2">
+      <a href="/listing-2.html" class="card-link">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" alt="Studio apartment in the old town" />
+        <h2>Studio in the old town</h2>
+        <p class="price">EUR 890 / month</p>
+      </a>
+    </li>
+    <li class="listing-card" data-testid="listing-card-3">
+      <a href="/listing-3.html" class="card-link">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" alt="Loft apartment above the market hall" />
+        <h2>Loft above the market hall</h2>
+        <p class="price">EUR 1,180 / month</p>
+      </a>
+    </li>
+  </ul>
+</main>
+</body>
+</html>

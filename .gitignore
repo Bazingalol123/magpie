@@ -29,3 +29,11 @@ skills-lock.json
 
 # Playwright MCP session output (snapshots/screenshots from manual test runs)
 .playwright-mcp/
+
+# Playwright E2E harness (tests-e2e/) — local run artifacts and the
+# credentials/runtime file global-setup writes for the local test owner and
+# spawned dev-server ports/PIDs. Never contains real user data: the owner
+# account only ever exists in an in-memory local `base44 dev` database.
+test-results/
+playwright-report/
+tests-e2e/.auth/
