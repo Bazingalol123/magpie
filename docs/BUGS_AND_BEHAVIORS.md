@@ -470,7 +470,21 @@ verified locally.
 
 ## G9 — Website first-run onboarding is not yet a complete UI contract
 
-**Status:** Known product/UI gap. Suitable for a focused frontend task.
+**Status:** Partially built, see Build Guide 36. `src/onboarding/` adds a pure
+state machine (`state.js`: `NOT_PAIRED` / `AWAITING_FIRST_CAPTURE` /
+`FIRST_CAPTURE_RECEIVED` / `READY`, absorbing `dismissed` flag) plus two
+components rendered above the workspace grid in `src/App.jsx`:
+`PairingChecklist` (states 1–3 below) and `CaptureStatusBanner` (states 5–6,
+mapping `Clip.routing_status` to a distinct existing-Collection /
+new-Collection / needs-review / failed UI). Still open: signed-out landing
+changes (state 1's "explain the loop before sign-in" requirement — the
+Landing component itself was not touched), the "paired and ready, capture
+your first item" state (4) as its own explicit UI rather than folding
+straight into `AWAITING_FIRST_CAPTURE` copy, the broader recovery-state set
+(AI/routing unavailable, source blocked) beyond token-revoked and
+generic-failed, and all of the acceptance criteria's fixture-driven UI tests
+and the local Playwright happy-path test. Recorded as a deliberate scope cut
+for this pass in `docs/DECISIONS.md`.
 
 The website needs to make the first successful journey obvious:
 
@@ -643,4 +657,4 @@ A bug is not complete merely because a patch exists. The agent must report:
 | G6 | Bounded folders | Not built |
 | G7 | Direct Dashboard entity writes | Audited 2026-08-14; one accepted low-risk exception |
 | G8 | Local Base44 + Playwright harness | `npm run test:e2e` is one reproducible command as of 2026-08-15; CI gate + hosted smoke still open |
-| G9 | Website first-run onboarding UI contract | Known product/UI gap |
+| G9 | Website first-run onboarding UI contract | Partially built (Build Guide 36); pairing checklist and first-capture status done, signed-out landing/full recovery states/tests still open |

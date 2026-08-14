@@ -397,3 +397,38 @@ local `vite`/`base44 dev` session. This is a narrow, additive, dev-gated
 change to a shared frontend file — scored Low (L=1, I=1) since it has no
 runtime effect in the shipped product at all — not a new production auth
 surface.
+
+## G9 onboarding (Build Guide 36): shipped 3 of 7 required UI states, not the full contract
+
+`docs/BUGS_AND_BEHAVIORS.md`'s G9 entry lists seven required UI states and a
+"treat onboarding as a state machine" constraint. This pass built the state
+machine (`src/onboarding/state.js`) and two of the states that hang off it —
+signed-in-not-paired (`PairingChecklist`) and first-capture-processing/
+received (`CaptureStatusBanner`) — but deliberately did not attempt:
+
+1. **Signed-out landing changes.** G9 state 1 asks the landing page itself to
+   explain Capture → Organize → Review → Refresh and the write-only Extension
+   model before sign-in. `Landing.jsx` was not touched; the existing landing
+   page copy (checkpoint 33) was left as the signed-out surface.
+2. **A distinct "paired and ready" state (G9 state 4).** Right now a paired
+   owner with zero clips stays in `AWAITING_FIRST_CAPTURE`, which is close
+   enough in copy ("waiting for the extension — open the popup and try a
+   capture") but doesn't separately call out the keyboard shortcut or explain
+   available capture actions as its own step, per the required-journey list.
+3. **The broader recovery-state set.** `CaptureStatusBanner`'s `FAILED`
+   branch is one generic "something went wrong, report it" state; it does not
+   distinguish AI/routing-unavailable from source-blocked from a generic
+   ingest failure, all of which G9 lists as distinct recovery states.
+4. **Fixture-driven UI tests and the local Playwright happy-path test**, both
+   explicit G9 acceptance criteria. `state.js` was written pure and
+   side-effect-free specifically so it can be unit-tested, but no test file
+   was added in this pass.
+
+Reason for the cut: these are the states directly reachable from the current
+empty-Dashboard/first-capture path, the highest-value slice for a new signed-
+in user, and each of the remaining items is either a separate surface
+(Landing) or additive polish on top of the now-existing state machine rather
+than a redesign — lower risk to ship as a follow-up than to bundle into one
+larger change. Revisit as a second G9 pass; do not treat G9 as closed until
+items 1–4 above are addressed and the table row in
+`docs/BUGS_AND_BEHAVIORS.md` says so.

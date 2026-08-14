@@ -894,7 +894,7 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   owner approval per `CLAUDE.md`. No entity or function changes, nothing
   else to push.
 
-### 36. Automated Chrome capture integration matrix, Phase 1 (issue #19 / G8)
+### 37. Automated Chrome capture integration matrix, Phase 1 (issue #19 / G8)
 
 - [x] **Build:** New `tests-e2e/` Playwright suite (test infrastructure, not
   production code) drives the real unpacked `extension/` against a real
@@ -1012,3 +1012,62 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   tab-already-open-before-reload, worker sleep/wake, the hosted smoke test,
   and fixing either of the two findings above — all recorded as open in
   `docs/BUGS_AND_BEHAVIORS.md` (G3, G8) and `docs/DECISIONS.md`.
+
+### 36. First-run onboarding: pairing checklist and first-capture status (G9, partial, #17)
+
+- [x] **Build:** Added `src/onboarding/` — a pure state module (`state.js`,
+  no React or `base44` import, unit-testable standalone) plus three
+  components. `deriveOnboardingStage` maps `{ extensionInstalls, clips,
+  dismissed }` to one of `NOT_PAIRED` / `AWAITING_FIRST_CAPTURE` /
+  `FIRST_CAPTURE_RECEIVED` / `READY`; `dismissed` (persisted to
+  `localStorage["magpie.onboarding.dismissed"]`) is checked first and is
+  absorbing, so a returning user who has acknowledged their first capture
+  never sees the checklist again even if their pairing state later changes —
+  the G9 "returning users do not see the full first-run tour again"
+  acceptance criterion. `OnboardingPanel` renders `PairingChecklist` for the
+  first two stages and `CaptureStatusBanner` for `FIRST_CAPTURE_RECEIVED`,
+  and is mounted in `src/App.jsx` directly above `workspace-grid`, reusing
+  existing `handleCreatePairing`/`isPairing` pairing state and the existing
+  review dialog (`setSelectedReviewClipId`/`setIsReviewOpen`) rather than
+  adding new ones. `loadDashboard` now also pages `ExtensionInstall`
+  (`base44.entities.ExtensionInstall`, already a deployed entity from the
+  ten-gap release — no entity change here) alongside the other owner-scoped
+  entities, through the same `fetchAllPages` helper as G1, and subscribes to
+  it for realtime updates. `CaptureStatusBanner` derives its state from
+  `Clip.routing_status` (`deriveCaptureOutcome`) and distinguishes
+  routed-to-existing-Collection, created-new-Collection, needs-review (routes
+  to the existing review dialog, never presented as an error, per G9), and
+  failed (routes to the existing bug-report dialog) — matching the closed
+  enum in `base44/entities/clip.jsonc`, falling back to `FAILED` for any
+  unrecognized value so the banner never renders blank. The extension-install
+  link only ever offers a plain link to the GitHub Releases page; per G9's
+  "do not invent a state it cannot verify," the UI never claims the extension
+  is installed, since there's no `externally_connectable` handshake to check
+  that from the dashboard.
+- **Scope cut (deliberate, not a bug):** this checkpoint implements 3 of
+  G9's 7 required UI states — signed-in-not-paired, pairing-in-progress (via
+  existing `isPairing`), and first-capture-processing/received. Still open,
+  and not attempted in this pass: signed-out landing changes, a distinct
+  "paired and ready" state, the wider recovery-state set (AI/routing
+  unavailable, source blocked, empty-workspace-after-failed-attempt), and all
+  of the acceptance criteria's fixture-driven UI tests plus the local
+  Playwright happy-path test. See `docs/DECISIONS.md` and the updated G9
+  entry in `docs/BUGS_AND_BEHAVIORS.md`.
+- **Risk:** L=2, I=3, score 6, Medium (`docs/V3_1_PRODUCT_AND_RISK_PLAN.md`
+  risk model) — additive UI on the dashboard's main authenticated view, reads
+  one already-deployed entity the RLS policy already scopes to
+  `data.owner_id`, no new writes, no extension or function changes.
+- **Files:** `src/onboarding/state.js` (new), `src/onboarding/
+  OnboardingPanel.jsx` (new), `src/onboarding/PairingChecklist.jsx` (new),
+  `src/onboarding/CaptureStatusBanner.jsx` (new), `src/App.jsx`,
+  `src/index.css`, `.gitignore`, `docs/BUGS_AND_BEHAVIORS.md`,
+  `docs/DECISIONS.md`, `docs/BUILD_GUIDE.md`,
+  `docs/CLAUDE_CODE_HANDOFF.md`.
+- **Verify:** `npm run build` passes. No automated test coverage was added in
+  this pass — `state.js` is written to be unit-testable but no test file
+  exists yet (see scope cut above); this is a gap, not a claim of tested
+  behavior. Not yet manually verified against a live pairing/capture flow in
+  a browser.
+- **Not yet deployed:** frontend-only change; needs a site deploy, which
+  requires explicit owner approval per `CLAUDE.md`. No entity or function
+  changes, nothing else to push.

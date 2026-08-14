@@ -37,3 +37,5 @@ skills-lock.json
 test-results/
 playwright-report/
 tests-e2e/.auth/
+
+APIFY_ENRICHMENT_PLAN.md
