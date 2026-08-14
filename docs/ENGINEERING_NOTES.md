@@ -622,3 +622,126 @@ measured the intended 150px. General lesson for this codebase: `aspect-ratio`
 on any element that is also a flex item needs `min-height: 0` (or
 `min-width: 0` for a row-direction flex item) alongside it, or the ratio is
 only advisory.
+
+## 2026-08-14 — G4: live cross-owner verification against local `base44 dev`
+
+`npx base44 dev` is not a thin proxy to hosted Base44 for entities/auth: the
+CLI's dev server (`node_modules/base44/dist/cli/index.js`) runs a genuine
+local, in-memory (`nedb`) `Database`, a local `authRouter`, and a local
+`entityRoutes` that evaluates the *exact same* RLS engine format used in
+`base44/entities/*.jsonc` (`checkRLS`/`evaluateCondition`, including
+`user_condition` and `$or`/`$and`/`$nor`). Only routes it doesn't implement
+locally fall through to a `remoteProxy` and log
+`"<path>" is not supported in local development, passing call to production`
+— entities and auth are not on that fallback path (confirmed: no such log
+line appeared for any `/auth/register`, `/auth/login`, `/auth/verify-otp`, or
+`/entities/*` call made during this test). One incidental miss: an early,
+unauthenticated `curl` probe against a malformed path
+(`/api/apps/me/auth/me`, using the literal string `me` instead of a real app
+ID) didn't match the local route and *did* fall through to
+`remoteProxy` — visible in the log as the one such warning line. It carried
+no Authorization header and touched no owner data (a bare 404-shaped
+introspection GET), but it did technically leave the "local only" boundary
+for one harmless request; noted here for honesty rather than treated as a
+real breach.
+
+This made a genuinely live, non-production two-owner test possible without a
+browser: `base44 dev`'s local auth seeds the currently-logged-in CLI
+identity (`omerkrespi.1@gmail.com`) as `role: "admin"` on startup — the same
+mechanism that made the 2026-07-26 incident possible in production (Base44
+assigns `role: admin` to the app creator by default) — and its `/register` +
+`/verify-otp` flow works fully locally, echoing the OTP to the dev server's
+own stdout (`In order to complete registration use this verification code:
+NNNNNN`) instead of sending real email, so two disposable, non-admin owner
+accounts (`g4-owner-a@example.test`, `g4-owner-b@example.test`) could be
+registered, verified, and logged in as distinct principals with real tokens
+— no email inbox, no interactive OAuth.
+
+Test script (`@base44/sdk` + axios, run from the project root so
+`@base44/sdk` resolves, deleted after the run): logged in as admin, registered
+and verified owner A and owner B, then used the admin client to seed one
+`Clip` per owner (direct client `.create()` requires `role: admin` per
+`clip.jsonc`'s `create` RLS — the same gate a backend function's
+`asServiceRole` satisfies, so this mirrors how synthetic fixtures would be
+seeded in production without a real capture pipeline). All 16 assertions
+passed:
+
+- owner A's `Clip.list()` returns exactly their own row, never owner B's, and
+  vice versa;
+- **the admin-role account's `Clip.list()` returns neither synthetic row** —
+  this is the direct, live re-test of the exact 2026-07-26 bypass scenario
+  (admin account, unfiltered `list()`, cross-owner data) and it stays fixed;
+- `Clip.get(<other owner's id>)` fails with a typed 404 and no row data in
+  the body, for both a non-admin cross-owner `get` and an admin `get` (the
+  admin-bypass fix applies to `read` uniformly, not just `list`);
+- owner A's `update()`/`delete()` against owner B's clip both 404;
+- a `Bearer mp_...`-shaped (pairing-token-style) header on the entities API
+  cannot read any `Clip` rows — `resolveCurrentUser()` can't decode a
+  non-JWT bearer, so `currentUser` stays `undefined` and `checkRLS` denies
+  every row (`if (!user) return false`) — there is no code path from a
+  pairing-token-shaped bearer into entity reads, live-confirmed as well as
+  visible in source.
+- cleanup: both synthetic clips were deleted by their owning client
+  (`update`/`delete` RLS is strict `data.owner_id === user.id`, so even the
+  seeding *admin* client could not delete them — confirmed as a side effect
+  of the point above) and a final `list()` as admin shows neither row
+  remains.
+
+Extension read-boundary (G4 point 3) is otherwise a static-code claim, not a
+live one: `ingest-clip`, `refresh-capture`, and `extension-context` (the only
+three functions that call `requireExtensionPrincipal`) were read end to end;
+none of their response bodies include `Clip.raw_text`/`raw_html`,
+`Record` fields, `Collection` contents, or `Enrichment` history —
+`extension-context` returns only `{id, title, template}` per active Mission,
+and `ingest-clip`/`refresh-capture` return only routing/outcome metadata
+(`clip_id`, `routing_status`, `outcome`, etc.). This was not separately
+exercised against a real pairing token end-to-end (that would need a real
+extension install flow); the live pairing-token check above only proves the
+*entities* API itself rejects that bearer shape, not that every function
+response is bounded — the function-source read is what proves the latter.
+
+Everything above ran only against the local `base44 dev` backend
+(`http://localhost:4477`, in-memory, torn down with the dev server process at
+the end of the session — nothing persisted to disk or to any hosted Base44
+app). No production request carried an Authorization header or touched
+owner data at any point.
+
+## 2026-08-14 — G7: direct Dashboard entity-write audit
+
+Exhaustive grep of `src/` for `base44.entities.\w+\.(create|update|delete|bulkCreate)`
+(and a broader `base44\.entities\.\w+\.` sweep to catch anything the first
+pattern might miss) turns up exactly one direct write, everywhere else in
+`src/App.jsx` is `.list()`/`.subscribe()` (reads) or `base44.functions.invoke(...)`
+(the intended pattern — `create-mission`, `report-bug`, `resolve-routing`,
+`delete-record` all go through backend functions already):
+
+```js
+// src/App.jsx:1267, inside updateCandidateStatus()
+await base44.entities.Record.update(selectedRecord.id, { decision_status: decisionStatus, next_action: nextAction });
+```
+
+Assessed as an accepted low-risk exception, left as-is:
+
+- `record.jsonc`'s `update` RLS is `{"data.owner_id": "{{user.id}}"}` with no
+  admin/service escape hatch (re-verified live today in the G4 pass above) —
+  so even if `selectedRecord.id` were forged to point at another owner's
+  Record, the write is rejected server-side by RLS regardless of this call
+  going direct-to-entity instead of through a function. The "go through a
+  backend function" convention is a defense-in-depth/consistency preference
+  here, not the only thing standing between this call and a cross-owner
+  write.
+- The two fields it writes, `decision_status` and `next_action`, are
+  presentational triage metadata (`record.jsonc`: `decision_status` is an
+  `inbox|shortlisted|contacted|rejected|decided|expired` enum with a default
+  set at creation time by `classification.ts`/`routing-persistence.ts`/
+  `routing-resolution.ts`; `next_action` is a short human-readable string).
+  Grepped every backend reference: the only place either field is read back
+  is `agent-tools.ts`, which truncates it to 40 chars as bounded read-only
+  context handed to the owner's own AI agent tool calls — nothing treats
+  either field as an ownership, routing, or authorization signal.
+
+No fix applied; see `docs/DECISIONS.md` for the corresponding decision
+record. If a future change makes either field security-relevant (e.g. if
+`decision_status` ever gated a notification, a share link, or another
+owner-visible surface), this call should move to a small backend function at
+that point.

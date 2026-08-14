@@ -264,3 +264,33 @@ enforces its own API rate limit on the token (5,000 req/hr), and the token
 is scoped to Issues-only on a single repo, so the worst case of a signed-in
 owner submitting many reports is GitHub issue noise, not a security or data
 exposure. Revisit if this ever becomes reachable from a signed-out surface.
+
+## G7 audit: the one direct Dashboard entity write (`Record.decision_status`/`next_action`) stays as-is
+
+Exhaustive grep of `src/` for `base44.entities.*.(create|update|delete|bulkCreate)`
+found exactly one hit: `updateCandidateStatus()` in `src/App.jsx` calls
+`base44.entities.Record.update(selectedRecord.id, { decision_status,
+next_action })` directly instead of going through a backend function, unlike
+every other mutation in the file (`create-mission`, `report-bug`,
+`resolve-routing`, `delete-record` all use `base44.functions.invoke`).
+
+Left unfixed, deliberately, for two independent reasons:
+
+1. `record.jsonc`'s `update` RLS is a strict `{"data.owner_id":
+   "{{user.id}}"}` with no admin or service-role escape hatch — re-verified
+   live against a local `base44 dev` instance during this same pass (see
+   `docs/ENGINEERING_NOTES.md`, 2026-08-14 G4 entry). Even a forged
+   `selectedRecord.id` pointing at another owner's Record is rejected
+   server-side by RLS; the "always go through a function" convention is
+   defense-in-depth here, not the only barrier.
+2. `decision_status`/`next_action` are presentational triage metadata with a
+   system-set default at creation time. The only backend code that reads
+   either field back (`agent-tools.ts`) truncates it to 40 characters as
+   bounded context for the owner's own AI agent tool calls; nothing treats
+   either field as an ownership, routing, or authorization signal.
+
+Adding a bespoke backend function for a two-field, RLS-protected, non-security
+status toggle would be additive complexity without closing a real gap. If
+either field ever becomes security-relevant (gates a notification, a share
+link, another owner-visible surface, etc.), move this call to a small backend
+function at that point — not before.
