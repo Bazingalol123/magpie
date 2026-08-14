@@ -7,11 +7,13 @@ import { parseDocsLocation } from "./docs-navigation.js";
 import gettingStartedMd from "../docs/GETTING_STARTED.md?raw";
 import productGuideMd from "../docs/PRODUCT_GUIDE.md?raw";
 import apiMd from "../docs/API.md?raw";
+import releaseNotesMd from "../docs/RELEASE_NOTES.md?raw";
 
 const SECTIONS = [
   { file: "GETTING_STARTED.md", slug: "getting-started", label: "Getting started", content: gettingStartedMd },
   { file: "PRODUCT_GUIDE.md", slug: "product-guide", label: "Product guide", content: productGuideMd },
   { file: "API.md", slug: "api", label: "API reference", content: apiMd },
+  { file: "RELEASE_NOTES.md", slug: "release-notes", label: "Release notes", content: releaseNotesMd },
 ];
 
 const SLUG_TO_FILE = Object.fromEntries(SECTIONS.map((section) => [section.slug, section.file]));
@@ -42,7 +44,7 @@ export default function Docs({ initialSlug, isSignedIn, onSignIn, isSigningIn })
 
   const docLink = (props) => {
     const href = props.href || "";
-    const match = href.match(/^(GETTING_STARTED\.md|PRODUCT_GUIDE\.md|API\.md)(#.*)?$/);
+    const match = href.match(/^(GETTING_STARTED\.md|PRODUCT_GUIDE\.md|API\.md|RELEASE_NOTES\.md)(#.*)?$/);
     if (match) {
       return (
         <a
