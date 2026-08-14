@@ -246,6 +246,39 @@ left out of this pass, which was scoped to "the page keeps growing" UX
 complaint, not data completeness at scale. Worth revisiting if this project
 gets meaningfully more usage per owner.
 
+**Superseded by Build Guide 35 (G1):** the fetch cap itself is fixed —
+`loadDashboard` now pages every entity to completion (or a 5,000-row
+ceiling) instead of a single 200-row request. See the next entry for the
+scoping decision made as part of that fix, and
+`docs/ENGINEERING_NOTES.md` (2026-08-14) for the full contract note.
+
+## G1 fix keeps Record queries global instead of scoping to the active Collection
+
+G1's own note in `docs/BUGS_AND_BEHAVIORS.md` suggested scoping Record
+queries to the active Collection "where that's a reasonable design." Before
+choosing, every consumer of `data.records` in `src/App.jsx` was checked:
+
+- the Items count in `workspace-heading` sums Records across the whole
+  Mission (or the whole owner with no Mission selected);
+- `CollectionSidebar` needs a per-Collection count for every Collection in
+  the sidebar, not just the active one;
+- `ActivityPanel` shows recent activity across all Collections;
+- `missionRecords`/`missionCollectionIds` derive Mission-level aggregates
+  that need every Record scoped to the Mission, not just the active
+  Collection within it.
+
+Scoping the Record fetch to only the active Collection would break all four
+of these without restructuring them into their own separately-scoped
+queries — a materially larger change than a data-completeness fix, and one
+that changes consumption patterns the task instructions explicitly said not
+to touch without a specific need. Kept `loadDashboard` fetching the full
+(now fully paginated, not capped) Record set instead. If this ever becomes a
+real performance problem — an owner with tens of thousands of Records — the
+right fix is probably separate lightweight count/aggregate queries for the
+sidebar and heading rather than scoping the main fetch, so the full Record
+set doesn't have to move over the wire just to render a count. Not needed at
+current or foreseeable scale (5,000-row ceiling per entity per load).
+
 ## The in-app bug report form is dashboard-only and has no rate limit
 
 `report-bug` (Build Guide 34) deliberately does not extend to the landing

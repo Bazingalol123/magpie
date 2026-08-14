@@ -163,9 +163,10 @@ grow indefinitely.
 - page is clamped when records disappear;
 - card/table mode is decided from the full loaded set.
 
-**Important limitation:** This is not server-side pagination. The Dashboard
-still has a per-entity fetch cap of 200 in the current loading path. See the
-known gaps section.
+**Important limitation:** This is not server-side pagination; it is
+rendering-layer pagination over whatever `loadDashboard` already fetched.
+The separate fetch-cap gap this note used to point at (G1) is fixed as of
+Build Guide checkpoint 35 — see the G1 entry below.
 
 ## Docs deep-link anchor navigation
 
@@ -304,18 +305,29 @@ primitive and its fixtures.
 
 ## G1 — Dashboard data completeness beyond 200 rows
 
-The UI pagination fix does not solve the `loadDashboard()` fetch cap. Older data
-can be silently absent when an owner has more than 200 rows in an entity.
+**Status:** Fixed, not yet deployed. `loadDashboard` (`src/App.jsx`) no
+longer issues a single hardcoded-limit `list()` call per entity; it pages
+every entity to completion via `fetchAllPages`
+(`src/dashboard-pagination.js`), matching the offset/`skip` contract Base44's
+SDK actually exposes (verified against
+`.agents/skills/base44-sdk/references/entities.md`, not assumed) and the same
+page-until-short-page convention `base44/shared/service-entities.ts`'s
+`listAllOwned` already uses server-side. An owner with more rows than the old
+20/100/200 caps in any entity now gets complete data, up to a 5,000-row
+ceiling per entity per load; `dataMeta.<entity>.hasMore`/`.total` are
+returned and the Items count in the dashboard header shows a `+` suffix and
+tooltip when Records are truncated at the ceiling. Record queries were
+deliberately kept global rather than scoped to the active Collection — see
+`docs/DECISIONS.md` for why. Full contract note: `docs/ENGINEERING_NOTES.md`
+(2026-08-14). Build Guide checkpoint 35. Fixtures:
+`tests/dashboard-pagination.test.ts`, including a 250-row fixture for the
+literal ">200 rows" case. Needs a site deploy (frontend-only change; no
+entity or function changes) before this is live — see Build Guide 35's
+"Not yet deployed" note.
 
-Required future work:
-
-- verify Base44 `filter`/`list` pagination signatures;
-- choose cursor or offset pagination;
-- scope Record queries to the active Collection;
-- return `hasMore` or a real count;
-- add fixtures with more than 200 rows.
-
-Do not claim that the current UI pagination is server-side pagination.
+Do not claim that the current UI pagination (Build Guide 29.18, B7) is
+server-side pagination — that remains a separate, already-shipped,
+rendering-layer concern from this fetch-completeness fix.
 
 ## G2 — Concurrent ingestion serialization
 
@@ -560,7 +572,7 @@ A bug is not complete merely because a patch exists. The agent must report:
 | B7 | Unbounded Collection panel | UI pagination merged; server cap remains |
 | B8 | Tracking/query-string duplicate misses | Fixed and merged |
 | D1 | Docs deep-link anchor scroll | Open PR #12 |
-| G1 | Server-side pagination beyond 200 | Known gap |
+| G1 | Server-side pagination beyond 200 | Fixed, not yet deployed |
 | G2 | Concurrent ingest serialization | Open verification gate |
 | G3 | Complete Chrome matrix | Open verification gate |
 | G4 | Live cross-owner fixtures | Open verification gate |
