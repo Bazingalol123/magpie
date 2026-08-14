@@ -10,10 +10,10 @@ function fakeService(seed: Record<string, any[]> = {}) {
     name,
     {
       get: async (id: string) => tables[name].find((row) => row.id === id) ?? null,
-      filter: async (query: Record<string, unknown>, _sort?: string, limit?: number) =>
+      filter: async (query: Record<string, unknown>, _sort?: string, limit?: number, skip = 0) =>
         tables[name]
           .filter((row) => Object.entries(query).every(([key, value]) => row[key] === value))
-          .slice(0, limit ?? tables[name].length),
+          .slice(skip, skip + (limit ?? tables[name].length)),
       delete: async (id: string) => {
         const index = tables[name].findIndex((row) => row.id === id);
         if (index < 0) throw new Error(`Entity ${name} with ID ${id} not found`);
@@ -87,6 +87,32 @@ Deno.test("removal cascades over watches, history, decision, capture, and the It
   for (const name of ["Record", "Clip", "RoutingDecision", "WatchRule", "Enrichment"]) {
     assertEquals(tables[name].length, 0, `expected ${name} to be empty`);
   }
+});
+
+Deno.test("removal pages past a single fetch page so no Enrichment or WatchRule is orphaned", async () => {
+  const manyEnrichments = Array.from({ length: 250 }, (_, index) => ({
+    id: `enrichment-${index}`,
+    owner_id: "owner-1",
+    record_id: "record-1",
+    field: "price",
+  }));
+  const manyWatchRules = Array.from({ length: 150 }, (_, index) => ({
+    id: `watch-${index}`,
+    owner_id: "owner-1",
+    record_id: "record-1",
+    active: true,
+  }));
+  const { service, tables } = fakeService(seedItem({
+    Enrichment: manyEnrichments,
+    WatchRule: manyWatchRules,
+  }));
+
+  const result = await removeRecord(service, "owner-1", "record-1");
+
+  assertEquals(result.deleted.enrichments, 250, "every Enrichment row must be deleted, not just the first page");
+  assertEquals(result.deleted.watch_rules, 150, "every WatchRule row must be deleted, not just the first page");
+  assertEquals(tables.Enrichment.length, 0, "no Enrichment row may survive a completed cascade");
+  assertEquals(tables.WatchRule.length, 0, "no WatchRule row may survive a completed cascade");
 });
 
 Deno.test("removal never touches another owner's Item", async () => {

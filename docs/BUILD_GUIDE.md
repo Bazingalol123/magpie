@@ -952,3 +952,39 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Not yet deployed:** frontend-only change; needs a site deploy, which
   requires explicit owner approval per `CLAUDE.md`. No entity or function
   changes, nothing else to push.
+
+### 37. Fix cascade delete orphaning child rows past one fetch page (B13)
+
+- [x] **Build:** Found via a targeted code audit for a new P0 (not a user
+  report), on branch `fix/p0-cascade-delete-pagination`. `cascadeRecord`
+  (`base44/shared/record-removal.ts`) — the innermost cascade shared by
+  `delete-record`, `delete-collection`, and `delete-mission` — fetched
+  WatchRule/Enrichment/RoutingDecision children with a single hardcoded-limit
+  `.filter()` call (100/200/10 respectively) instead of paging to completion,
+  even though the outer Collection/Mission cascades one level up already use
+  the `listAllOwned` pagination helper for exactly this reason. A Record with
+  more than 200 Enrichment rows (realistic for a long-lived, actively-watched
+  candidate — `persistFieldDiff` appends one row per changed field per check)
+  or more than 100 WatchRules only had its newest page deleted; since the
+  Record is deleted last as the retry anchor, a retry 404s immediately and
+  the older child rows are permanently orphaned, silently breaking the
+  documented "permanent full delete, not an archive" guarantee. Fixed by
+  routing all three child fetches through `listAllOwned`, same as the outer
+  cascades. Also fixed a latent gap in the test harness: the
+  `tests/record-removal.test.ts` mock `filter()` ignored the `skip`
+  parameter entirely, which is exactly why no fixture caught this — a
+  >page-size fixture against the old mock would have made `listAllOwned`
+  loop forever instead of failing loud. Fixed the mock to honor `skip` and
+  added a regression fixture seeding 250 Enrichment + 150 WatchRule rows;
+  confirmed by reverting the source fix that the new fixture fails exactly as
+  predicted (200/100 deleted, the rest orphaned) before re-applying the fix.
+- **Files:** `base44/shared/record-removal.ts`, `tests/record-removal.test.ts`,
+  `BUGS.local.md`, `docs/BUGS_AND_BEHAVIORS.md`, `docs/BUILD_GUIDE.md`.
+- **Verify:** `deno test --allow-env --allow-read tests` — 143/143 passing
+  (was 142; one net new fixture). `deno check` passes on all 16
+  `base44/functions/**/entry.ts`. `node --check` passes on every extension
+  script and the `@base44/sdk`-in-`extension/` grep is clean (unaffected;
+  backend-only change). `npm run build` passes.
+- **Not yet deployed:** no entity/schema change — needs
+  `npx base44 functions deploy delete-record delete-collection delete-mission`
+  with explicit owner approval per `CLAUDE.md`.
