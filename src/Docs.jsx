@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowLeft, ArrowUpRight, Book, LoaderCircle } from "lucide-react";
 import magpieMarkSrc from "./icon/magpie-mark.png";
+import { parseDocsLocation } from "./docs-navigation.js";
 import gettingStartedMd from "../docs/GETTING_STARTED.md?raw";
 import productGuideMd from "../docs/PRODUCT_GUIDE.md?raw";
 import apiMd from "../docs/API.md?raw";
@@ -24,11 +25,20 @@ export default function Docs({ initialSlug, isSignedIn, onSignIn, isSigningIn })
     setActiveFile(file);
     const slug = FILE_TO_SLUG[file] || SECTIONS[0].slug;
     window.history.replaceState(null, "", `?docs=${slug}`);
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       const target = hash ? document.getElementById(hash.replace(/^#/, "")) : null;
       (target || document.querySelector(".docs-content"))?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
+    }));
   };
+
+  useEffect(() => {
+    const { hash } = parseDocsLocation(window.location.href);
+    if (!hash) return undefined;
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+    return () => cancelAnimationFrame(frame);
+  }, [active.file]);
 
   const docLink = (props) => {
     const href = props.href || "";
