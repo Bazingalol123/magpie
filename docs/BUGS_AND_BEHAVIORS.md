@@ -393,6 +393,102 @@ local Base44 + local Vite
 
 Do not deploy merely to test a UI change that can be verified locally.
 
+## G9 — Website first-run onboarding is not yet a complete UI contract
+
+**Status:** Known product/UI gap. Suitable for a focused frontend task.
+
+The website needs to make the first successful journey obvious:
+
+```text
+Landing page
+  → understand the value
+  → sign in
+  → install the Chrome extension
+  → pair the extension
+  → capture the first item
+  → see the item arrive in the Dashboard
+  → understand what to do next
+```
+
+### Required UI states
+
+The onboarding work should explicitly design and test these states:
+
+1. **Signed-out landing**
+   - Explain Capture → Organize → Review → Refresh.
+   - Provide one primary next action.
+   - Explain that the Extension is write-only and does not read workspace data.
+   - Do not perform entity reads while signed out.
+
+2. **Signed-in but not paired**
+   - Show a first-run checklist.
+   - Explain why pairing is needed.
+   - Offer the install-extension action before asking for a token.
+   - Distinguish “extension not installed” from “extension installed but not paired”
+     when the browser can know the difference; do not invent a state it cannot verify.
+
+3. **Pairing in progress**
+   - Show that the token is being created or waiting to be used.
+   - Make the one-time secret handling clear.
+   - Do not display or persist the raw pairing token beyond its intended one-time use.
+
+4. **Paired and ready**
+   - Show a clear connected state.
+   - Explain the keyboard shortcut and the available capture actions.
+   - Provide a “capture your first item” next step.
+
+5. **First capture processing**
+   - Show that the capture was accepted.
+   - Distinguish routing states: existing Collection, new Collection, Needs review, or failed.
+   - Never present `needs_review` as an infrastructure error.
+
+6. **First item received**
+   - Point to the new Item or Collection.
+   - Explain what the user is seeing.
+   - Offer a next action such as review, compare, or enable monitoring.
+
+7. **Recovery states**
+   - Pairing token invalid or revoked.
+   - Capture failed.
+   - AI/routing unavailable.
+   - Source blocked.
+   - Empty workspace after an unsuccessful first attempt.
+
+### Frontend constraints
+
+- Prefer existing endpoints: `create-extension-pairing`, `extension-context`,
+  `ingest-clip`, and `resolve-routing`.
+- Do not expand Extension read permissions to implement onboarding.
+- Do not expose Collection, Record, Enrichment, or owner-history data to the
+  pairing principal.
+- Keep backend entity/function names unchanged; UI may use Project, Item,
+  Capture, and Needs review labels.
+- Preserve deep-link and auth-callback behavior.
+- Treat onboarding as a state machine rather than a collection of unrelated
+  banners or modals.
+- Make the flow keyboard-accessible and responsive.
+
+### Acceptance criteria
+
+- A new signed-in user can identify the next action without external instructions.
+- The user can reach pairing from the empty Dashboard.
+- Pairing success and pairing failure are visually distinct.
+- The first capture has a visible, status-aware result.
+- A `needs_review` capture leads to a clear recovery action.
+- Returning users do not see the full first-run tour after pairing is known.
+- Signed-out landing performs no entity reads.
+- Onboarding can be tested locally with fixture data and a targeted Playwright
+  smoke test; it must not require a Production deploy for every UI iteration.
+
+### Recommended implementation order
+
+1. Map the current Landing, auth, pairing, empty-state, and capture-result surfaces.
+2. Define the onboarding state machine and transitions.
+3. Extract reusable status/checklist components.
+4. Add fixture-driven UI tests for each state.
+5. Add one local Playwright happy-path test.
+6. Only then consider visual polish or additional onboarding copy.
+
 ---
 
 # 4. Agent operating rules
@@ -472,3 +568,4 @@ A bug is not complete merely because a patch exists. The agent must report:
 | G6 | Bounded folders | Not built |
 | G7 | Direct Dashboard entity writes | Audit required |
 | G8 | Local Base44 + Playwright harness | Not yet packaged as one command |
+| G9 | Website first-run onboarding UI contract | Known product/UI gap |
