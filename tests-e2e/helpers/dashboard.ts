@@ -38,9 +38,17 @@ export type PairingCredentials = { ingestUrl: string; token: string };
  * PairingDialog (src/App.jsx) exactly as a human pairing the extension
  * would. This exercises the real trust boundary the issue asks for, rather
  * than seeding chrome.storage.local directly.
+ *
+ * Scoped to the persistent topbar button specifically (`header.topbar`),
+ * not just any "Pair extension" button: since the G9 onboarding checklist
+ * (src/onboarding/PairingChecklist.jsx) landed, a brand-new unpaired owner
+ * also sees a second "Pair extension" CTA in that checklist, which would
+ * otherwise make this locator ambiguous (Playwright strict-mode violation).
+ * The topbar button is the stable one — always present, unlike the
+ * checklist CTA which disappears once paired.
  */
 export async function pairExtensionViaDialog(page: Page): Promise<PairingCredentials> {
-  await page.getByRole("button", { name: /Pair extension/i }).click();
+  await page.locator("header.topbar").getByRole("button", { name: /Pair extension/i }).click();
   const dialog = page.locator(".pairing-dialog");
   await dialog.waitFor({ state: "visible", timeout: 15_000 });
 
