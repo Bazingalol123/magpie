@@ -209,8 +209,13 @@ Four real `needs_review` Captures exist in production data for this.
    deletion, and landing surfaces still need manual browser verification.
 2. **Concurrent ingest serialization:** sequential retries are idempotent, but
    simultaneous-request behavior remains an explicit gate.
-3. **Owner/RLS integration fixtures:** pure ownership tests exist; live
-   cross-owner integration verification remains.
+3. **Owner/RLS integration fixtures:** pure ownership tests exist, and live
+   cross-owner integration verification against a local `base44 dev` instance
+   (two synthetic owners plus the real admin-role account) was completed
+   2026-08-14 — see `docs/BUGS_AND_BEHAVIORS.md` G4 and
+   `docs/ENGINEERING_NOTES.md`. A matching hosted spot-check was performed
+   once already, at the original RLS-bypass fix (2026-07-26 entry); it was
+   not repeated in this pass and remains optional future work if desired.
 4. **Folders:** bounded two-level Collection folders are planned but not built.
    They must never influence routing or appear in the extension.
 5. **Competition finish:** demo fixture and screenshots/video remain. User

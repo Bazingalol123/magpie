@@ -353,13 +353,36 @@ The following need repeatable browser verification:
 
 ## G4 — Live cross-owner integration fixtures
 
-Pure ownership tests exist, but the live hosted environment still needs a safe,
-throwaway two-owner verification that proves:
+**Status:** Live-verified locally against `npx base44 dev` on 2026-08-14
+(see `docs/ENGINEERING_NOTES.md`). Two disposable non-admin owners were
+registered and logged in through the local dev server's real (local-only)
+`/register` + `/verify-otp` flow, and the currently-logged-in CLI identity
+was used as a live `role: "admin"` account — the same setup that produced the
+2026-07-26 incident. All four items were exercised with real tokens against
+the actual local RLS engine and the shipped `base44/entities/*.jsonc` rules:
 
-- Dashboard owner A cannot read owner B;
-- an admin-role account does not bypass owner isolation;
-- an extension pairing token cannot read owner data;
-- unauthorized IDs fail without partial responses.
+- Dashboard owner A cannot read owner B: verified (`Clip.list()`/`.get()`
+  each stay within the caller's own `owner_id`);
+- an admin-role account does not bypass owner isolation: verified (`role:
+  admin` account's `Clip.list()` saw neither synthetic owner's row, and
+  `Clip.get(<id>)` 404s the same as a non-admin cross-owner `get`);
+- an extension pairing token cannot read owner data: verified at the entities
+  API layer (a `Bearer mp_...`-shaped header cannot read any row, since it
+  isn't a decodable JWT and `checkRLS` denies with no `currentUser`); the
+  claim that extension-facing function *responses* never carry Collection/
+  Record/Clip contents is a static source read of `ingest-clip`,
+  `refresh-capture`, and `extension-context`, not a live pairing-token-through-a-real-extension-install test;
+- unauthorized IDs fail without partial responses: verified (`get`/`update`/
+  `delete` against another owner's ID all return a typed 404 with no row
+  data in the body).
+
+This was local-only, per `CLAUDE.md`'s "no verification against production"
+rule for this pass; production already got a live spot-check at the original
+fix time (`docs/ENGINEERING_NOTES.md`, 2026-07-26 entry: an admin `Clip.list()`
+that used to return 13+6 mixed-owner rows returned only the admin's own 13
+after the fix shipped). That was not re-run now. All synthetic accounts/rows
+from this pass lived only in the local dev server's in-memory database and
+were deleted, then the local server itself was stopped.
 
 Use synthetic data and delete it after verification.
 
@@ -384,10 +407,18 @@ remain dashboard navigation only:
 
 ## G7 — Direct Dashboard entity writes
 
-The documented architecture prefers durable writes through backend functions.
-Audit the current UI for direct `base44.entities.*.update/create/delete` calls
-before adding new writes. Any new durable mutation should use an owner-validated
-Backend Function unless an explicit exception is documented.
+**Status:** Audited 2026-08-14 (see `docs/ENGINEERING_NOTES.md`). Exhaustive
+grep of `src/` found exactly one direct write:
+`base44.entities.Record.update(selectedRecord.id, { decision_status,
+next_action })` in `updateCandidateStatus()`, `src/App.jsx:1267`. Every other
+mutation in the file already routes through `base44.functions.invoke(...)`.
+
+Assessed as an accepted, documented, low-risk exception and left unfixed —
+see `docs/DECISIONS.md` for the full reasoning (strict owner-only RLS on
+`Record.update` with no bypass, and both fields are presentational triage
+metadata that no security-relevant code path trusts). Any *new* durable
+mutation should still use an owner-validated Backend Function unless a
+similarly documented exception applies.
 
 ## G8 — Local verification harness
 
@@ -575,9 +606,9 @@ A bug is not complete merely because a patch exists. The agent must report:
 | G1 | Server-side pagination beyond 200 | Fixed, not yet deployed |
 | G2 | Concurrent ingest serialization | Open verification gate |
 | G3 | Complete Chrome matrix | Open verification gate |
-| G4 | Live cross-owner fixtures | Open verification gate |
+| G4 | Live cross-owner fixtures | Live-verified locally 2026-08-14; hosted spot-check not re-run |
 | G5 | Bug-report quota/rate limiting | Known gap |
 | G6 | Bounded folders | Not built |
-| G7 | Direct Dashboard entity writes | Audit required |
+| G7 | Direct Dashboard entity writes | Audited 2026-08-14; one accepted low-risk exception |
 | G8 | Local Base44 + Playwright harness | Not yet packaged as one command |
 | G9 | Website first-run onboarding UI contract | Known product/UI gap |
