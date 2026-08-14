@@ -894,6 +894,125 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   owner approval per `CLAUDE.md`. No entity or function changes, nothing
   else to push.
 
+### 37. Automated Chrome capture integration matrix, Phase 1 (issue #19 / G8)
+
+- [x] **Build:** New `tests-e2e/` Playwright suite (test infrastructure, not
+  production code) drives the real unpacked `extension/` against a real
+  local `npx base44 dev` backend + dashboard for all 6 capture modes —
+  `docs/BUGS_AND_BEHAVIORS.md`'s G3 (Chrome integration matrix) and G8
+  (local verification harness) both move from "not built" to "Phase 1
+  landed"; see that doc for exactly what remains open. Scope was chosen in a
+  plan-mode conversation with the repo owner before implementation — see
+  `docs/DECISIONS.md` for the phased-scope, local-fixtures, and
+  CI-deferred reasoning.
+  - `playwright.config.ts`: `testDir: tests-e2e/specs`, `workers: 1`
+    (every spec shares one already-paired extension Chrome profile, one
+    local backend, and one test owner's rows), `globalSetup`/
+    `globalTeardown` pointing into `tests-e2e/`.
+  - `tests-e2e/global-setup.ts`: spawns `npx base44 dev --port 4491` (a
+    pinned port, not auto-selected) from the repo root — this single
+    process also starts the local Vite dashboard already wired to it, since
+    `base44/config.jsonc` has `site.serveCommand` set (confirmed via the
+    `base44-cli` skill's `dev.md` reference, not assumed) — registers one
+    test owner through the real local `/auth/register` + `/verify-otp` flow
+    (OTP read off the `base44 dev` process's own stdout), starts a
+    dependency-free static file server
+    (`tests-e2e/helpers/fixtures-server.mjs`) for the HTML fixtures, then
+    launches a real persistent Chromium context with the extension loaded,
+    logs the dashboard in via the real `base44.auth.loginViaEmailPassword`
+    SDK method (through a new dev-only `window.__magpieBase44` hook — see
+    below), drives the real "Pair extension" dialog, and saves the returned
+    ingest URL + token into the extension's popup connection form — once
+    for the whole run, not once per spec.
+  - `tests-e2e/global-teardown.ts`: kills everything global-setup spawned by
+    PID (`taskkill /t /f` on Windows) and clears the gitignored
+    `tests-e2e/.auth/` scratch directory (credentials, runtime port/PID map,
+    the paired Chrome profile).
+  - `tests-e2e/fixtures/*.html`: local static pages — a listings index/card
+    grid (`index.html`) plus three detail pages, deliberately shaped to
+    reproduce the real B4 regression (element/link capture must resolve to
+    the clicked card's own detail URL, not the index page's URL), and a
+    plain text article page for selection/page modes.
+  - `tests-e2e/helpers/`: `config.ts` (pinned ports, gitignored-file
+    readers), `browser.ts` (extension-loading — see the headless finding
+    below), `backend.ts` (direct-`fetch()` entities-API assertions, not
+    `@base44/sdk` — see the finding below), `capture.ts` (popup/tab/
+    context-menu-equivalent driving helpers, all reusing real production
+    message types), `dashboard.ts` (login + pairing-dialog helpers),
+    `extension-test.ts` (the extended Playwright `test`/`expect` every spec
+    imports instead of `@playwright/test` directly, since the stock `page`
+    fixture cannot load an extension at all).
+  - `tests-e2e/specs/capture-{element,selection,page,link,visual,image}.spec.ts`:
+    one per mode, each asserting `capture_mode`, `source_url`/`context_url`,
+    bounded `raw_html`/`raw_text` against `clip.ts`'s real caps, and a real
+    duplicate-retry proving the B8 content-hash dedupe check against a
+    second identical capture.
+  - `src/api/base44Client.js`: added a dev-only
+    `if (import.meta.env.DEV) window.__magpieBase44 = base44;` hook so tests
+    can drive the real SDK login method via `page.evaluate()` instead of
+    hand-injecting a session — dead-code eliminated from production builds
+    (verified: `grep -c __magpieBase44 dist/assets/*.js` is 0 after a real
+    `vite build`). Full reasoning in `docs/DECISIONS.md`.
+  - `package.json`: `@playwright/test` devDependency, `test:e2e` script.
+    `.gitignore`: `test-results/`, `playwright-report/`, `tests-e2e/.auth/`.
+  - Two real findings surfaced while building this (both documented in
+    `docs/ENGINEERING_NOTES.md`, neither fixed here per this task's "found a
+    bug, don't fix it silently" instruction):
+    1. **Product bug, narrow:** page mode's `raw_text` is
+       `document.body.innerText` wholesale, which includes the previous
+       capture's own still-visible result toast — a same-page page-mode
+       recapture within the toast's ~9s lifetime gets polluted `raw_text`
+       and a different `content_hash`, silently defeating the B8 dedupe
+       check for that one case. Confirmed the other 5 modes are structurally
+       immune (they read a specific element/selection/anchor, not the whole
+       body). The test works around it by waiting for the toast to clear
+       before its own retry, to test the real dedupe contract rather than
+       this gap.
+    2. **Known gap, unchanged:** re-confirmed `captureInFlight` in
+       `extension/service-worker.js` has no `chrome.alarms`/keep-alive
+       backing it and would silently reset on a mid-capture MV3 worker
+       restart — worker sleep/wake testing itself is explicitly deferred
+       (`docs/DECISIONS.md`), this is only a re-confirmation from reading
+       the code this pass touched indirectly (`waitForCaptureIdle()` polls
+       the same lock from outside).
+- **Risk:** L=1, I=2, score 2, Low (`docs/V3_1_PRODUCT_AND_RISK_PLAN.md` risk
+  model) — new, additive test infrastructure with a build+regression-test
+  control; the one production-file touch (`base44Client.js`) is inert
+  outside a local dev session.
+- **Environment findings** (full detail in `docs/ENGINEERING_NOTES.md`):
+  Chromium's `headless: true` in Playwright 1.62 silently loads a separate
+  binary that cannot load extensions at all (no error, the service worker
+  just never registers) — fixed with `headless: false` +
+  an explicit `--headless=new` arg, which still requires no virtual display.
+  `@base44/sdk` cannot be imported from any file Playwright's test runner
+  loads (crashes at collection time inside axios's `https-proxy-agent`/
+  `agent-base`/`debug` chain, reproduced with a one-line import, works fine
+  under plain Node) — worked around by having `tests-e2e/helpers/backend.ts`
+  call the local entities REST API directly with `fetch()` instead, which is
+  arguably closer to the issue's own "poll the local backend's entities
+  API" wording anyway.
+- **Files:** `playwright.config.ts` (new), `tests-e2e/**` (new),
+  `src/api/base44Client.js`, `package.json`, `package-lock.json`,
+  `.gitignore`, `docs/BUGS_AND_BEHAVIORS.md`, `docs/DECISIONS.md`,
+  `docs/ENGINEERING_NOTES.md`.
+- **Verify:** `npm run test:e2e` — 6/6 specs passing, confirmed across two
+  full consecutive runs for stability (local AI-Gateway calls proxy to
+  production and are occasionally slow/401, per
+  `docs/ENGINEERING_NOTES.md`, but did not flake the final passing runs).
+  Full existing release gate suite re-run and confirmed unaffected: `deno
+  test --allow-env --allow-read tests` — 142/142 passing; `deno check` on
+  every `base44/functions/**/entry.ts`; `node --check` on every
+  `extension/**/*.js`; `rg -n "@base44/sdk" extension` — no matches; `npm
+  run build` — passes.
+- **Not deployed; nothing to deploy.** This checkpoint is test
+  infrastructure and one dev-gated frontend hook with no production runtime
+  effect — no entity, function, or site deploy is needed or was performed.
+- **Not done this pass, deliberately:** CI wiring
+  (`.github/workflows/ci.yml`), non-English keyboard layouts,
+  tab-already-open-before-reload, worker sleep/wake, the hosted smoke test,
+  and fixing either of the two findings above — all recorded as open in
+  `docs/BUGS_AND_BEHAVIORS.md` (G3, G8) and `docs/DECISIONS.md`.
+
 ### 36. First-run onboarding: pairing checklist and first-capture status (G9, partial, #17)
 
 - [x] **Build:** Added `src/onboarding/` — a pure state module (`state.js`,
