@@ -523,3 +523,17 @@ which was not consulted when several earlier checkpoints were written.
 See the PR for issue #47 for the full audit table and
 `docs/BETA_LIMITATIONS.md` for the consolidated supported-vs-unverified
 summary this audit produced.
+
+## Picker/snip mode-switch and stale-toast fix (extension-v0.3.1): no real-Chrome UI verification performed
+
+Build Guide checkpoint 40 fixes two bugs in `extension/content.js` reported
+by hand-testing the Side Panel build: Escape not visibly cancelling the
+picker/snip hint toast, and being unable to switch between Clip Element and
+Snip Area once one was active. Both fixes were verified by reading the full
+`startPicker`/`startSnip`/`stopPicker`/`stopSnip`/`showToast` lifecycle and
+confirming the new guards and `hideToast()` calls produce the intended state
+transitions — not by exercising the picker in a real browser, since this
+session had no way to launch real Chrome. Real-Chrome verification (trigger
+Shift+Alt+M, confirm Escape clears the hint immediately, click Snip Area
+while Clip Element is active and confirm it switches cleanly) is the
+explicit next step before treating either fix as done.

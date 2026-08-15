@@ -1252,3 +1252,48 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
   `docs/BETA_LIMITATIONS.md` in the issue #47 PR for the full claim-by-claim
   status (source-only / locally-verified / deployed / live-verified /
   unknown) this checkpoint produced.
+
+### 40. Fix picker/snip mode switching and a stale hint toast after Escape
+
+- [x] **Build:** Two bugs found by manual use of the just-shipped Side Panel,
+  both in `extension/content.js` and both present since before the Side
+  Panel migration (reproduced on the prior `extension-v0.2.0` popup build
+  too — neither is caused by that migration):
+  - **Escape didn't visibly cancel the picker/snip hint.** `stopPicker()`
+    and `stopSnip()` removed the highlight box / snip overlay and their
+    listeners, but never touched the "Hover any element..." / "Drag to
+    select..." hint toast `showToast()` had put on the page. That toast
+    only self-clears via its own `setTimeout` (8s for a "hint"), so
+    pressing Escape looked like it did nothing for up to 8 seconds. Added
+    `hideToast()` (clears `toastTimer` and any `toastStageTimers`, removes
+    the toast element) and call it from both `stopPicker()` and
+    `stopSnip()`.
+  - **Couldn't switch from Clip Element to Snip Area (or back) once one was
+    active.** `startPicker(mode)` guarded with `if (pickerActive ||
+    snipActive) return;` and `startSnip()` guarded with `if (snipActive ||
+    pickerActive) return;` — so clicking the other mode's Side Panel button
+    while a picker/snip session was already running silently no-opped in
+    the content script. `sidepanel.js`'s `startPickerInTab` never learns
+    this happened (`chrome.tabs.sendMessage` resolves once the listener is
+    reached, not once the requested mode actually started), so the Side
+    Panel status text still claimed the new mode had started. Changed both
+    guards to only block re-starting the *same* mode, and to call the other
+    mode's stop function first (`startPicker` calls `stopSnip()` if
+    `snipActive`; `startSnip()` calls `stopPicker()` if `pickerActive`) so
+    switching now tears down the old mode's DOM/listeners before starting
+    the new one, including clearing its hint toast via the fix above.
+  - Bumped `extension/manifest.json` version `0.3.0` -> `0.3.1` (bug fix,
+    not a feature change).
+- **Files:** `extension/content.js`, `extension/manifest.json`.
+- **Verify:** `deno test --allow-env --allow-read tests` — 147/147 passing
+  (unchanged; this fix has no Deno-covered surface, same as the rest of
+  `content.js`'s DOM logic). `deno check` clean on all 17
+  `base44/functions/**/entry.ts` (unaffected). `node --check` clean on
+  every `extension/**/*.js`. `@base44/sdk`-in-`extension/` grep clean.
+  `npm run build` passes. **Not performed:** real-Chrome manual
+  verification of either fix (no way to launch real Chrome this session) —
+  both are inferred correct by reading the full picker/snip/toast lifecycle
+  in `content.js`, not observed in a live page.
+- **No backend/entity/site change; no deploy needed.** Ships as GitHub
+  Release `extension-v0.3.1` after merge and explicit owner approval — this
+  task opens the PR only and does not push that tag.

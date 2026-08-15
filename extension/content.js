@@ -67,11 +67,12 @@ function startPicker(mode = "element") {
     startSnip();
     return;
   }
-  if (pickerActive || snipActive) return;
+  if (pickerActive) return;
   if (captureSubmitting) {
     showToast("A capture is still running — wait for it to finish.", "hint");
     return;
   }
+  if (snipActive) stopSnip();
   pickerMode = "element";
   pickerActive = true;
   document.documentElement.classList.add("magpie-picker-active");
@@ -84,11 +85,12 @@ function startPicker(mode = "element") {
 }
 
 function startSnip() {
-  if (snipActive || pickerActive) return;
+  if (snipActive) return;
   if (captureSubmitting) {
     showToast("A capture is still running — wait for it to finish.", "hint");
     return;
   }
+  if (pickerActive) stopPicker();
   snipActive = true;
   snipOverlay = document.createElement("div");
   snipOverlay.id = SNIP_OVERLAY_ID;
@@ -106,6 +108,7 @@ function stopSnip() {
   snipOverlay?.remove();
   snipOverlay = null;
   snipRect = null;
+  hideToast();
 }
 
 function onSnipDown(event) {
@@ -195,6 +198,7 @@ function stopPicker() {
   highlight = null;
   document.removeEventListener("pointermove", updateHighlight, true);
   document.removeEventListener("click", selectElement, true);
+  hideToast();
 }
 
 function updateHighlight(event) {
@@ -482,6 +486,13 @@ function showToast(message, state, url) {
   // safety net for a worker that never responds.
   const lifetime = state === "loading" ? 25_000 : url ? 9000 : state === "hint" ? 8000 : 4200;
   toastTimer = window.setTimeout(() => toast.remove(), lifetime);
+}
+
+function hideToast() {
+  window.clearTimeout(toastTimer);
+  toastStageTimers.forEach((id) => window.clearTimeout(id));
+  toastStageTimers = [];
+  document.getElementById(TOAST_ID)?.remove();
 }
 
 function isEditable(target) {
