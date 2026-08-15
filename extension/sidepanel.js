@@ -70,6 +70,9 @@ document.getElementById("start-visual").addEventListener("click", async () => {
   await startPicker("visual");
 });
 
+// Unlike the old popup, the Side Panel stays open once a capture starts, so
+// buttons are always re-enabled once the request settles (success or
+// failure) instead of relying on the surface closing itself.
 document.getElementById("save-page").addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
@@ -79,9 +82,9 @@ document.getElementById("save-page").addEventListener("click", async () => {
     const response = await chrome.runtime.sendMessage({ type: "magpie:capture-tab", tabId: tab.id, mode: "page" });
     if (!response?.ok) throw new Error(response?.error || "Capture failed.");
     status.textContent = "Captured — organizing in Magpie.";
-    window.setTimeout(() => window.close(), 450);
   } catch (error) {
     status.textContent = error.message || "Magpie cannot run on this page.";
+  } finally {
     setCaptureButtonsBusy(false);
   }
 });
@@ -92,9 +95,12 @@ async function startPicker(mode) {
   setCaptureButtonsBusy(true);
   try {
     await startPickerInTab(tab.id, mode);
-    window.close();
+    status.textContent = mode === "visual"
+      ? "Drag on the page to select the area to clip."
+      : "Hover an element on the page, then press C to clip it.";
   } catch (error) {
     status.textContent = error.message || "Magpie cannot run on this page.";
+  } finally {
     setCaptureButtonsBusy(false);
   }
 }
@@ -107,8 +113,13 @@ openDashboard.addEventListener("click", async () => {
     return;
   }
 
+  // The Side Panel stays open in this window while the dashboard opens in a
+  // new tab, so the owner can copy the pairing URL/token there and switch
+  // straight back to paste them below — no re-opening the extension.
   await chrome.tabs.create({ url: dashboardUrl });
-  window.close();
+  status.textContent = document.body.dataset.connected === "true"
+    ? "Dashboard opened in a new tab."
+    : "Dashboard opened in a new tab — copy the pairing URL and token, then come back here and paste them below.";
 });
 
 function getDashboardUrl(value) {

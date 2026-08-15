@@ -204,6 +204,7 @@ No change rated High or Critical begins production implementation until its back
 | Landing page AI-capability section | Names the AI decision/comparison/explanation/watch-config surface the landing previously didn't mention | New static `Landing.jsx` section | None; no entity reads, preserves the zero-entity-read landing constraint | 1 | 1 | 1 Low | Ship |
 | In-app Docs page | Replaces linking out to raw GitHub markdown with a branded in-app docs surface; explains the extension trust story right next to the sign-in CTA | New `Docs.jsx` view reached via `?docs=<slug>` (no server routing needed, same pattern as the `?review=` deep link); links from Landing and the dashboard topbar | None; renders the existing `docs/*.md` files client-side via a build-time `?raw` import, no entity reads for a signed-out visitor | 1 | 1 | 1 Low | Ship |
 | In-app bug report form (B11 follow-up) | Lets a signed-in owner report a bug without needing their own GitHub account | `BugReportDialog` modal reached from the dashboard footer, replacing the raw GitHub-issues link | New `report-bug` function; owner-authenticated only; calls the GitHub REST API server-side with a repo-scoped fine-grained PAT (`GITHUB_ISSUES_TOKEN` secret, Issues read/write on this repo only); no entity/schema change, no data persisted in Base44 | 2 | 3 | 6 Moderate | Ship with fixtures; dashboard-only (not landing/extension) per product decision, since an unauthenticated public form writing to a public repo would need separate abuse-protection scoping |
+| Extension popup -> Side Panel migration (issue #46) | The extension currently closes itself when the owner needs to leave it to copy the pairing URL/token from the dashboard, forcing a repeat toolbar click; a Side Panel stays open across that same-window tab switch, and stays open through capture/picker/snip actions instead of vanishing before a person can read the result | `extension/manifest.json` (`side_panel.default_path`, `sidePanel` permission, drop `action.default_popup`); `extension/popup.html`/`.css`/`.js` renamed and rewritten as `extension/sidepanel.html`/`.css`/`.js` (fluid width instead of a fixed 340px popup frame, no more `window.close()` after Save page / picker-start / snip-start / Open dashboard, explicit "open dashboard in a new tab, come back and paste" pairing copy) | `extension/service-worker.js` gains one `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` call in the existing `onInstalled` listener; no other service-worker logic changes | 3 | 3 | 9 Moderate | Ship |
 
 ## Backend change plan
 
@@ -627,6 +628,93 @@ Checks:
 - Leave `folder_id` ignored; existing routing and Collection reads continue.
 - Do not delete Folder rows during rollback.
 - Reverting the feature never rewrites Mission, Record, Clip, or RoutingDecision.
+
+### Extension popup -> Side Panel migration (issue #46)
+
+- **User value:** the popup closed itself on every "leave the extension"
+  action (opening the dashboard to copy the pairing URL/token, starting the
+  element picker, starting a visual snip), so pairing and picker flows always
+  needed a second toolbar click to get back into the extension. A Chrome Side
+  Panel is a persistent per-window surface that survives switching to another
+  tab in the same window, so the owner can open the dashboard in a new tab,
+  copy the two pairing values, switch back to the still-open panel, and
+  paste — one continuous flow instead of a re-open-the-popup loop.
+- **Frontend surface:** `extension/manifest.json` gains `side_panel.default_path`
+  and the `sidePanel` permission and drops `action.default_popup`.
+  `extension/popup.html`/`.css`/`.js` are renamed and rewritten as
+  `extension/sidepanel.html`/`.css`/`.js`: the CSS drops the fixed 340px popup
+  frame for a fluid width that fills the resizable side panel; the JS drops
+  every `window.close()` call (after a successful Save page, after starting
+  the element picker or visual snip, after opening the dashboard) since the
+  panel is designed to stay open; the setup-callout copy explicitly says
+  "open the dashboard in a new tab ... come back to this panel and paste."
+  No other UI state, button, or control is removed — pairing fields, the
+  Project/intent selectors, the auto-refresh toggle, and the connection pill
+  are all migrated unchanged.
+- **Backend surface:** none. No entity, function, or AI Gateway change. The
+  only non-UI file touched is `extension/service-worker.js`, which gains one
+  `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` call
+  inside the existing `chrome.runtime.onInstalled` listener (the documented
+  Chrome pattern — Chrome persists this setting across service-worker
+  restarts, so it only needs to run once per install/update, matching how
+  `installContextMenus()` and `reinjectContentScripts()` already work in that
+  same listener). `submitCapture`, `captureFromTab`, `addViewportScreenshot`,
+  the context-menu handlers, and the auto-refresh tab listener are unchanged:
+  every capture and refresh request still goes through plain `fetch` with the
+  opaque pairing token from `chrome.storage.local` to the same Base44
+  function URLs. No `@base44/sdk` import is added anywhere in `extension/`.
+- **Data compatibility:** `chrome.storage.local` keys (`ingestUrl`,
+  `extensionToken`, `activeMissionId`, `captureIntent`, `autoRefreshEnabled`,
+  `savedUrls`) are unchanged in name and shape, so an existing paired install
+  upgrading to this version keeps its pairing and auto-refresh state with no
+  migration step.
+- **Security/RLS:** none of this reaches the backend trust boundary. The
+  Side Panel is still a plain `chrome.storage.local` + `fetch` + opaque
+  bearer-token client; it still cannot import `@base44/sdk`, hold a service
+  credential, or read Collection/Record contents. `sidePanel` is a Chrome UI
+  surface permission, not a host or data permission, and grants no new page
+  or network access.
+- **Failure behavior:** if `chrome.sidePanel.setPanelBehavior` rejects (older
+  Chrome, or an unexpected runtime error), the call is wrapped in `.catch()`
+  so it cannot throw out of the `onInstalled` listener and block
+  `installContextMenus()`/`reinjectContentScripts()`; the toolbar action
+  simply falls back to Chrome's default action click behavior (no popup, no
+  panel) rather than breaking the rest of extension startup. Every existing
+  typed capture/refresh failure path (missing pairing, capture-in-flight
+  lock, malformed response) is untouched because none of that code moved.
+- **Migration:** none required server-side. Locally: reload the unpacked
+  extension, confirm the toolbar icon opens the Side Panel instead of a
+  popup, and confirm a previously paired profile's `chrome.storage.local`
+  state still shows as paired without re-entering the token.
+- **Rollback:** revert `extension/manifest.json` to `default_popup:
+  "popup.html"` (drop `side_panel`/`sidePanel`) and restore
+  `popup.html`/`.css`/`.js` from git history; no data migration is needed
+  either direction because storage keys never changed.
+- **Verification:** `node --check` on every `extension/**/*.js`; a new
+  focused Deno fixture (`tests/extension-manifest.test.ts`) asserting the
+  manifest is valid JSON, has no `action.default_popup`, declares
+  `side_panel.default_path` and the `sidePanel` permission, and that every
+  file the manifest references (`background.service_worker`,
+  `side_panel.default_path`, `action.default_icon`, `content_scripts`
+  js/css, top-level `icons`) exists on disk; the existing
+  `@base44/sdk`-in-`extension/` grep stays clean. Real Chrome UI verification
+  (toolbar click opening the panel, resize behavior, panel persisting across
+  a tab switch) was **not** performed in this change — see the PR
+  description and `docs/DECISIONS.md`.
+- **Release authority:** extension-only; no entity, function, agent, or site
+  deployment. Ships as a version-bumped `extension-v*` GitHub Release after
+  merge and owner approval, per `CLAUDE.md`; this task does not push that
+  tag.
+
+Risk is L=3, I=3, score 9 Moderate: likelihood is real (every capture entry
+point's event wiring moves files and loses its self-close call, so a missed
+button or a stale button-busy state is a plausible regression), but impact is
+bounded because the capture protocol, storage schema, and trust boundary are
+completely unchanged and the whole feature reverts with a manifest edit and a
+file restore — there is no data to lose and no security surface to widen.
+Required controls: the manifest/reference fixture above, `node --check` on
+every script, the `@base44/sdk` grep, and an honest PR note on what was not
+manually verified in real Chrome.
 
 ## Required test cases
 

@@ -1,6 +1,6 @@
 import { test, expect, readOwner, readRuntime } from "../helpers/extension-test";
 import { createOwnerClient, countClipsForSource, getClip } from "../helpers/backend";
-import { getTabId, openPopup, triggerCaptureTab } from "../helpers/capture";
+import { getTabId, openSidePanel, triggerCaptureTab } from "../helpers/capture";
 
 // Link mode: this is the exact page shape that caused the real B4 bug
 // (docs/BUGS_AND_BEHAVIORS.md) — a card-grid index page where the captured
@@ -29,10 +29,10 @@ test("link capture resolves the right-clicked card's own URL, keeps the index pa
   await card.click({ button: "right" });
   await page.keyboard.press("Escape").catch(() => {});
 
-  const popup = await openPopup(context, extensionId);
-  const tabId = await getTabId(popup, indexUrl);
+  const sidePanel = await openSidePanel(context, extensionId);
+  const tabId = await getTabId(sidePanel, indexUrl);
 
-  const first = await triggerCaptureTab(popup, tabId, "link");
+  const first = await triggerCaptureTab(sidePanel, tabId, "link");
   expect(first.ok, `capture-tab failed: ${first.error}`).toBe(true);
   expect(first.result?.capture_status).toBe("new");
   const clipId = first.result?.clip_id;
@@ -50,7 +50,7 @@ test("link capture resolves the right-clicked card's own URL, keeps the index pa
   // by content_hash (B8), not create a second Clip.
   await card.click({ button: "right" });
   await page.keyboard.press("Escape").catch(() => {});
-  const retry = await triggerCaptureTab(popup, tabId, "link");
+  const retry = await triggerCaptureTab(sidePanel, tabId, "link");
   expect(retry.ok, `capture-tab retry failed: ${retry.error}`).toBe(true);
   expect(retry.result?.capture_status).toBe("duplicate");
   expect(retry.result?.clip_id).toBe(clipId);

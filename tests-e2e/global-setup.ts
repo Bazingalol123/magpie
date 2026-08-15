@@ -19,7 +19,7 @@ import {
 } from "./helpers/config";
 import { getExtensionId, launchExtensionContext } from "./helpers/browser";
 import { loginDashboard, pairExtensionViaDialog } from "./helpers/dashboard";
-import { openPopup, savePairingIntoExtension } from "./helpers/capture";
+import { openSidePanel, savePairingIntoExtension } from "./helpers/capture";
 
 // Phase 1 (issue #19) needs exactly one owner to drive the 6-mode capture
 // matrix end to end; a second owner / cross-owner isolation fixture is
@@ -208,11 +208,11 @@ export default async function globalSetup(): Promise<void> {
     const pairing = await pairExtensionViaDialog(dashboardPage);
     console.log(`[global-setup] Pairing dialog returned ingest_url=${pairing.ingestUrl}`);
 
-    const popup = await openPopup(context, extensionId);
-    await savePairingIntoExtension(popup, pairing);
-    await popup.close();
+    const sidePanel = await openSidePanel(context, extensionId);
+    await savePairingIntoExtension(sidePanel, pairing);
+    await sidePanel.close();
     await dashboardPage.close();
-    console.log("[global-setup] Extension paired and connection confirmed (popup body[data-connected=true]).");
+    console.log("[global-setup] Extension paired and connection confirmed (side panel body[data-connected=true]).");
   } finally {
     await context.close();
   }
