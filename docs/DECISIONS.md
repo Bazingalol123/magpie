@@ -432,3 +432,33 @@ than a redesign — lower risk to ship as a follow-up than to bundle into one
 larger change. Revisit as a second G9 pass; do not treat G9 as closed until
 items 1–4 above are addressed and the table row in
 `docs/BUGS_AND_BEHAVIORS.md` says so.
+
+## Extension popup -> Side Panel migration (issue #46): no real-Chrome UI verification performed
+
+Build Guide checkpoint 38 replaces `extension/popup.html`/`.css`/`.js` with
+`extension/sidepanel.html`/`.css`/`.js`, switches `extension/manifest.json`
+to `side_panel.default_path` + the `sidePanel` permission, drops
+`action.default_popup`, and has `service-worker.js` call
+`chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` once in
+`onInstalled`. This session had no way to launch real Chrome, so the actual
+acceptance criteria that only a live browser can confirm — the toolbar
+action opening a genuine Side Panel instead of a popup, the panel visibly
+staying docked while the dashboard opens in a new tab, and the panel
+surviving a service-worker sleep/wake cycle — were **not** manually
+exercised. What was verified instead: `node --check` on every
+`extension/**/*.js`; a new Deno fixture
+(`tests/extension-manifest.test.ts`) asserting the manifest is valid JSON,
+declares no `default_popup`, declares `side_panel.default_path` and the
+`sidePanel` permission, and that every manifest-referenced file exists on
+disk and the old popup files are gone; the `@base44/sdk`-in-`extension/`
+grep stays clean; and a full read-through reasoning that
+`chrome.storage.local` keys (`ingestUrl`, `extensionToken`,
+`activeMissionId`, `captureIntent`, `autoRefreshEnabled`, `savedUrls`) are
+untouched, so pairing/auto-refresh state survives the surface change without
+a migration step. The `tests-e2e/` Playwright helpers/specs were updated to
+open `sidepanel.html` instead of `popup.html` and to drop the
+now-inaccurate "closes itself" comments, but the suite itself was not run in
+this pass (it needs a real Chrome + a local `npx base44 dev` backend, same
+precondition as every other run of that suite). Real-Chrome verification is
+the explicit next step before treating this migration as done, not a gap
+that was silently skipped.

@@ -1,13 +1,13 @@
 import { test, expect, readOwner, readRuntime } from "../helpers/extension-test";
 import { createOwnerClient, countClipsForSource, waitForNewClip } from "../helpers/backend";
-import { activateTab, getTabId, openPopup, waitForToastState } from "../helpers/capture";
+import { activateTab, getTabId, openSidePanel, waitForToastState } from "../helpers/capture";
 
 // Visual mode: a user-drawn crop rectangle plus nearby visible text, with a
 // screenshot attached (docs/V3_1_PRODUCT_AND_RISK_PLAN.md's multi-mode
 // capture contract). There is no keyboard shortcut for visual mode in
-// production (chrome.commands only maps to element mode) — only the popup's
-// "Start visual snip" button — so this drives that real button, then
-// performs a real drag gesture on the page exactly as a user would.
+// production (chrome.commands only maps to element mode) — only the Side
+// Panel's "Start visual snip" button — so this drives that real button,
+// then performs a real drag gesture on the page exactly as a user would.
 test("visual snip captures a cropped rectangle with visible-text evidence, and dedupes an identical retry", async ({
   context,
   extensionId,
@@ -20,13 +20,16 @@ test("visual snip captures a cropped rectangle with visible-text evidence, and d
   const page = await context.newPage();
   await page.goto(url);
 
-  const tabId = await getTabId(await openPopup(context, extensionId), url);
+  const tabId = await getTabId(await openSidePanel(context, extensionId), url);
   const rect = { x: 60, y: 80, width: 220, height: 160 };
 
   async function performSnip() {
-    const popup = await openPopup(context, extensionId);
-    await activateTab(popup, tabId);
-    await popup.locator("#start-visual").click(); // popup closes itself after starting the snip in content.js
+    const sidePanel = await openSidePanel(context, extensionId);
+    await activateTab(sidePanel, tabId);
+    // Unlike the old popup, sidepanel.js no longer closes its own window
+    // after starting the snip (issue #46) — it stays open, showing a status
+    // hint, while the drag gesture happens on the page.
+    await sidePanel.locator("#start-visual").click();
     await page.bringToFront();
     await page.locator("#magpie-snip-overlay").waitFor({ state: "attached", timeout: 10_000 });
     await page.mouse.move(rect.x, rect.y);

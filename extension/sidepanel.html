@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Magpie Clip</title>
-    <link rel="stylesheet" href="popup.css" />
+    <title>Magpie</title>
+    <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
     <main>
@@ -15,8 +15,12 @@
       </header>
 
       <section id="setup-callout" class="setup-callout" hidden>
-        <b>Connect Magpie first</b>
-        <p>Open the dashboard, click <i>Pair extension</i>, and paste both values below.</p>
+        <b>Connect Magpie</b>
+        <p>
+          Open the dashboard in a new tab and click <i>Pair extension</i>. Copy
+          the pairing URL and token it shows you, then come back to this side
+          panel — it stays open — and paste both values below.
+        </p>
       </section>
 
       <div id="capture-zone">
@@ -60,7 +64,7 @@
       </div>
 
       <button id="open-dashboard" class="dashboard-link">
-        Open dashboard
+        Open dashboard in a new tab
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
       </button>
 
@@ -80,6 +84,6 @@
         Write-only by design — this token can never read your data.
       </footer>
     </main>
-    <script type="module" src="popup.js"></script>
+    <script type="module" src="sidepanel.js"></script>
   </body>
 </html>

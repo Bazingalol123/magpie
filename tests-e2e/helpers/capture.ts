@@ -2,43 +2,46 @@ import type { BrowserContext, Page } from "@playwright/test";
 import type { PairingCredentials } from "./dashboard";
 
 /**
- * Opens the extension's real popup.html as a normal tab in the same
+ * Opens the extension's real sidepanel.html as a normal tab in the same
  * persistent context. This is the standard (and only available) way to
- * drive an MV3 action-popup's own UI under Playwright — there is no API to
- * click the real toolbar icon and have Chrome float a popup window under
- * automation. popup.html/popup.js are otherwise unmodified production code.
+ * drive the Side Panel's own UI under Playwright — there is no API to click
+ * the real toolbar icon and have Chrome float the actual side panel surface
+ * under automation. sidepanel.html/sidepanel.js are otherwise unmodified
+ * production code (issue #46 migrated this from an action-click popup;
+ * unlike the old popup, this page no longer closes itself after a
+ * successful capture/picker-start/dashboard-open).
  */
-export async function openPopup(context: BrowserContext, extensionId: string): Promise<Page> {
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  return popup;
+export async function openSidePanel(context: BrowserContext, extensionId: string): Promise<Page> {
+  const sidePanel = await context.newPage();
+  await sidePanel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  return sidePanel;
 }
 
 /**
- * Fills the real popup connection-settings form (#ingest-url,
+ * Fills the real Side Panel connection-settings form (#ingest-url,
  * #extension-token) with the values pairExtensionViaDialog() read out of
  * the dashboard, then clicks the real "save-settings" button — the same UI
  * path a person copy-pasting the pairing dialog's two values would use.
- * popup.js's own updateConnectionState() flips document.body.dataset.connected
- * to "true" once both fields are non-empty, which this waits on as proof
- * the extension is genuinely paired rather than just assuming the click
- * worked.
+ * sidepanel.js's own updateConnectionState() flips
+ * document.body.dataset.connected to "true" once both fields are non-empty,
+ * which this waits on as proof the extension is genuinely paired rather
+ * than just assuming the click worked.
  */
-export async function savePairingIntoExtension(popup: Page, pairing: PairingCredentials): Promise<void> {
-  await popup.locator("#ingest-url").fill(pairing.ingestUrl);
-  await popup.locator("#extension-token").fill(pairing.token);
-  await popup.locator("#save-settings").click();
-  await popup.waitForFunction(() => document.body.dataset.connected === "true", undefined, { timeout: 10_000 });
+export async function savePairingIntoExtension(sidePanel: Page, pairing: PairingCredentials): Promise<void> {
+  await sidePanel.locator("#ingest-url").fill(pairing.ingestUrl);
+  await sidePanel.locator("#extension-token").fill(pairing.token);
+  await sidePanel.locator("#save-settings").click();
+  await sidePanel.waitForFunction(() => document.body.dataset.connected === "true", undefined, { timeout: 10_000 });
 }
 
 /**
  * Finds the tabId of an already-open page by URL, from inside an extension
- * page's own chrome.* API access (any extension page — popup, background,
- * etc. — can call chrome.tabs.query with the "tabs" permission, which this
- * extension already has in manifest.json).
+ * page's own chrome.* API access (any extension page — side panel,
+ * background, etc. — can call chrome.tabs.query with the "tabs" permission,
+ * which this extension already has in manifest.json).
  */
-export async function getTabId(popup: Page, url: string): Promise<number> {
-  const tabId = await popup.evaluate(async (targetUrl) => {
+export async function getTabId(sidePanel: Page, url: string): Promise<number> {
+  const tabId = await sidePanel.evaluate(async (targetUrl) => {
     const tabs = await chrome.tabs.query({ url: targetUrl });
     return tabs[0]?.id;
   }, url);
@@ -47,24 +50,24 @@ export async function getTabId(popup: Page, url: string): Promise<number> {
 }
 
 /**
- * popup.js's own button handlers (start-picker/start-visual/save-page) all
- * call chrome.tabs.query({active: true, currentWindow: true}) to find their
- * target tab, matching a real toolbar-icon click where the popup floats
- * over the page the user was already looking at. Opening popup.html as its
- * own Playwright tab makes THAT tab the active one instead, so this
- * explicitly re-activates the fixture tab first — a real chrome.tabs API
- * call, not a bypass of popup.js's own logic, which is exercised unmodified
- * once the active tab is correct again.
+ * sidepanel.js's own button handlers (start-picker/start-visual/save-page)
+ * all call chrome.tabs.query({active: true, currentWindow: true}) to find
+ * their target tab, matching a real toolbar-icon click where the Side Panel
+ * sits alongside the page the user was already looking at. Opening
+ * sidepanel.html as its own Playwright tab makes THAT tab the active one
+ * instead, so this explicitly re-activates the fixture tab first — a real
+ * chrome.tabs API call, not a bypass of sidepanel.js's own logic, which is
+ * exercised unmodified once the active tab is correct again.
  */
-export async function activateTab(popup: Page, tabId: number): Promise<void> {
-  await popup.evaluate(async (id) => {
+export async function activateTab(sidePanel: Page, tabId: number): Promise<void> {
+  await sidePanel.evaluate(async (id) => {
     await chrome.tabs.update(id, { active: true });
   }, tabId);
 }
 
 /**
  * Polls the service worker's own "magpie:capture-status" message (the same
- * one popup.js checks on open to decide whether to disable its capture
+ * one sidepanel.js checks on open to decide whether to disable its capture
  * buttons) until the single-flight `captureInFlight` lock in
  * extension/service-worker.js clears. Local AI-routing calls can be slow —
  * `npx base44 dev` proxies AI Gateway calls to production rather than
@@ -73,20 +76,20 @@ export async function activateTab(popup: Page, tabId: number): Promise<void> {
  * to ingest-clip has returned yet (the Clip is created before routing
  * finishes, but the extension is still awaiting the full response). Callers
  * that need to start a second real capture (e.g. a duplicate-retry check)
- * must wait for this to clear first, or popup.js's own buttons stay
+ * must wait for this to clear first, or sidepanel.js's own buttons stay
  * disabled and the retry action never actually fires.
  */
-export async function waitForCaptureIdle(popup: Page, timeoutMs = 60_000): Promise<void> {
+export async function waitForCaptureIdle(sidePanel: Page, timeoutMs = 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const status = await popup.evaluate(
+    const status = await sidePanel.evaluate(
       () =>
         new Promise((resolve) => {
           chrome.runtime.sendMessage({ type: "magpie:capture-status" }, resolve);
         }),
     );
     if (!(status as { inFlight?: boolean } | undefined)?.inFlight) return;
-    await popup.waitForTimeout(300);
+    await sidePanel.waitForTimeout(300);
   }
   throw new Error("Timed out waiting for the extension's single-flight capture lock to clear");
 }
@@ -107,9 +110,9 @@ export type CaptureTabResult = {
 
 /**
  * Sends the real "magpie:capture-tab" runtime message that
- * extension/service-worker.js already handles in production (popup.js's own
- * "Save page" button uses exactly this message for page-mode captures). The
- * service worker routes it through the same withCaptureLock(() =>
+ * extension/service-worker.js already handles in production (sidepanel.js's
+ * own "Save page" button uses exactly this message for page-mode captures).
+ * The service worker routes it through the same withCaptureLock(() =>
  * captureFromTab(tabId, mode)) pipeline a right-click context-menu item
  * would use — captureFromTab, buildContextPayload, the screenshot step, and
  * submitCapture are all unmodified production code.
@@ -123,8 +126,8 @@ export type CaptureTabResult = {
  * directly instead of the unautomatable menu click. See
  * docs/ENGINEERING_NOTES.md for the full writeup of this limitation.
  */
-export async function triggerCaptureTab(popup: Page, tabId: number, mode: string): Promise<CaptureTabResult> {
-  return popup.evaluate(
+export async function triggerCaptureTab(sidePanel: Page, tabId: number, mode: string): Promise<CaptureTabResult> {
+  return sidePanel.evaluate(
     async ({ tabId: id, mode: captureMode }) => {
       return await chrome.runtime.sendMessage({ type: "magpie:capture-tab", tabId: id, mode: captureMode });
     },

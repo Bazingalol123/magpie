@@ -1,6 +1,6 @@
 import { test, expect, readOwner, readRuntime } from "../helpers/extension-test";
 import { createOwnerClient, countClipsForSource, getClip } from "../helpers/backend";
-import { getTabId, openPopup, triggerCaptureTab } from "../helpers/capture";
+import { getTabId, openSidePanel, triggerCaptureTab } from "../helpers/capture";
 
 // Image mode: right-clicked image crop + alt/caption + surrounding text
 // (docs/V3_1_PRODUCT_AND_RISK_PLAN.md's multi-mode capture contract). Real
@@ -24,10 +24,10 @@ test("image capture reads the right-clicked image's alt/caption text, and dedupe
   await image.click({ button: "right" });
   await page.keyboard.press("Escape").catch(() => {});
 
-  const popup = await openPopup(context, extensionId);
-  const tabId = await getTabId(popup, url);
+  const sidePanel = await openSidePanel(context, extensionId);
+  const tabId = await getTabId(sidePanel, url);
 
-  const first = await triggerCaptureTab(popup, tabId, "image");
+  const first = await triggerCaptureTab(sidePanel, tabId, "image");
   expect(first.ok, `capture-tab failed: ${first.error}`).toBe(true);
   expect(first.result?.capture_status).toBe("new");
   const clipId = first.result?.clip_id;
@@ -51,7 +51,7 @@ test("image capture reads the right-clicked image's alt/caption text, and dedupe
   // by content_hash (B8), not create a second Clip.
   await image.click({ button: "right" });
   await page.keyboard.press("Escape").catch(() => {});
-  const retry = await triggerCaptureTab(popup, tabId, "image");
+  const retry = await triggerCaptureTab(sidePanel, tabId, "image");
   expect(retry.ok, `capture-tab retry failed: ${retry.error}`).toBe(true);
   expect(retry.result?.capture_status).toBe("duplicate");
   expect(retry.result?.clip_id).toBe(clipId);

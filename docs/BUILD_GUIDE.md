@@ -1107,3 +1107,85 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Not yet deployed:** no entity/schema change — needs
   `npx base44 functions deploy delete-record delete-collection delete-mission`
   with explicit owner approval per `CLAUDE.md`.
+
+### 38. Migrate the extension from a popup to a Chrome Side Panel (issue #46)
+
+- [x] **Build:** `extension/manifest.json` now declares
+  `side_panel.default_path: "sidepanel.html"` and the `sidePanel`
+  permission, and drops `action.default_popup` entirely — clicking the
+  toolbar icon opens the Side Panel via
+  `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`,
+  called once in `service-worker.js`'s existing `onInstalled` listener
+  (wrapped in `.catch()` so an older-Chrome rejection can't block the
+  context-menu/content-script setup that already lives there). The popup UI
+  is renamed and rewritten as `extension/sidepanel.html`/`.css`/`.js`:
+  - CSS drops the fixed 340px popup frame for a fluid width (`width: 100%;
+    min-width: 280px`) with a flex-column `main` so the trust-boundary
+    footer pins to the bottom of whatever height the panel is resized to.
+  - Every `window.close()` call is removed — after a successful Save page,
+    after starting the element picker or visual snip, and after opening the
+    dashboard, the panel now updates its own status text and re-enables the
+    capture buttons in a `finally` block instead of relying on the surface
+    closing itself.
+  - The setup-callout and status copy are now explicit about the two-step
+    flow the acceptance criteria require: "Open the dashboard in a new tab
+    and click Pair extension... come back to this side panel — it stays
+    open — and paste both values below," and the Open-dashboard button is
+    labeled "Open dashboard in a new tab."
+  - No pairing field, Project/intent selector, auto-refresh toggle, or
+    connection-pill logic was dropped — `chrome.storage.local` keys
+    (`ingestUrl`, `extensionToken`, `activeMissionId`, `captureIntent`,
+    `autoRefreshEnabled`, `savedUrls`) are untouched, so an existing paired
+    profile stays paired across the upgrade with no migration step.
+  - `content.js` and the rest of `service-worker.js` (capture lock,
+    `submitCapture`, `addViewportScreenshot`, context menus, auto-refresh
+    tab listener) are unmodified — the plain-`fetch` + opaque-pairing-token
+    capture protocol did not move.
+  - Dashboard copy that described "the popup" (`src/App.jsx`'s pairing
+    dialog, `src/onboarding/PairingChecklist.jsx`'s waiting-state copy) now
+    says "side panel" to match.
+  - User docs (`README.md`, `docs/GETTING_STARTED.md`,
+    `docs/PRODUCT_GUIDE.md`, `docs/API.md`) updated from popup to Side
+    Panel language; `docs/GETTING_STARTED.md`'s pairing walkthrough was
+    rewritten for the "side panel stays open, dashboard opens in a new tab"
+    flow.
+  - Added a new focused Deno fixture,
+    `tests/extension-manifest.test.ts` (4 fixtures): manifest is valid
+    JSON with no `action.default_popup`, declares
+    `side_panel.default_path` and the `sidePanel` permission; every
+    manifest-referenced file (`background.service_worker`,
+    `side_panel.default_path`, top-level `icons`, `action.default_icon`,
+    `content_scripts` js/css) exists on disk; the old `popup.html`/`.js`/
+    `.css` files and manifest references are gone; `sidepanel.js` has no
+    `@base44/sdk` import.
+  - Updated `tests-e2e/helpers/capture.ts` and every
+    `tests-e2e/specs/capture-*.spec.ts` file (all 6 capture-mode specs plus
+    `global-setup.ts`) to open `sidepanel.html` (renamed `openPopup` ->
+    `openSidePanel`) and to drop comments claiming the surface closes
+    itself, since it no longer does. This suite was not executed in this
+    pass — see the verification note below and `docs/DECISIONS.md`.
+  - Bumped `extension/manifest.json` version `0.2.0` -> `0.3.0` (last
+    released tag was `extension-v0.2.0`; this is a user-facing feature
+    change, not a patch).
+- **Files:** `extension/manifest.json`, `extension/service-worker.js`,
+  `extension/sidepanel.html` (new), `extension/sidepanel.css` (new),
+  `extension/sidepanel.js` (new), `extension/popup.html`/`.css`/`.js`
+  (removed), `tests/extension-manifest.test.ts` (new), `src/App.jsx`,
+  `src/onboarding/PairingChecklist.jsx`, `tests-e2e/helpers/capture.ts`,
+  `tests-e2e/global-setup.ts`, `tests-e2e/specs/capture-*.spec.ts`,
+  `README.md`, `docs/GETTING_STARTED.md`, `docs/PRODUCT_GUIDE.md`,
+  `docs/API.md`, `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`, `docs/DECISIONS.md`.
+- **Verify:** `deno test --allow-env --allow-read tests` — 147/147 passing
+  (was 143; 4 net new fixtures). `deno check` passes on all 16
+  `base44/functions/**/entry.ts` (unaffected; extension-only change).
+  `node --check` passes on every `extension/**/*.js`. The
+  `@base44/sdk`-in-`extension/` grep is clean. `npm run build` passes.
+  **Not performed:** any real-Chrome manual verification (toolbar click
+  opening the actual Side Panel, panel persisting across a tab switch to
+  the dashboard, worker-sleep/wake behavior) — this session had no way to
+  launch real Chrome. See `docs/DECISIONS.md` for the full list of what was
+  and was not verified.
+- **No backend/entity/site change; no deploy needed.** Ships as a
+  version-bumped `extension-v0.3.0` GitHub Release after merge and explicit
+  owner approval — this task opens the PR only and does not push that tag,
+  per `CLAUDE.md`.

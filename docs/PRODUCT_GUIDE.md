@@ -110,7 +110,7 @@ Items actually filed under the Project are removed.
   have. Real changes land in history, freshness recovers, and an auto-paused
   watch wakes back up. Bounded to pages you explicitly saved, rate-limited to
   once per page per 12 hours, announced by a toast when it changes anything,
-  and switchable off in the popup.
+  and switchable off in the side panel.
 
 ## Ask Magpie
 
