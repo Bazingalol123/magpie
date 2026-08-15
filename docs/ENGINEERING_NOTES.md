@@ -1217,3 +1217,23 @@ returns nothing for either); `enrich-record`'s entry point uses
 dead code carrying a known-wrong error-handling assumption. Recommend a
 follow-up cleanup issue to delete them; not fixed here since this pass is
 docs-only and neither is reachable in production.
+
+## 2026-08-16 — Picker/snip mode-switch bug: the re-entrancy guard was too broad
+
+`content.js`'s `startPicker`/`startSnip` each guarded against double-starting
+with `if (pickerActive || snipActive) return;` — correct for stopping a
+second click on the *same* button from re-adding listeners, but it also
+silently blocked switching from one mode to the other, since the guard
+doesn't distinguish "already in this mode" from "in the other mode." The
+Side Panel UI had no way to detect this: `startPickerInTab` in `sidepanel.js`
+resolves as soon as `chrome.tabs.sendMessage` reaches the content script's
+listener, not once the requested mode actually starts, so the status text
+optimistically claimed success regardless. Fix: each start function now only
+guards against its own mode already being active, and tears down the other
+mode first (`stopSnip()`/`stopPicker()`) if it's running. Same root file also
+had a related toast bug: `stopPicker()`/`stopSnip()` never dismissed the
+"Hover any element..."/"Drag to select..." hint toast on Escape — it only
+self-cleared via its own timer (8s for a "hint" toast), so Escape looked
+inert for up to 8 seconds. Added `hideToast()` and call it from both stop
+functions, which also fixes the visual handoff when switching modes (the old
+mode's hint disappears immediately instead of overlapping the new one).
