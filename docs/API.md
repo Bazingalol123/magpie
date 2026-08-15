@@ -84,8 +84,9 @@ items, or captures. Empty body `{}` is a valid request.
 Report fresh page text for a previously captured URL, so an Item can update
 from the owner's own browser when server checks are blocked.
 
-**Request:** `source_url` (required, exact URL of a prior capture),
-`raw_text` (required, ≤20,000 chars).
+**Request:** `source_url` (required, the URL of a prior capture — matched
+against `Record.canonical_url` first, falling back to an exact `source_url`
+match for older Records), `raw_text` (required, ≤20,000 chars).
 
 **Success `200`:** `{"outcome": "updated", "change_count": 1, "checked_at": "…"}`
 — outcome is one of `updated`, `unchanged`, `no_match`, `suspicious`. Real

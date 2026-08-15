@@ -142,10 +142,34 @@ The SDK-import search must return no extension matches.
 
 ## Current continuation point
 
+> Reconciled 2026-08-16 by the issue #47 documentation audit. This section
+> was stale (test count and deploy status); see `docs/CLAUDE_CODE_HANDOFF.md`
+> and `docs/BETA_LIMITATIONS.md` for the full current picture and evidence.
+
 The ten-gap release (Build Guide 29.4) is deployed at
 <https://magpieorelse.base44.app>: Item deletion, review dismissal,
 Project-scoped creation, blocked-watch auto-pause, chat markdown, review UX,
-and the static CSS-3D landing page. The suite is 102/102. Next, in order: a
-manual browser pass of the new surfaces, the `getOrNull` 404 sweep across older
-functions, then folders or competition finish per
-`docs/CLAUDE_CODE_HANDOFF.md`.
+and the static CSS-3D landing page. Work has continued well past that
+checkpoint (cascade-delete pagination hardening, dashboard pagination
+completeness, a Chrome capture Playwright matrix, first-run onboarding, and
+public SEO/trust pages), and the automated suite is now 143/143, not 102/102
+— see `docs/CLAUDE_CODE_HANDOFF.md`'s "Latest verified release gates" for the
+current count and how it was reconfirmed.
+
+The `getOrNull` 404 sweep across older functions is effectively resolved: the
+only backend code using the unsafe raw `.get(id)` pattern (`if (!row) throw
+404`, which the hosted SDK does not actually support — see
+`docs/API_AND_FAILURE_MAP.md`'s "Hosted note" under `resolve-routing`) is
+`base44/shared/enrichment.ts`'s `enrichRecord` and
+`base44/shared/classification.ts`'s `classifyStoredClip`, and neither is
+imported by any current `base44/functions/*/entry.ts` (verified by grep,
+2026-08-16) — they are dead code, not a live 404-handling gap. Recommend a
+follow-up cleanup issue to delete them rather than leaving live-looking dead
+code with a known-wrong error-handling pattern in `base44/shared/`; this is a
+cleanup, not a behavior fix, so it was not made here.
+
+Next, in order: a manual browser pass of the current surfaces (review,
+deletion, onboarding, blocked-source recovery — still outstanding per
+`docs/CLAUDE_CODE_HANDOFF.md`), then folders (issue #25) or the beta backlog
+(issues #46 Side Panel, #48 Don't-Make-Me-Think audit, #49 release checklist)
+per `docs/CLAUDE_CODE_HANDOFF.md`.

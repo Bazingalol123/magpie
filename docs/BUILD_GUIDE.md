@@ -1107,3 +1107,56 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Not yet deployed:** no entity/schema change — needs
   `npx base44 functions deploy delete-record delete-collection delete-mission`
   with explicit owner approval per `CLAUDE.md`.
+  **2026-08-16 update:** this deploy has since happened — see checkpoint
+  below.
+
+### 38. Pre-beta documentation audit (issue #47)
+
+> Numbering note: this repository already has two checkpoints labeled
+> "### 37" (the Chrome capture integration matrix, and this file's B13
+> entry immediately above) from earlier concurrent work landing
+> out of strict order. Not renumbered here to avoid disturbing history;
+> flagged as a doc-audit finding. This entry uses the next unused number.
+
+- [x] **Build (docs-only, no runtime change):** Read
+  `docs/PRODUCT_CHARTER.md`, `docs/CLAUDE_CODE_HANDOFF.md`,
+  `docs/API_AND_FAILURE_MAP.md`, `docs/BUILD_GUIDE.md`,
+  `docs/ENGINEERING_NOTES.md`, `docs/DECISIONS.md`,
+  `docs/GETTING_STARTED.md`, `docs/PRODUCT_GUIDE.md`, `docs/API.md`,
+  `README.md`, and `docs/BUGS_AND_BEHAVIORS.md` in full, then verified their
+  factual claims against current source (`base44/functions/`,
+  `base44/shared/`, `extension/`, `src/`), the local release-gate commands,
+  and `deploy-base44.yml`'s GitHub Actions run history rather than trusting
+  prior doc text. Found and corrected: two stale test-count summaries
+  (102/102 → 143/143 in `CLAUDE.md` and `docs/CLAUDE_CODE_HANDOFF.md`; the
+  detailed docs already had 143/143), a stale backend-function count (16 →
+  17, missing `report-bug`), several "not yet deployed"/"not merged" claims
+  that GitHub Actions run history shows are now false (B13, G1, G9's site
+  code, `report-bug`, and the `fix/p0-bugfix-pass`/`fix/p0-cascade-delete-
+  pagination` branches, all confirmed merged via `git log origin/main` and/or
+  deployed via successful `deploy-base44.yml` dispatches), a `refresh-capture`
+  contract description that hadn't been updated for the canonical-URL-first
+  lookup change, a misplaced paragraph in `docs/DECISIONS.md`, and two dead
+  code paths (`enrichRecord` in `base44/shared/enrichment.ts`,
+  `classifyStoredClip` in `base44/shared/classification.ts`) carrying a
+  known-wrong "SDK `.get()` returns null" assumption that `docs/
+  API_AND_FAILURE_MAP.md` itself documents as false for the hosted SDK —
+  both unreachable from any current entry point, flagged for a follow-up
+  cleanup issue rather than fixed here. Also confirmed no Chrome Side Panel
+  code or docs exist yet (issue #46 unmerged, `extension/manifest.json`
+  still `action.default_popup`) — every popup-based instruction in the
+  current docs remains accurate.
+- **Files:** `README.md`, `docs/README.md`, `docs/CLAUDE_CODE_HANDOFF.md`,
+  `docs/API_AND_FAILURE_MAP.md`, `docs/API.md`, `docs/BUGS_AND_BEHAVIORS.md`,
+  `docs/DECISIONS.md`, `docs/ENGINEERING_NOTES.md`, `docs/RELEASE_NOTES.md`,
+  `docs/BUILD_GUIDE.md` (this entry), `docs/BETA_LIMITATIONS.md` (new),
+  `CLAUDE.md`. No `base44/`, `extension/`, or `src/` file changed.
+- **Verify:** `deno test --allow-env --allow-read tests` 143/143; `deno
+  check` clean on all 17 `base44/functions/*/entry.ts`; `node --check` clean
+  on every `extension/*.js`; `rg -n "@base44/sdk" extension` empty; `npm run
+  build` passes. All re-run locally 2026-08-16 as part of the audit, not
+  assumed from prior docs.
+- **Deployed:** N/A — documentation only. See the audit table and
+  `docs/BETA_LIMITATIONS.md` in the issue #47 PR for the full claim-by-claim
+  status (source-only / locally-verified / deployed / live-verified /
+  unknown) this checkpoint produced.

@@ -121,10 +121,15 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Success:** `200` with a typed outcome only: `updated` (with `change_count`),
   `unchanged`, `no_match`, or `suspicious`. No Record, Collection, or Clip
   contents are returned.
-- **Behavior:** matches the owner's most recent Record by exact `source_url`;
-  diffs watched fields from the supplied bounded text through the same
-  extraction and suspicious-value guards as `enrich-record`; appends Enrichment
-  rows and restores freshness on real changes; resets watch failure counts and
+- **Behavior:** matches the owner's most recent Record by canonicalized URL
+  first (`Record.canonical_url`, which absorbs tracking/session query-param
+  drift the same way capture-time duplicate detection does — see B8 in
+  `docs/BUGS_AND_BEHAVIORS.md`), falling back to an exact `source_url` match
+  for Records created before that field existed
+  (verified against `base44/functions/refresh-capture/entry.ts`); diffs
+  watched fields from the supplied bounded text through the same extraction
+  and suspicious-value guards as `enrich-record`; appends Enrichment rows and
+  restores freshness on real changes; resets watch failure counts and
   reactivates an `AUTO_PAUSED_BLOCKED` watch.
 - **Expected cases:** missing token `401`; inactive pairing `403`; malformed
   input `400`; no matching Record is `no_match`, not an error.

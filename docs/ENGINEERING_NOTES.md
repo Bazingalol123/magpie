@@ -1101,3 +1101,77 @@ build` clean. No entity/schema change — the fix is pure logic inside an
 already-deployed shared module, so it only needs a targeted
 `functions deploy delete-record delete-collection delete-mission` (owner
 approval required, not yet run).
+
+## 2026-08-16 — Issue #47 pre-beta documentation audit: deployment status was stale, not the code
+
+Re-ran the full release-gate suite from a clean worktree and cross-checked
+`deploy-base44.yml`'s GitHub Actions run history (`gh api
+repos/Bazingalol123/magpie/actions/runs`, `gh run view <id> --json ...jobs`)
+against `git log origin/main`, because several docs (this file's own last
+entry included, plus `docs/CLAUDE_CODE_HANDOFF.md` and
+`docs/BUGS_AND_BEHAVIORS.md`) asserted "not yet deployed"/"needs owner
+approval, not yet run" for work that had, in fact, already gone through a
+CI-dispatched, approval-gated deploy since those notes were written. This is
+a docs-audit finding, not new engineering work; no source changed.
+
+**What re-running the gates found:** `deno test --allow-env --allow-read
+tests` is 143/143 (matches the last checkpoint above; unchanged). `deno
+check` on `$(find base44/functions -name entry.ts)` is clean across all
+**17** entry points — one more than the "16" figure this file, `README.md`,
+and `docs/CLAUDE_CODE_HANDOFF.md` had been citing; the seventeenth is
+`report-bug` (Build Guide checkpoint 34), which existing counts had stopped
+including. `node --check` is clean on every `extension/*.js` file. `rg -n
+"@base44/sdk" extension` is empty. `npm run build` succeeds
+(`dist/assets/index-*.js` is ~527 kB pre-gzip, unchanged from prior builds —
+Vite already warns about this; not addressed here, out of scope for a docs
+audit).
+
+**What the GitHub Actions history showed, that the docs didn't reflect:**
+`gh run list --workflow=deploy-base44.yml` shows 12 successful dispatches in
+the visible history, the last three of interest here:
+
+- Run `31849671121` — `target=functions` at commit `f542c4e` (the B13
+  cascade-delete-pagination fix, PR #40), 2026-08-14T23:14:53Z, succeeded.
+  `npx base44 functions deploy --force` (see `.github/workflows/
+  deploy-base44.yml`) redeploys every function unconditionally, regardless of
+  which one changed — so this single dispatch put all 17 functions'
+  then-current source into production, not just the three the B13 fix
+  touched. `report-bug` (previously documented as "not yet deployed" in
+  Build Guide checkpoint 34) went live in the same dispatch.
+- Run `31850021926` — `target=site` at the same commit `f542c4e`,
+  2026-08-14T23:20:40Z, succeeded, shipping the G1 dashboard-pagination
+  frontend fix (which predates `f542c4e` in `main`'s history, so it was
+  already included).
+- Run `31852725909` — `target=site` at commit `e2a4f84` (current `main`
+  HEAD as of this audit), 2026-08-15T00:09:16Z, succeeded.
+  `git diff f542c4e..e2a4f84 -- base44/` is empty, so the functions deployed
+  by the first run above are still the current backend source — no function
+  code has changed since.
+- No `target=entities` or `target=agents` dispatch appears in the visible
+  run history checked, so this audit could not independently confirm entity
+  schema or Agent sync status beyond what earlier entries in this file
+  already documented as run locally.
+
+**What this does and doesn't establish:** a successful CI deploy run is
+verifiable evidence that code was pushed to the production Base44 app — it
+is not the same claim as "a human clicked through the resulting UI in
+production and it worked." Every place this correction touches a "not yet
+deployed" claim, it upgrades the status to "deployed" (with the run ID as
+evidence) while leaving "browser/live-verified" as a separate, still-mostly-
+open claim. See `docs/BUGS_AND_BEHAVIORS.md` (B13, G1),
+`docs/CLAUDE_CODE_HANDOFF.md`, `docs/DECISIONS.md`'s dated entry, and
+`docs/BETA_LIMITATIONS.md` for where each correction landed.
+
+**getOrNull 404 sweep (mentioned as outstanding in `CLAUDE.md`):** checked
+which `base44/functions/*/entry.ts` files call `.get(id)` directly instead of
+through `getOrNull` (`base44/shared/service-entities.ts`), since
+`docs/API_AND_FAILURE_MAP.md` documents that the hosted SDK throws rather
+than returning null on a missing ID. Two call sites use the unsafe raw
+pattern — `enrichRecord` in `base44/shared/enrichment.ts` and
+`classifyStoredClip` in `base44/shared/classification.ts` — but neither is
+imported by any current entry point (`grep -rln` across `base44/functions`
+returns nothing for either); `enrich-record`'s entry point uses
+`enrichment-v2.ts` instead, and nothing calls `classifyStoredClip`. Both are
+dead code carrying a known-wrong error-handling assumption. Recommend a
+follow-up cleanup issue to delete them; not fixed here since this pass is
+docs-only and neither is reachable in production.
