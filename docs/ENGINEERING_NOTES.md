@@ -757,7 +757,7 @@ real breach.
 
 This made a genuinely live, non-production two-owner test possible without a
 browser: `base44 dev`'s local auth seeds the currently-logged-in CLI
-identity (`omerkrespi.1@gmail.com`) as `role: "admin"` on startup — the same
+identity (the app creator's account) as `role: "admin"` on startup — the same
 mechanism that made the 2026-07-26 incident possible in production (Base44
 assigns `role: admin` to the app creator by default) — and its `/register` +
 `/verify-otp` flow works fully locally, echoing the OTP to the dev server's
