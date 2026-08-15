@@ -158,7 +158,7 @@ directory.
 base44/entities/        Owner-scoped Base44 schemas
 base44/functions/       17 backend functions (ingest, routing, review, deletion, refresh, bug reports, Agent tools)
 base44/shared/          Deterministic validation and reusable backend logic
-extension/              MV3 picker, snip tool, worker, and pairing popup (Chrome Side Panel migration tracked in issue #46, not yet merged)
+extension/              MV3 picker, snip tool, worker, and pairing side panel
 src/                    Landing page and realtime dashboard
 tests/                  143 pure Deno fixtures
 docs/                   User docs, API reference, charter, and engineering history

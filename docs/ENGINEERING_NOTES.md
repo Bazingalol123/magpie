@@ -1102,6 +1102,48 @@ already-deployed shared module, so it only needs a targeted
 `functions deploy delete-record delete-collection delete-mission` (owner
 approval required, not yet run).
 
+## 2026-08-16 — Side Panel migration (issue #46): what actually needed to change vs. what didn't
+
+The MV3 Side Panel API turned out to be a small, additive surface, not a
+rewrite. The only non-UI-file change needed was one call —
+`chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` — added
+once inside the existing `chrome.runtime.onInstalled` listener in
+`service-worker.js`, next to the existing `installContextMenus()` and
+`reinjectContentScripts()` calls. Per Chrome's documented behavior, this
+setting persists across service-worker restarts once set at install/update
+time, so it does not need to run on every wake, matching how the two
+existing calls in that same listener already behave. `action.default_popup`
+and `side_panel.default_path` are mutually exclusive in practice — an action
+with both a popup and Side Panel behavior enabled just opens the popup on
+click and the Side Panel only via the toolbar icon's separate menu — so this
+migration removed `default_popup` entirely rather than layering the two.
+
+The real work was in the UI file itself, not the manifest: every one of the
+old popup's four `window.close()` calls (Save page success, element-picker
+start, visual-snip start, Open dashboard) was there specifically because a
+Chrome action-popup is a transient overlay that Chrome auto-closes on
+outside interaction, so the code proactively closed it rather than leaving a
+stale "Capturing…" popup floating over a page a person had already clicked
+away from. A Side Panel has the opposite lifecycle — it is a persistent
+per-window surface that Chrome does not auto-close — so keeping any of the
+old `window.close()` calls would have been actively wrong: it would close
+the one surface the whole migration exists to keep open. The fix in each
+spot was symmetrical: replace the close with a status-text update, and move
+`setCaptureButtonsBusy(false)` into a `finally` block so the buttons
+re-enable regardless of outcome instead of relying on the surface
+disappearing.
+
+One easy trap avoided: `chrome.storage.local` state (`ingestUrl`,
+`extensionToken`, `activeMissionId`, `captureIntent`, `autoRefreshEnabled`,
+`savedUrls`) is keyed by name only, not by which HTML page reads it, so
+renaming `popup.html`/`popup.js` to `sidepanel.html`/`sidepanel.js` needed no
+migration step — an already-paired install upgrades in place. This was
+verified by inspection (every `chrome.storage.local.get`/`.set` call in the
+old `popup.js` and the new `sidepanel.js` uses the identical key names), not
+by an actual browser reload, since this session had no way to launch real
+Chrome — see `docs/DECISIONS.md` for the full list of what was and was not
+verified for this change. **Merged to `main` 2026-08-16 as PR #50.**
+
 ## 2026-08-16 — Issue #47 pre-beta documentation audit: deployment status was stale, not the code
 
 Re-ran the full release-gate suite from a clean worktree and cross-checked

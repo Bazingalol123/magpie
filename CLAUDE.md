@@ -170,6 +170,7 @@ cleanup, not a behavior fix, so it was not made here.
 
 Next, in order: a manual browser pass of the current surfaces (review,
 deletion, onboarding, blocked-source recovery — still outstanding per
-`docs/CLAUDE_CODE_HANDOFF.md`), then folders (issue #25) or the beta backlog
-(issues #46 Side Panel, #48 Don't-Make-Me-Think audit, #49 release checklist)
-per `docs/CLAUDE_CODE_HANDOFF.md`.
+`docs/CLAUDE_CODE_HANDOFF.md`; also owed for the merged issue #46 Side Panel
+migration), then folders (issue #25) or the beta backlog (issue #48
+Don't-Make-Me-Think audit, #49 release checklist) per
+`docs/CLAUDE_CODE_HANDOFF.md`.

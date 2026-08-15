@@ -75,7 +75,7 @@ pairing `403`; unavailable selected Project `409`.
 
 ### `extension-context`
 
-Fetch the bounded context the popup needs: the owner's active Projects (id +
+Fetch the bounded context the extension side panel needs: the owner's active Projects (id +
 title only) and `auto_organize: true`. Returns nothing else — no collections,
 items, or captures. Empty body `{}` is a valid request.
 

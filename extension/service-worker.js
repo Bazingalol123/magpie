@@ -7,7 +7,7 @@ const DEFAULT_CONFIG = {
 const REFRESH_MIN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const MAX_REMEMBERED_URLS = 500;
 
-// Every capture path (picker/snip in content.js, popup buttons, the right-click
+// Every capture path (picker/snip in content.js, Side Panel buttons, the right-click
 // menu) funnels through here before hitting the network. One in-flight capture
 // at a time keeps a double-click or a stacked right-click from firing two
 // overlapping ingest requests and tripping the backend rate limit.
@@ -46,6 +46,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
+  // Chrome persists this setting across service-worker restarts, so it only
+  // needs to run once per install/update, same as the two calls below. If it
+  // rejects (older Chrome build), the toolbar action just falls back to
+  // doing nothing on click instead of breaking the rest of startup.
+  chrome.sidePanel
+    ?.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.warn("Magpie could not enable Side Panel on action click", error));
   installContextMenus();
   reinjectContentScripts();
 });

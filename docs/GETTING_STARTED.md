@@ -37,14 +37,20 @@ expected for any unpacked extension.
 
 ## 3. Pair the extension with your account
 
-1. In the dashboard, click **Pair extension** (top-right).
-2. The dialog shows two values: an **ingest function URL** and a one-time
-   **pairing token** (shown only once; the server keeps only its hash).
-3. Click the Magpie toolbar icon. The popup opens with a "Connect Magpie
-   first" notice and its **Connection** section already expanded.
-4. Paste both values and click **Save connection**.
+1. Click the Magpie toolbar icon. Chrome opens the Magpie **side panel** —
+   it docks alongside the page and stays open while you switch tabs, so you
+   never lose it mid-setup.
+2. In the side panel, click **Open dashboard in a new tab**. The dashboard
+   opens next to the side panel; click **Pair extension** (top-right) there.
+3. The dialog shows two values: an **ingest function URL** and a one-time
+   **pairing token** (shown only once; the server keeps only its hash). Copy
+   both.
+4. Switch back to the tab with the still-open side panel, paste both values
+   into the **Connection** section (already expanded), and click
+   **Save connection**.
 
-The popup's status pill flips to **● paired** and the capture buttons light up.
+The side panel's status pill flips to **● paired** and the capture buttons
+light up.
 
 ## 4. Capture something
 
@@ -53,9 +59,9 @@ a recipe — and pick whichever feels natural:
 
 | Action | How |
 |---|---|
-| **Clip element** | Popup button or `Alt+Shift+M`, hover the part you want (it highlights), then press `C` — or just click it |
-| **Snip area** | Popup button, then drag a rectangle over anything, exactly like a screenshot snipping tool |
-| **Save page** | Popup button; captures the page's title, description, and visible text |
+| **Clip element** | Side panel button or `Alt+Shift+M`, hover the part you want (it highlights), then press `C` — or just click it |
+| **Snip area** | Side panel button, then drag a rectangle over anything, exactly like a screenshot snipping tool |
+| **Save page** | Side panel button; captures the page's title, description, and visible text |
 | **Right-click** | Any selected text, link, or image → *Save … to Magpie* |
 
 You don't choose a destination — that's the point. A toast tells you what
@@ -85,7 +91,7 @@ collection (optionally under a new Project), or dismiss it.
   state — and here's the trick: **just visit the page yourself**. The
   extension notices you're on a page you saved, quietly re-captures it in your
   logged-in browser, and the Item heals itself, watch and all. On by default;
-  toggle it off in the popup any time.
+  toggle it off in the side panel any time.
 
 ## 7. Ask Magpie
 
@@ -99,7 +105,7 @@ runs through the same owner-checked backend as the buttons.
 
 | Symptom | Fix |
 |---|---|
-| Popup says "not connected" | Re-open **Pair extension** in the dashboard and paste fresh values — tokens are shown only once |
+| Side panel says "not connected" | Re-open **Pair extension** in the dashboard and paste fresh values — tokens are shown only once |
 | Capture buttons do nothing on a page | Chrome system pages (`chrome://…`, the Web Store) block all extensions; try a normal site |
 | Pressing `C` doesn't clip | Reload the extension at `chrome://extensions` — and note clicking the highlighted element always works too |
 | Old tabs ignore new extension features | Reload the extension once; it re-equips all open tabs automatically |

@@ -212,7 +212,7 @@ function PairingDialog({ pairing, onClose }) {
           <div><div className="eyebrow"><Key size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
-        <p>Copy both values into the Magpie extension popup. The pairing token is shown only now and is stored as a hash on the server.</p>
+        <p>Copy both values into the Magpie extension's side panel. The pairing token is shown only now and is stored as a hash on the server.</p>
         <div className="pairing-value"><span>Ingest function URL</span><code>{pairing.ingest_url}</code><button onClick={() => copy(pairing.ingest_url, "URL copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-value token"><span>Paired extension token</span><code>{pairing.token}</code><button onClick={() => copy(pairing.token, "Token copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-note"><ShieldCheck size={16} /> This token can only submit clips to your library. It cannot read anything from Magpie.</div>

@@ -14,7 +14,7 @@ function statusCopy(overallStatus) {
       return "This browser's connection looks inactive. Pair again to reconnect.";
     case PairingStepStatus.UNUSED:
     default:
-      return "Waiting for the extension — open the popup and try a capture.";
+      return "Waiting for the extension — open the side panel and try a capture.";
   }
 }
 

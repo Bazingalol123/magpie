@@ -1,11 +1,11 @@
 import { test, expect, readOwner, readRuntime } from "../helpers/extension-test";
 import { createOwnerClient, countClipsForSource, waitForNewClip } from "../helpers/backend";
-import { activateTab, getTabId, openPopup, waitForCaptureIdle, waitForToastGone } from "../helpers/capture";
+import { activateTab, getTabId, openSidePanel, waitForCaptureIdle, waitForToastGone } from "../helpers/capture";
 
 // Page mode: title + meta description + bounded visible text, no full-page
 // HTML (docs/V3_1_PRODUCT_AND_RISK_PLAN.md's multi-mode capture contract).
-// Driven through the real popup "Save page" button — the only mode with a
-// direct popup UI entry point besides element/visual.
+// Driven through the real Side Panel "Save page" button — the only mode
+// with a direct Side Panel UI entry point besides element/visual.
 test("page capture sends bounded text with no raw_html, and dedupes on retry", async ({ context, extensionId }) => {
   const runtime = readRuntime();
   const owner = readOwner();
@@ -15,14 +15,15 @@ test("page capture sends bounded text with no raw_html, and dedupes on retry", a
   const page = await context.newPage();
   await page.goto(url);
 
-  const popup = await openPopup(context, extensionId);
-  const tabId = await getTabId(popup, url);
-  await activateTab(popup, tabId);
+  const sidePanel = await openSidePanel(context, extensionId);
+  const tabId = await getTabId(sidePanel, url);
+  await activateTab(sidePanel, tabId);
 
   const notBeforeIso = new Date().toISOString();
-  await popup.locator("#save-page").click();
-  // popup.js closes its own window ~450ms after a successful capture; don't
-  // wait on the popup page itself past this point.
+  await sidePanel.locator("#save-page").click();
+  // Unlike the old popup, sidepanel.js does not close its own window after a
+  // successful capture (issue #46) — the status text on this same page
+  // updates in place once the request settles.
 
   const clip = await waitForNewClip(client, {
     ownerId: owner.id,
@@ -43,10 +44,10 @@ test("page capture sends bounded text with no raw_html, and dedupes on retry", a
   // AI routing finishes, and local AI-routing calls proxy to production
   // (see helpers/capture.ts's waitForCaptureIdle doc comment and
   // docs/ENGINEERING_NOTES.md). Wait for the single-flight lock to clear
-  // before starting the retry, or popup.js's own buttons stay disabled.
-  const idleCheckPopup = await openPopup(context, extensionId);
-  await waitForCaptureIdle(idleCheckPopup);
-  await idleCheckPopup.close();
+  // before starting the retry, or sidepanel.js's own buttons stay disabled.
+  const idleCheckSidePanel = await openSidePanel(context, extensionId);
+  await waitForCaptureIdle(idleCheckSidePanel);
+  await idleCheckSidePanel.close();
 
   // The result toast from the first capture is real DOM content on this
   // same page; page mode reads document.body.innerText wholesale, so a
@@ -58,10 +59,10 @@ test("page capture sends bounded text with no raw_html, and dedupes on retry", a
 
   // Retry: the identical page save must dedupe by content_hash (B8), not
   // create a second Clip.
-  const popup2 = await openPopup(context, extensionId);
-  await activateTab(popup2, tabId);
-  await popup2.locator("#save-page").click();
-  await popup2.locator("#status").filter({ hasText: /Captured|already|saved/i }).first().waitFor({ timeout: 15_000 }).catch(() => {});
+  const sidePanel2 = await openSidePanel(context, extensionId);
+  await activateTab(sidePanel2, tabId);
+  await sidePanel2.locator("#save-page").click();
+  await sidePanel2.locator("#status").filter({ hasText: /Captured|already|saved/i }).first().waitFor({ timeout: 15_000 }).catch(() => {});
 
   const count = await countClipsForSource(client, { ownerId: owner.id, captureMode: "page", sourceUrl: url });
   expect(count).toBe(1);

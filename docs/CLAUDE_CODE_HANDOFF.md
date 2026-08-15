@@ -210,6 +210,38 @@ The functions/entities/site listed above as deployed from the branch are, as
 of the same-day full `functions`/`site` deploys described in the next
 section, also deployed from `main` at a newer commit.
 
+## Extension Side Panel migration (2026-08-15, issue #46, merged 2026-08-16 as PR #50)
+
+`extension/popup.html`/`.css`/`.js` are retired; the extension now opens as
+a Chrome Side Panel (`extension/sidepanel.html`/`.css`/`.js`,
+`manifest.json`'s `side_panel.default_path` + `sidePanel` permission,
+`action.default_popup` dropped, `service-worker.js` calls
+`chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` once
+in `onInstalled`). Every `window.close()` call from the old popup (Save page
+success, picker/snip start, Open dashboard) is removed since the panel is
+designed to stay open — status text and re-enabled buttons replace the
+self-close behavior. Pairing copy is now explicit: "open the dashboard in a
+new tab ... come back to this side panel ... and paste." The plain-`fetch` +
+opaque-pairing-token capture protocol, `chrome.storage.local` schema, and
+every other extension file (`content.js`, the rest of `service-worker.js`)
+are unchanged — no backend, entity, or trust-boundary change. Manifest
+version bumped `0.2.0` -> `0.3.0`.
+
+Gated locally: 147/147 Deno tests (4 new fixtures in
+`tests/extension-manifest.test.ts` covering manifest validity and Side Panel
+references), all 16 `entry.ts` type-check clean, `node --check` clean on
+every `extension/**/*.js`, `@base44/sdk`-in-`extension/` grep clean, `npm
+run build` clean. `tests-e2e/` was updated (helper renamed `openPopup` ->
+`openSidePanel`, all 6 capture-mode specs + `global-setup.ts` point at
+`sidepanel.html`) but not executed — needs real Chrome + a local `npx base44
+dev` backend. **No real-Chrome manual verification was performed this
+pass** (toolbar click opening the actual panel, panel persisting across a
+tab switch, worker-sleep/wake) — see `docs/DECISIONS.md`. No entity or
+function change; ships as GitHub Release `extension-v0.3.0` — tag push and
+site redeploy (for the popup->side-panel dashboard copy in `src/App.jsx`,
+`src/onboarding/PairingChecklist.jsx`) are the release steps still pending
+owner approval as of this writing.
+
 ## P0 code audit (2026-08-15, `fix/p0-cascade-delete-pagination`)
 
 **2026-08-16 audit note:** the "not merged" / "Not deployed" claims below are
@@ -269,7 +301,11 @@ Four real `needs_review` Captures exist in production data for this.
    non-English keyboard layouts, tab-already-open-after-reload, worker
    sleep/wake, hosted multimodal routing, semantic Project assignment, and
    the review/deletion/landing surfaces (still need manual browser
-   verification, or a later phase of this same suite).
+   verification, or a later phase of this same suite). The suite was
+   updated for the Side Panel migration (checkpoint 38) but has not been
+   re-run since — running it, and a real-Chrome manual pass of the Side
+   Panel itself (toolbar click, panel persisting across a tab switch,
+   worker sleep/wake), is the next concrete verification step.
 2. **Concurrent ingest serialization:** sequential retries are idempotent, but
    simultaneous-request behavior remains an explicit gate.
 3. **Owner/RLS integration fixtures:** pure ownership tests exist, and live
