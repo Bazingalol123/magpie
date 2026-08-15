@@ -80,7 +80,7 @@ the extension.
 | Surface | Load-bearing use |
 |---|---|
 | Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `ExtensionInstall` |
-| Backend functions | 16 deployed: pairing, ingestion, routing, correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, and four Agent tools |
+| Backend functions | 17 in `base44/functions/` (verified by directory count 2026-08-16): pairing, extension context, Project creation, ingestion, routing/retry, correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools |
 | AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
 | Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
 | Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
@@ -90,7 +90,10 @@ the extension.
 
 ## Current status
 
-Deployed and live-verified in production:
+Deployed in production (code confirmed live via `deploy-base44.yml` GitHub
+Actions run history as of 2026-08-16; see `docs/BETA_LIMITATIONS.md` for
+per-feature verification status — deployed code and manually-verified UX are
+tracked separately, not conflated):
 
 - six capture modes including a drag-to-snip visual tool, with
   layout-independent keyboard shortcuts and status-aware toasts;
@@ -99,17 +102,27 @@ Deployed and live-verified in production:
 - a Needs-review workflow: accept / move / create (with inline Project
   creation) / dismiss, deep-linked from capture toasts;
 - permanent Item, Collection, and Project deletion, each a full server-owned
-  cascade over everything scoped beneath it;
+  cascade over everything scoped beneath it, including a 2026-08-14 fix for
+  cascades past 200+ child rows (B13);
 - watches with exponential backoff, auto-pause after three blocked checks, and
   refresh-on-revisit that heals blocked Items from the owner's own browser;
 - the authenticated `magpie_organizer` Agent with four owner-validating tools;
 - a static CSS-3D landing page and a realtime dashboard with review, deletion,
   monitoring, and comparison surfaces.
 
-Release gates: 123/123 Deno tests; all 16 backend entry points type-check; the
-production build passes; extension scripts parse; no extension SDK import;
-live smoke tests cover authentication, typed 404s, the deletion cascades, and a
-real browser-token refresh that updated a blocked Item end to end.
+Some of the above have documented live production checks (RLS owner
+isolation, `refresh-capture`'s browser-token healing path, `delete-record`/
+`resolve-routing` auth and 404 behavior); others are deployed but have not
+had a manual sign-in click-through since their latest change (notably
+Collection/Project deletion and the onboarding checklist). See
+`docs/BETA_LIMITATIONS.md` for the claim-by-claim breakdown.
+
+Release gates (re-run 2026-08-16): 143/143 Deno tests; all 17 backend entry
+points type-check; the production build passes; extension scripts parse; no
+extension SDK import; live smoke tests documented in
+`docs/CLAUDE_CODE_HANDOFF.md` cover authentication, typed 404s, the original
+deletion-cascade smoke checks, and a real browser-token refresh that updated
+a blocked Item end to end (2026-07-25, not re-run by this audit).
 
 ## Local development
 
@@ -143,11 +156,11 @@ directory.
 
 ```text
 base44/entities/        Owner-scoped Base44 schemas
-base44/functions/       16 backend functions (ingest, routing, review, deletion, refresh, Agent tools)
+base44/functions/       17 backend functions (ingest, routing, review, deletion, refresh, bug reports, Agent tools)
 base44/shared/          Deterministic validation and reusable backend logic
 extension/              MV3 picker, snip tool, worker, and pairing side panel
 src/                    Landing page and realtime dashboard
-tests/                  123 pure Deno fixtures
+tests/                  143 pure Deno fixtures
 docs/                   User docs, API reference, charter, and engineering history
 ```
 

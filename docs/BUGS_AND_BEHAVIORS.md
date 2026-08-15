@@ -108,7 +108,19 @@ Do not add automatic merging without an explicit data-reconciliation design.
 
 ## B13 — Cascade delete permanently orphaned child rows past one fetch page
 
-**Status:** Fixed, not yet deployed (source-only, `fix/p0-cascade-delete-pagination`).
+**Status:** Fixed and merged to `main` (`f542c4e`, PR #40).
+
+**Deployment update (2026-08-16, issue #47 audit):** the original "not yet
+deployed" status below is stale. GitHub Actions run
+[`31849671121`](https://github.com/Bazingalol123/magpie/actions/runs/31849671121)
+ran `deploy-base44.yml` with `target=functions` against commit `f542c4e`
+(2026-08-14T23:14:53Z) and succeeded — `npx base44 functions deploy --force`
+redeploys every function unconditionally, so `delete-record`,
+`delete-collection`, and `delete-mission` were deployed with this fix.
+`git diff f542c4e..<current main HEAD> -- base44/` is empty, so this remains
+the deployed state. This is deployment evidence only (the function's code is
+live); it is not a substitute for the still-outstanding manual sign-in
+click-through in `docs/CLAUDE_CODE_HANDOFF.md`, which stays "unknown."
 
 **Symptom:** `cascadeRecord` (`base44/shared/record-removal.ts`), shared by
 `delete-record`, `delete-collection`, and `delete-mission`, fetched child
@@ -337,7 +349,20 @@ primitive and its fixtures.
 
 ## G1 — Dashboard data completeness beyond 200 rows
 
-**Status:** Fixed, not yet deployed. `loadDashboard` (`src/App.jsx`) no
+**Status:** Fixed and deployed.
+
+**Deployment update (2026-08-16, issue #47 audit):** the "needs a site
+deploy" note below is stale. GitHub Actions run
+[`31850021926`](https://github.com/Bazingalol123/magpie/actions/runs/31850021926)
+ran `deploy-base44.yml` with `target=site` against commit `f542c4e`
+(2026-08-14T23:20:40Z, an ancestor of every later `main` commit including the
+current HEAD) and succeeded — `npx base44 site deploy -y` builds and deploys
+whatever is checked out, so this frontend-only fix shipped with that run (and
+every subsequent site deploy). This confirms the code is live; it does not by
+itself confirm someone has manually exercised the >200-row path in the
+browser against production data, which remains unverified.
+
+`loadDashboard` (`src/App.jsx`) no
 longer issues a single hardcoded-limit `list()` call per entity; it pages
 every entity to completion via `fetchAllPages`
 (`src/dashboard-pagination.js`), matching the offset/`skip` contract Base44's

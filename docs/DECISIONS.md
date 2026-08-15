@@ -26,13 +26,13 @@ The extension captures a compressed viewport image. The backend turns that data 
 
 ## Keep Collection as a compatibility layer in V2 (historical; superseded for V3)
 
+V2 made Mission the navigation, schema, and decision boundary because removing Collection would have forced a destructive migration and rewrite of stable enrichment code. V2 therefore hid Collection as an implementation detail and stamped Mission-queryable fields onto Record. This was a transitional implementation decision, not the durable product model.
+
 ## Add capture modes without adding a crawler
 
 V3.1 treats element, selection, page, link, visual, and image capture as different evidence bundles for the same Clip and routing pipeline. Link capture uses the target URL plus browser-observed label/context and does not authorize the backend to retrieve arbitrary URLs. This avoids introducing SSRF, redirect, authentication-wall, content-size, and source-trust behavior into the critical capture path.
 
 Visual and image modes upload actual browser-captured pixels through the existing screenshot boundary and expose that image only to the backend routing request. The extension remains write-only, imports no SDK, and receives only the existing safe routing status.
-
-V2 made Mission the navigation, schema, and decision boundary because removing Collection would have forced a destructive migration and rewrite of stable enrichment code. V2 therefore hid Collection as an implementation detail and stamped Mission-queryable fields onto Record. This was a transitional implementation decision, not the durable product model.
 
 ## Restore Collection as the automatic organization boundary in V3
 
@@ -461,4 +461,65 @@ now-inaccurate "closes itself" comments, but the suite itself was not run in
 this pass (it needs a real Chrome + a local `npx base44 dev` backend, same
 precondition as every other run of that suite). Real-Chrome verification is
 the explicit next step before treating this migration as done, not a gap
-that was silently skipped.
+that was silently skipped. **Merged to `main` 2026-08-16 as PR #50**; still
+outstanding at merge time: the real-Chrome verification above, and the
+`extension-v0.3.0` release tag / site redeploy.
+
+## 2026-08-16 — Issue #47 documentation audit: corrections, not new decisions
+
+This entry records corrections made during the pre-beta source-of-truth audit
+(issue #47). It does not change product intent; it reconciles stale
+"not yet deployed" claims against verifiable deployment evidence found in
+GitHub Actions run history (`gh api repos/Bazingalol123/magpie/actions/runs`),
+which was not consulted when several earlier checkpoints were written.
+
+- **B13 (cascade-delete pagination) and G1 (dashboard pagination) were
+  deployed, not "not yet deployed."** `docs/BUGS_AND_BEHAVIORS.md` and
+  `docs/CLAUDE_CODE_HANDOFF.md` stated both fixes were source-only pending
+  owner-approved deploys. GitHub Actions run
+  [`31849671121`](https://github.com/Bazingalol123/magpie/actions/runs/31849671121)
+  ran `deploy-base44.yml` with `target=functions` (`npx base44 functions
+  deploy --force`, which redeploys every function) against commit `f542c4e`
+  — the exact commit that contains the B13 fix — at 2026-08-14T23:14:53Z, and
+  succeeded. Run
+  [`31850021926`](https://github.com/Bazingalol123/magpie/actions/runs/31850021926)
+  then ran `target=site` against the same commit at 2026-08-14T23:20:40Z,
+  deploying the G1 dashboard-pagination frontend fix. `git diff
+  f542c4e..e2a4f84 -- base44/` (current `main` HEAD) is empty, so no backend
+  function has changed since that deploy — the deployed function source and
+  the current repository source are the same for `base44/functions`.
+  `docs/BUGS_AND_BEHAVIORS.md` and `docs/CLAUDE_CODE_HANDOFF.md` were updated
+  accordingly. This does **not** mean the fixed behavior was exercised
+  through the browser in production — the manual sign-in click-through is
+  still unperformed and remains "unknown," not "live-verified."
+- **`report-bug` was also deployed** by the same `--force` functions deploy
+  (it redeploys all functions unconditionally, regardless of which one
+  changed), contradicting Build Guide checkpoint 34's "not yet deployed"
+  note. Function *presence* in production is now "deployed"; its live
+  behavior (an actual GitHub issue being filed end to end) is still
+  unverified by this audit.
+- **G9 onboarding's site code was deployed** by the `target=site` run at
+  commit `1a28831` (2026-08-14T21:39:38Z), even though the UI contract is
+  still incomplete per the entry above. "Deployed" and "feature-complete" are
+  independent axes; G9 is now both source-complete-for-its-scope and
+  deployed, but still lacking states 1/4/recovery-set/tests as documented.
+- **Current `deno test` count is 143/143** (verified locally on 2026-08-16),
+  not the 102/102 figure in `CLAUDE.md`'s "Current continuation point" or the
+  intro line of `docs/CLAUDE_CODE_HANDOFF.md`. `docs/BUILD_GUIDE.md` and
+  `docs/ENGINEERING_NOTES.md` already carried the correct running total
+  (143/143, dated 2026-08-15, B13) — the staleness was only in the two
+  top-level summary docs, which have been corrected.
+- No entities-target or agents-target `deploy-base44.yml` run appears in the
+  most recent 12 workflow dispatches (checked via `gh run list
+  --workflow=deploy-base44.yml`), so entity-schema and Agent deployment
+  status claims elsewhere in the docs could not be independently confirmed or
+  denied this way; they remain whatever the source doc already stated
+  (typically "run locally, not CI-visible").
+- The heading `## Keep Collection as a compatibility layer in V2 (historical;
+  superseded for V3)` above had lost its body paragraph in an earlier edit —
+  the paragraph had drifted under the next heading instead. Reordered; no
+  wording was changed, only the paragraph's position.
+
+See the PR for issue #47 for the full audit table and
+`docs/BETA_LIMITATIONS.md` for the consolidated supported-vs-unverified
+summary this audit produced.
