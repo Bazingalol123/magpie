@@ -33,8 +33,9 @@ under truly concurrent capture requests.
 Magpie turns pieces of the web — listings, products, jobs, recipes — into
 structured, owner-scoped Items that stay current. `capture → understand →
 organize → review → compare → refresh`. It's a Chrome extension, a Base44
-backend, and a React dashboard. Live at
-<https://magpieorelse.base44.app>.
+backend, and a React dashboard. The intended public app URL after the Base44
+custom-domain connection is
+<https://magpiecapture.com>.
 
 ## How it's built
 

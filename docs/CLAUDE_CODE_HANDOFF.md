@@ -70,7 +70,7 @@ authorization to crawl.
 ## Deployed state
 
 - Base44 app ID: `6a622e254ee5f8740523313e`
-- Production: <https://magpieorelse.base44.app>
+- Production: <https://magpiecapture.com>
 - Eight entity definitions are deployed.
 - Existing capture, routing, pairing, enrichment, and sweep functions are
   deployed.

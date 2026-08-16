@@ -9,7 +9,7 @@ from nothing to your first organized, watched Item in about five minutes.
 
 ## 1. Sign in to the dashboard
 
-Open **<https://magpieorelse.base44.app>** and click **Continue with Google**.
+Open **<https://magpiecapture.com>** and click **Continue with Google**.
 That's the whole signup — your workspace is created on first sign-in and
 everything in it is visible only to you.
 
