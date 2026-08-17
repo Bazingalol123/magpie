@@ -1346,3 +1346,24 @@ authorization, first-party Base44 tooling only, an audit trail, documented
 operational ownership) a future break-glass mechanism would need before it
 could be called supported. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
 round 1" section for the full detail.
+
+**Review round 2 (2026-08-17, Hermes comments on PR #62):** one remaining
+gap addressed, still discovery-only: round 1's non-atomic
+`replace_installation_id` design still left the *create* half of the
+create-then-revoke sequence unsafe to retry after an ambiguous
+timeout/network failure — retrying could mint a duplicate active pairing
+while the first pairing's raw token, deliberately never persisted, would be
+unrecoverable. A client-supplied idempotency key (this codebase's existing
+`ingest-clip` pattern) can't fix this the way it fixes `ingest-clip`,
+because `ingest-clip`'s retry safely re-returns already-stored data while
+`create-extension-pairing`'s retry cannot re-return a secret that was never
+stored. Resolution: `replace_installation_id` is deferred out of MVP
+entirely — `create-extension-pairing` ships unmodified, and "replace this
+browser's pairing" becomes a two-step, separately-confirmed UI flow over the
+already-safe `create-extension-pairing` (unchanged) and
+`revoke-extension-pairing` (idempotent) primitives, with no new backend
+surface that could itself have an ambiguous-retry failure mode. The
+pre-existing ambiguous-retry gap in plain `create-extension-pairing` is
+recorded as a candidate future hardening item (§11.5 of the design doc), not
+solved by this issue. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
+round 2" section for the full detail.

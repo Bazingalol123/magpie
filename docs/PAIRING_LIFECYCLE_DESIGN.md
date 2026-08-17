@@ -18,7 +18,10 @@
    RLS/FLS evaluation, not to coupling two separate writes). This note no
    longer describes `replace_installation_id` as atomic: it is now two
    sequential, non-atomic service-role writes with explicit failure/retry
-   semantics. See §3, §5, §8, §9.
+   semantics. See §3, §5, §8, §9. **Superseded by review round 2 below** —
+   the create half of that sequence turned out to have its own unsolved
+   retry problem, so `replace_installation_id` is now deferred entirely
+   rather than shipped with "just" revoke-side failure semantics.
 2. **Scope of `revoke-all`.** Resolved the mismatch between issue #27's
    unconditional "Revoke all installations" acceptance criterion and this
    note's earlier "optional bulk action" framing for
@@ -34,6 +37,34 @@
    operational ownership) are listed as requirements for such a thing to be
    buildable later — none of them are implemented or assumed available now.
    See §9.
+
+## Review round 2 (Hermes, 2026-08-17) — resolved
+
+Round 1 correctly forced this note to describe `replace_installation_id`'s
+create-then-revoke sequence as non-atomic with defined failure semantics for
+the revoke half. Round 2 found that was incomplete: **the create half has
+its own unsolved retry problem**, and this design cannot fix it without
+weakening the "raw token is never persisted" security invariant
+(`docs/API_AND_FAILURE_MAP.md:89`, §1). If a `create-extension-pairing`
+response is lost after the write commits, the client cannot tell whether a
+pairing was created; retrying mints a second active row, and the first
+row's raw token — never stored anywhere, only its hash — is unrecoverable.
+A client-supplied idempotency key (the pattern this codebase already uses
+for `ingest-clip`) does not fix this the way it fixes `ingest-clip`,
+because `ingest-clip`'s retry can safely re-return already-stored data,
+while `create-extension-pairing`'s retry cannot re-return a secret that was
+deliberately never stored.
+
+**Resolution: took the review's option (a).** `replace_installation_id` is
+deferred out of MVP entirely; `create-extension-pairing` is unmodified by
+this issue. "Replacing a browser's pairing" in MVP is two separately
+confirmed UI-level actions (create, confirm, *then* revoke the old one) built
+entirely from the already-safe `create-extension-pairing` (unchanged) and
+`revoke-extension-pairing` (idempotent) primitives — no new backend surface
+that could itself have an ambiguous-retry failure mode. See §3, §5, §6, §8,
+§9, §10. The pre-existing ambiguous-retry gap in plain
+`create-extension-pairing` (independent of this issue, already shipped
+today) is recorded as open question §11.5 rather than solved here.
 
 ## 1. Verified current behavior
 
@@ -184,12 +215,15 @@ for this over a single-active-pairing model:
   revoke-all," which only makes sense under a multi-pairing model.
 
 This means "rotation" is not a distinct primitive — it is **create-new +
-explicit revoke-old**. §5 evaluates bundling those two writes into a single
-`create-extension-pairing` call for the common "replace this browser's key"
-case, but — since Base44 has no documented cross-entity transaction
-primitive (verified in the review-round note above and in §5) — describes
-that bundling honestly as a non-atomic, two-step server-side sequence with
-defined failure/retry semantics, not an atomic operation.
+explicit revoke-old**, and in MVP it stays that way as two separately
+confirmed actions rather than one bundled call. §5 evaluated bundling those
+two writes into a single `create-extension-pairing` call for the common
+"replace this browser's key" case; since Base44 has no documented
+cross-entity transaction primitive (review round 1) *and* the create half
+has its own unsolved ambiguous-retry problem given the "raw token is never
+persisted" invariant (review round 2), §5 defers that bundling entirely
+rather than ship a convenience call whose own failure mode it cannot fully
+specify.
 
 ## 4. Security / threat model
 
@@ -265,46 +299,62 @@ signed-in-owner-only, exactly like `delete-record`/`delete-collection`.
   `list-extension-pairings` and `revoke-extension-pairing` — it is not a
   candidate to defer to a later follow-up.
 
-### `create-extension-pairing` (existing — one additive, backward-compatible, **non-atomic** change)
+### `create-extension-pairing` (existing — **no change in MVP**; `replace_installation_id` deferred, review round 2)
 
-- **Atomicity verified as unavailable (review round 1).** Base44's SDK
-  documents no cross-entity transaction, cross-entity batch, or rollback
-  primitive: `bulkCreate`/`bulkUpdate`/`updateMany`/`deleteMany`
-  (`.agents/skills/base44-sdk/references/entities.md`) all operate within a
-  single entity type, and the SDK's "no partial results" guarantee is scoped
-  to one write's own RLS/FLS check, not to coupling a create on one row with
-  an update on another. **This design does not claim or implement
-  atomicity for `replace_installation_id`.**
-- Add an **optional** `replace_installation_id` field to the request body,
-  implemented as **two sequential, non-atomic service-role writes inside one
-  function invocation**:
-  1. Create the new `ExtensionInstall` row — existing behavior, unchanged.
-  2. Only if step 1 succeeded and `replace_installation_id` was provided:
-     verify the named row's `owner_id` matches the caller (identical
-     ownership check to `revoke-extension-pairing`), then attempt
-     `entities.ExtensionInstall.update(replace_installation_id, { active: false })`.
-- **Failure/retry semantics, made explicit because there is no transaction
-  to fall back on:**
-  - If step 1 fails, nothing happened; the caller gets the normal error
-    response and may retry the whole call.
-  - If step 1 succeeds but step 2 fails or is skipped (network/service
-    error, or `replace_installation_id` belongs to another owner), the
-    response must say so rather than claim full success: `201` with
-    `{ extension_id, token, ingest_url, replaced: false, replace_error:
-    "<reason>" }`. The new pairing is real and usable either way.
-  - No custom rollback path is needed for step 2's failure:
-    `revoke-extension-pairing` is already idempotent (above), so the caller
-    (or the user, from the pairing list UI) simply retries the revoke
-    directly against the known `replace_installation_id`.
-  - The failure direction is deliberately safe: any partial failure leaves
-    **more** pairings active than intended (old and new both), never zero —
-    consistent with the "never implicitly revoke" non-goal and with never
-    locking an owner out of capture.
-- If `replace_installation_id` is absent, behavior is byte-for-byte
-  unchanged from today (no implicit revoke) — preserves the non-goal "do not
-  automatically revoke existing keys."
-- Everything else about the function (raw-token-once, `ingest_url` in the
-  response, no persistence of the raw token) is unchanged.
+- **`replace_installation_id` is deferred out of MVP entirely** (review
+  round 2 finding — see the review-round note at the top of this doc).
+  Round 1 had already established the create-then-revoke sequence is
+  non-atomic (above) and defined failure/retry semantics for *step 2*
+  (the revoke half). Round 2 found that *step 1* (the create half) has an
+  unsolved retry problem of its own, and one this design cannot safely
+  solve without weakening an existing security invariant:
+  - `create-extension-pairing` mints a raw token and returns it exactly
+    once; only `sha256(token)` is ever persisted
+    (`docs/API_AND_FAILURE_MAP.md:89`, "raw token is never persisted" —
+    §1). If a client calls `create-extension-pairing` (with or without
+    `replace_installation_id`) and the response is lost to a timeout or
+    network failure after the server-side create already committed, the
+    client cannot tell whether a pairing was created, and **cannot safely
+    retry**: retrying creates a second active row, and the first row's raw
+    token is gone forever (never shown, never stored) — an orphaned,
+    unusable, but still-active credential.
+  - A client-supplied idempotency key (the pattern this codebase already
+    uses for `ingest-clip`'s `idempotency_key`, `base44/shared/clip.ts:21`)
+    does not fix this here the way it fixes `ingest-clip`: `ingest-clip`'s
+    retried call can safely re-return the *same already-stored* Clip data.
+    `create-extension-pairing`'s retried call cannot re-return the *same
+    already-issued* raw token, because the invariant above means the token
+    was never stored anywhere to re-return. Any mechanism that "safely
+    reconciles the prior result" would have to either persist the raw
+    token somewhere (weakens the invariant this design must not touch) or
+    mint and return a *different* new token on retry while discarding the
+    orphaned first row (which reintroduces exactly the duplicate-row
+    problem the idempotency key was meant to prevent).
+  - This ambiguous-retry gap is **pre-existing in `create-extension-pairing`
+    today, independent of this design** — it is not introduced by
+    `replace_installation_id`. What `replace_installation_id` would have
+    done is couple that pre-existing ambiguity to a second write (revoking
+    the old pairing), which raises the stakes of an ambiguous retry from
+    "one orphaned extra row" to "possible confusion about which of two
+    pairings survived." Deferring it removes that added risk from MVP
+    without pretending to have solved the underlying, harder problem.
+  - **Resolution (per the review's option (a)):** MVP ships `create-extension-pairing`
+    completely unchanged — no `replace_installation_id` field, no request/response
+    shape change. "Replacing a browser's pairing" in MVP is two separately
+    confirmed, already-safe actions composed at the UI layer: call the
+    existing `create-extension-pairing` to get a new token, then — once the
+    user has confirmed the new pairing is saved — call the new
+    `revoke-extension-pairing` (§ above) against the old `installation_id`.
+    `revoke-extension-pairing` is idempotent and safe to retry on its own
+    (already established above); the risk this section is deferring is
+    specific to retrying a **token-issuing create**, not to revoke.
+  - The pre-existing ambiguous-retry gap in plain `create-extension-pairing`
+    (i.e., today's shipped behavior, with or without this issue) is flagged
+    as a candidate future hardening item in §11, out of scope for this
+    design to solve.
+- Everything about the function's current behavior (raw-token-once,
+  `ingest_url` in the response, no persistence of the raw token) is
+  unchanged by this issue.
 
 No `rename-extension-pairing` / label-edit endpoint is proposed here — not
 required by #61's acceptance criteria or #27's, and adding it would expand
@@ -342,6 +392,18 @@ gap in this design.
   `PairingStepStatus.REVOKED` branch and "Pair again" button (§1) — no new
   onboarding UI needed, just needs the new revoke action to actually be
   reachable from somewhere that produces that state.
+- **"Replace this browser's pairing" is a two-step UI flow, not one button
+  (review round 2).** Since `replace_installation_id` is deferred (§5), the
+  dashboard composes the existing `create-extension-pairing` call and the
+  new `revoke-extension-pairing` call as two separately confirmed user
+  actions: (1) create and show the new token in `PairingDialog` as today,
+  requiring the existing "I saved the token" acknowledgment; (2) only after
+  that acknowledgment, offer a distinct "Revoke the previous pairing on this
+  browser?" prompt that calls `revoke-extension-pairing` for the old
+  `installation_id`. This ordering means an interrupted flow always fails
+  toward "both pairings still active" (safe) rather than toward the old
+  pairing being revoked before the user has confirmed the new one actually
+  arrived.
 - **Extension behavior on `403` specifically (new):** `submitCapture`
   (`extension/service-worker.js`) should special-case `response.status ===
   403` to clear `ingestUrl`/`extensionToken` from `chrome.storage.local` and
@@ -377,18 +439,10 @@ gap in this design.
   - `revoke-extension-pairing` sets `active: false`, is idempotent on an
     already-revoked row, rejects malformed ids (`400`), rejects unknown ids (`404`).
   - `revoke-all-extension-pairings` only touches rows for the caller's `owner_id`.
-  - `create-extension-pairing` with `replace_installation_id` revokes exactly
-    that row and no others; without it, behavior is unchanged (regression
-    guard against the existing `tests/extension-pairing.test.ts` assertions).
-  - `create-extension-pairing` with `replace_installation_id` pointing at
-    another owner's installation creates the new pairing but does **not**
-    revoke the foreign row, and reports `replaced: false` — the step-2
-    ownership check must behave identically to `revoke-extension-pairing`'s
-    own check.
-  - Simulated step-2 failure (mock the service-role update rejecting) still
-    returns `201` with the newly created pairing intact and usable, and
-    `replaced: false` — the function must never discard or roll back the
-    already-created row because the optional revoke sub-step failed.
+  - `create-extension-pairing` is unchanged by this issue in MVP (review
+    round 2 deferred `replace_installation_id` — §5): the existing
+    `tests/extension-pairing.test.ts` assertions continue to pass unmodified,
+    and no new request/response fields are added to this function.
 - Cross-owner (doubles as #20's entity-specific slice):
   - Owner A cannot list owner B's pairings.
   - Owner A's `revoke-extension-pairing` on owner B's `installation_id`
@@ -399,8 +453,13 @@ gap in this design.
     and `extension-context` (all three callers of `requireExtensionPrincipal`).
   - A revoked pairing does not update `last_used_at` on the rejected attempt.
 - Re-pair flow:
-  - Creating a new pairing while an old one is still active leaves both
-    active (no implicit revoke) unless `replace_installation_id` was passed.
+  - Creating a new pairing while an old one is still active always leaves
+    both active — MVP has no bundled create+revoke call (§5), so this is
+    simply `create-extension-pairing`'s existing, unchanged behavior.
+  - The UI-composed two-step "replace" flow (§6): creating a new pairing
+    and then separately revoking the old one via `revoke-extension-pairing`
+    produces the same end state as two independent, already-tested actions
+    — no new backend test surface, since no backend code couples them.
   - Extension-side: after a `403`, local storage is cleared and the next
     capture attempt shows the "not paired" state, not a stale error loop.
 - Live/hosted smoke (per `docs/API_AND_FAILURE_MAP.md`'s existing pattern,
@@ -412,10 +471,11 @@ gap in this design.
 
 ## 9. Rollback plan
 
-- All three new functions are additive; none change `ExtensionInstall`'s
-  schema or any existing function's request/response shape (the
-  `replace_installation_id` field on `create-extension-pairing` is optional
-  and ignored by old clients).
+- All three new functions (`list-extension-pairings`,
+  `revoke-extension-pairing`, `revoke-all-extension-pairings`) are additive;
+  none change `ExtensionInstall`'s schema. `create-extension-pairing` itself
+  is unmodified in MVP (§5 defers `replace_installation_id`), so there is no
+  existing-function request/response shape to roll back at all.
 - Rollback is: stop calling the new functions from the dashboard (revert the
   UI change) and/or redeploy without them via `npx base44 functions deploy`
   targeting only the previous function set. No entity rollback needed since
@@ -457,7 +517,8 @@ gap in this design.
 - `docs/API_AND_FAILURE_MAP.md`: add `list-extension-pairings`,
   `revoke-extension-pairing`, `revoke-all-extension-pairings` entries in the
   same format as the existing `create-extension-pairing` entry (line 84
-  onward); add the `replace_installation_id` field to that existing entry.
+  onward). Do **not** add a `replace_installation_id` field to that existing
+  entry — it is deferred out of MVP (§5, review round 2).
 - `docs/CLAUDE_CODE_HANDOFF.md`: add a "Deployed state" bullet once shipped;
   do not write it preemptively.
 - `docs/DECISIONS.md`: record the "multiple active pairings, explicit revoke
@@ -488,6 +549,15 @@ gap in this design.
    separate follow-up — affects how many files the first PR touches.
 4. Expiration/idle-timeout for unused pairings (#61 question 9): explicitly
    deferred by this design; no proposal made.
+5. **Pre-existing ambiguous-retry gap in plain `create-extension-pairing`**
+   (surfaced by review round 2, §5): if a `create-extension-pairing`
+   response is lost after the server-side write commits, the client cannot
+   safely retry (duplicate active row) or recover the lost raw token (never
+   persisted, by design). This already exists in the shipped function today
+   and is not caused or worsened by anything in this design — flagged here
+   as a candidate future hardening item (e.g., a "creation in progress"
+   client-side guard, or accepting the orphaned-row cost as a documented,
+   deliberate tradeoff) rather than solved in this pass.
 
 ## Acceptance-criteria checklist (issue #61)
 
