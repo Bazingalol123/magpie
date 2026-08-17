@@ -1329,3 +1329,20 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Next:** owner review/approval of the design, then split
   implementation into small follow-up PRs per issue #61's acceptance
   criteria — not started in this pass.
+
+**Review round 1 (2026-08-17, Hermes comments on PR #62):** three findings
+addressed, still discovery-only (no code/schema/Function/Extension change):
+(1) verified Base44 has no cross-entity transaction primitive
+(`.agents/skills/base44-sdk/references/entities.md`) and rewrote
+`replace_installation_id` from "atomic" to an honestly-described non-atomic
+two-step sequence with explicit failure/retry semantics; (2) resolved a
+mismatch where the design called `revoke-all-extension-pairings` an
+"optional bulk action" while issue #27 requires it unconditionally — it is
+now explicit MVP scope; (3) rewrote the rollback section's "manual
+`active: true` production edit" from an implied normal recovery path to
+`Unknown`/unverified status, stating plainly that no supported recovery
+mechanism exists today and listing minimum requirements (owner-only
+authorization, first-party Base44 tooling only, an audit trail, documented
+operational ownership) a future break-glass mechanism would need before it
+could be called supported. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
+round 1" section for the full detail.

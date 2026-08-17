@@ -7,6 +7,34 @@
 > installation management), which this issue supersedes as the concrete
 > design vehicle.
 
+## Review round 1 (Hermes, 2026-08-17) — resolved
+
+1. **Atomicity of `replace_installation_id`.** Verified Base44 has no
+   cross-entity transaction, batch-across-entities, or rollback primitive
+   (`.agents/skills/base44-sdk/references/entities.md`: `bulkCreate`,
+   `bulkUpdate`, `updateMany`, `deleteMany` all operate within one entity
+   type only; the SDK's one atomicity-adjacent statement — "operations
+   succeed or fail... no partial results" — scopes to a single write's
+   RLS/FLS evaluation, not to coupling two separate writes). This note no
+   longer describes `replace_installation_id` as atomic: it is now two
+   sequential, non-atomic service-role writes with explicit failure/retry
+   semantics. See §3, §5, §8, §9.
+2. **Scope of `revoke-all`.** Resolved the mismatch between issue #27's
+   unconditional "Revoke all installations" acceptance criterion and this
+   note's earlier "optional bulk action" framing for
+   `revoke-all-extension-pairings`. It is now explicit MVP scope, required
+   in the first implementation PR, not deferred. See §2, §5.
+3. **Rollback/recovery.** The "manual `active: true` production edit" is no
+   longer presented as a normal rollback procedure. It is now marked
+   `Unknown`/unverified whether that is even a sanctioned operational
+   practice independent of this feature, and this design states plainly
+   that **no supported recovery mechanism exists** today for an incorrect
+   revoke. Minimum requirements for a future break-glass mechanism (owner-only
+   authorization, first-party Base44 tooling only, an audit trail, documented
+   operational ownership) are listed as requirements for such a thing to be
+   buildable later — none of them are implemented or assumed available now.
+   See §9.
+
 ## 1. Verified current behavior
 
 Each item below is evidence-backed by file/line; labeled `Verified` unless
@@ -91,14 +119,21 @@ otherwise noted.
 ## 2. Overlap with #27, #38, #48, #20
 
 - **#27 ("Add pairing installation management, revoke, and re-pair flows")**
-  is the same feature at a less-audited stage. Its acceptance criteria
-  (list without exposing raw tokens, revoke one, revoke all, replacement
+  is the same feature at a less-audited stage. Its acceptance criteria — list
+  without exposing raw tokens, **revoke one, revoke all**, replacement
   doesn't invalidate unrelated installations unless explicit, distinct
-  expired/revoked/never-used states, tests for revoke/re-pair/capture-after-revoke)
+  expired/revoked/never-used states, tests for revoke/re-pair/capture-after-revoke —
   are a subset of #61's. **Resolution: #61 is the design vehicle; #27's
-  acceptance criteria are folded into §4/§6 below and #27 should be closed
+  acceptance criteria are folded into §4–§6 below and #27 should be closed
   or re-pointed at #61's follow-up implementation PRs rather than tracked
   separately**, to avoid two issues owning the same contract.
+  **Scope correction (review round 1): an earlier draft of this note
+  labeled `revoke-all-extension-pairings` an "optional bulk action," which
+  contradicted #27's unconditional "Revoke all installations" requirement.
+  Resolved: `revoke-all-extension-pairings` is part of MVP acceptance
+  criteria, required in the first implementation PR, not deferred** — see
+  §5, §8. Descoping it later would require a deliberate, explicit
+  re-scoping of #27 itself, not a silent gap in this design.
 - **#38 ("Refresh user-facing documentation...")** explicitly lists
   "Document pairing/reconnection expectations without exposing token
   internals unnecessarily" and "Update troubleshooting for pairing,
@@ -149,8 +184,12 @@ for this over a single-active-pairing model:
   revoke-all," which only makes sense under a multi-pairing model.
 
 This means "rotation" is not a distinct primitive — it is **create-new +
-explicit revoke-old**, optionally combined into one atomic call for the
-common "replace this browser's key" case (see §4).
+explicit revoke-old**. §5 evaluates bundling those two writes into a single
+`create-extension-pairing` call for the common "replace this browser's key"
+case, but — since Base44 has no documented cross-entity transaction
+primitive (verified in the review-round note above and in §5) — describes
+that bundling honestly as a non-atomic, two-step server-side sequence with
+defined failure/retry semantics, not an atomic operation.
 
 ## 4. Security / threat model
 
@@ -214,25 +253,56 @@ signed-in-owner-only, exactly like `delete-record`/`delete-collection`.
   `400` malformed `installation_id` (same id-shape regex `delete-record`
   uses: `/^[A-Za-z0-9_-]{1,160}$/`).
 
-### `revoke-all-extension-pairings` (new, optional bulk action)
+### `revoke-all-extension-pairings` (new — **required for MVP**, not optional)
 
 - Same shape as above but no `installation_id`; sets `active: false` on
   every currently-active row owned by the caller. Returns
   `{ "revoked_count": N }`.
-- Needed for issue #27's explicit "revoke all" acceptance criterion and the
-  "suspected broader compromise" scenario in §4.
+- **In MVP scope, per the review-round scope correction above.** Issue #27's
+  acceptance criteria requires "Revoke all installations" unconditionally,
+  and it directly serves the "suspected broader compromise" scenario in §4.
+  The first implementation PR must include this function alongside
+  `list-extension-pairings` and `revoke-extension-pairing` — it is not a
+  candidate to defer to a later follow-up.
 
-### `create-extension-pairing` (existing — one additive, backward-compatible change)
+### `create-extension-pairing` (existing — one additive, backward-compatible, **non-atomic** change)
 
-- Add an **optional** `replace_installation_id` field to the request body.
-  If present, after creating the new row, atomically also set
-  `active: false` on the named row **only if it belongs to the same owner**
-  (same ownership check as revoke). This gives the dashboard a single
-  round-trip "replace this browser's pairing" action instead of two
-  sequential calls with a window where both are momentarily active. If
-  absent, behavior is byte-for-byte unchanged from today (no implicit
-  revoke) — preserves the non-goal "do not automatically revoke existing
-  keys."
+- **Atomicity verified as unavailable (review round 1).** Base44's SDK
+  documents no cross-entity transaction, cross-entity batch, or rollback
+  primitive: `bulkCreate`/`bulkUpdate`/`updateMany`/`deleteMany`
+  (`.agents/skills/base44-sdk/references/entities.md`) all operate within a
+  single entity type, and the SDK's "no partial results" guarantee is scoped
+  to one write's own RLS/FLS check, not to coupling a create on one row with
+  an update on another. **This design does not claim or implement
+  atomicity for `replace_installation_id`.**
+- Add an **optional** `replace_installation_id` field to the request body,
+  implemented as **two sequential, non-atomic service-role writes inside one
+  function invocation**:
+  1. Create the new `ExtensionInstall` row — existing behavior, unchanged.
+  2. Only if step 1 succeeded and `replace_installation_id` was provided:
+     verify the named row's `owner_id` matches the caller (identical
+     ownership check to `revoke-extension-pairing`), then attempt
+     `entities.ExtensionInstall.update(replace_installation_id, { active: false })`.
+- **Failure/retry semantics, made explicit because there is no transaction
+  to fall back on:**
+  - If step 1 fails, nothing happened; the caller gets the normal error
+    response and may retry the whole call.
+  - If step 1 succeeds but step 2 fails or is skipped (network/service
+    error, or `replace_installation_id` belongs to another owner), the
+    response must say so rather than claim full success: `201` with
+    `{ extension_id, token, ingest_url, replaced: false, replace_error:
+    "<reason>" }`. The new pairing is real and usable either way.
+  - No custom rollback path is needed for step 2's failure:
+    `revoke-extension-pairing` is already idempotent (above), so the caller
+    (or the user, from the pairing list UI) simply retries the revoke
+    directly against the known `replace_installation_id`.
+  - The failure direction is deliberately safe: any partial failure leaves
+    **more** pairings active than intended (old and new both), never zero —
+    consistent with the "never implicitly revoke" non-goal and with never
+    locking an owner out of capture.
+- If `replace_installation_id` is absent, behavior is byte-for-byte
+  unchanged from today (no implicit revoke) — preserves the non-goal "do not
+  automatically revoke existing keys."
 - Everything else about the function (raw-token-once, `ingest_url` in the
   response, no persistence of the raw token) is unchanged.
 
@@ -310,6 +380,15 @@ gap in this design.
   - `create-extension-pairing` with `replace_installation_id` revokes exactly
     that row and no others; without it, behavior is unchanged (regression
     guard against the existing `tests/extension-pairing.test.ts` assertions).
+  - `create-extension-pairing` with `replace_installation_id` pointing at
+    another owner's installation creates the new pairing but does **not**
+    revoke the foreign row, and reports `replaced: false` — the step-2
+    ownership check must behave identically to `revoke-extension-pairing`'s
+    own check.
+  - Simulated step-2 failure (mock the service-role update rejecting) still
+    returns `201` with the newly created pairing intact and usable, and
+    `replaced: false` — the function must never discard or roll back the
+    already-created row because the optional revoke sub-step failed.
 - Cross-owner (doubles as #20's entity-specific slice):
   - Owner A cannot list owner B's pairings.
   - Owner A's `revoke-extension-pairing` on owner B's `installation_id`
@@ -341,12 +420,37 @@ gap in this design.
   UI change) and/or redeploy without them via `npx base44 functions deploy`
   targeting only the previous function set. No entity rollback needed since
   no entity fields are added or removed.
-- If a bug in `revoke-extension-pairing` incorrectly deactivates the wrong
-  row, recovery is a manual `active: true` fix via direct entity update
-  (same mechanism apparently used for the 2026-07-25 smoke-test
-  deactivation, §1) — there is no "undo" UI, consistent with this repo's
-  existing recorded omission of undo for deletions/resolutions
-  (`docs/DECISIONS.md`).
+- **Recovery from an incorrect revoke is currently unsupported, and must not
+  be presented as a normal rollback procedure (review round 1 correction).**
+  If a bug in `revoke-extension-pairing` (or a user's own mistaken click)
+  deactivates the wrong row, this design proposes no product-level "undo" —
+  consistent with this repo's existing recorded omission of undo for
+  deletions/resolutions (`docs/DECISIONS.md`).
+  - The only theoretical recovery path is a direct production entity edit
+    (`active: true`) performed outside this repo's Functions — e.g. through
+    Base44's own admin console or CLI with service-role/admin credentials.
+    **This is `Unknown`/unverified as a documented, owner-approved, or
+    audited operational procedure.** §1 notes that the 2026-07-25
+    smoke-test pairing was deactivated by an unspecified mechanism; that is
+    the closest precedent in this repo's history, and that mechanism was
+    itself never documented or verified as a sanctioned operation. It must
+    not be cited as evidence that a safe rollback path exists today.
+  - **This design does not request, assume, or implement a break-glass
+    recovery mechanism.** If the owner later wants one, it is a distinct
+    decision outside issue #61's scope. Before it could be called
+    "supported," it would need at minimum: (1) **owner-only authorization**
+    — never performed by an automated agent or unattended script;
+    (2) execution only through **Base44's own first-party tooling**
+    (admin console/CLI), never a bespoke repo script that calls
+    `asServiceRole` outside a reviewed, deployed Function; (3) an **audit
+    trail** — `Unknown` whether Base44's admin console/CLI logs manual
+    entity edits at all, not verified in this pass; (4) explicit
+    **operational ownership** (who is authorized to perform it, and under
+    what circumstances) recorded in documentation, not tribal knowledge.
+  - Until such a mechanism is explicitly designed and approved, the correct
+    statement is: **an incorrect revoke has no supported recovery today.**
+    The affected owner must create a new pairing (re-pair) rather than
+    expect the old one restored.
 
 ## 10. Documentation impact map (for follow-up PRs)
 
