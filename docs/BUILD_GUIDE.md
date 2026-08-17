@@ -1297,3 +1297,35 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **No backend/entity/site change; no deploy needed.** Ships as GitHub
   Release `extension-v0.3.1` after merge and explicit owner approval — this
   task opens the PR only and does not push that tag.
+
+### 41. Extension pairing lifecycle — research and design (issue #61)
+
+- [x] **Build:** Discovery-only pass, per issue #61's explicit non-goal of
+  not implementing revoke/rotate yet. Audited every file the issue named
+  (`base44/entities/extension-install.jsonc`, `base44/shared/auth.ts`,
+  `create-extension-pairing`, all three `requireExtensionPrincipal` callers,
+  onboarding state/UI, `App.jsx` pairing dialog, extension service
+  worker/side panel, `tests/extension-pairing.test.ts`, and the relevant
+  sections of `API_AND_FAILURE_MAP.md`/`DECISIONS.md`/`BETA_LIMITATIONS.md`/
+  `BUILD_GUIDE.md`/`BUGS_AND_BEHAVIORS.md`), plus issues #27, #38, #48, #20
+  for overlap. Produced `docs/PAIRING_LIFECYCLE_DESIGN.md`: verified current
+  behavior with evidence, a "multiple active pairings, explicit revoke only"
+  product decision, a threat model, a proposed
+  `list-extension-pairings`/`revoke-extension-pairing`/
+  `revoke-all-extension-pairings` API contract plus an additive
+  `replace_installation_id` option on `create-extension-pairing`, UI/UX
+  proposal (including a real gap found: the extension never stores its own
+  non-secret `extension_id` locally, so the dashboard currently has no way
+  to highlight "this browser's" pairing), extension `403`-handling gap
+  (current code shows a generic error and never clears the stale local
+  token on revoke), compatibility/rollback/test-matrix/doc-impact sections,
+  and resolved #27/#38/#48/#20 overlap (recommends closing #27 as
+  superseded once follow-up PRs exist; #20's hosted two-owner gate is a
+  hard prerequisite before calling any follow-up "hosted-verified").
+- **Files:** `docs/PAIRING_LIFECYCLE_DESIGN.md` (new).
+- **Verify:** Documentation-only; no code changed, so the standard release
+  gates were not re-run (nothing in them exercises this file). No
+  entity/function/site change; nothing to deploy.
+- **Next:** owner review/approval of the design, then split
+  implementation into small follow-up PRs per issue #61's acceptance
+  criteria — not started in this pass.

@@ -291,6 +291,16 @@ review panel (accept, redirect, create-with-Project, dismiss), delete an Item,
 inspect a blocked Item's pause/resume, and ask Magpie for a comparison table.
 Four real `needs_review` Captures exist in production data for this.
 
+**2026-08-17:** issue #61's discovery phase (Extension pairing revocation,
+rotation, and key management) is complete — see `docs/PAIRING_LIFECYCLE_DESIGN.md`
+and Build Guide checkpoint 41. No code changed; the design proposes
+`list-extension-pairings`, `revoke-extension-pairing`,
+`revoke-all-extension-pairings`, and an additive `replace_installation_id`
+option on `create-extension-pairing`, and recommends closing issue #27 as
+superseded once follow-up implementation PRs exist. Needs owner review/
+approval before any implementation PR starts, per the issue's explicit
+non-goal against implementing revoke/rotate in this pass.
+
 ## Known gaps, in priority order
 
 1. **Chrome integration matrix:** Phase 1 (issue #19) landed 2026-08-15 — a
