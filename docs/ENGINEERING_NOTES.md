@@ -1237,3 +1237,31 @@ self-cleared via its own timer (8s for a "hint" toast), so Escape looked
 inert for up to 8 seconds. Added `hideToast()` and call it from both stop
 functions, which also fixes the visual handoff when switching modes (the old
 mode's hint disappears immediately instead of overlapping the new one).
+
+## 2026-08-17 — New pairings get the custom-domain ingest URL (issue #59)
+
+`create-extension-pairing`'s `ingest_url` was the only place the
+`magpieorelse.base44.app` hostname is chosen for a live client, and it's a
+one-way handout: the returned URL is stored client-side (`chrome.storage.local`)
+and never re-fetched, so changing the constant only affects pairings created
+after the change — already-paired Extensions keep using whatever URL they
+were minted with and never see this code path again. Moved the constant into
+a pure `buildIngestUrl()` in `shared/auth.ts` (was inlined in the entry point)
+so a test can assert the exact returned string without spinning up
+`Deno.serve`, matching the existing pattern of testing pure functions
+directly (`clip.test.ts`'s `canonicalizeUrl`/`validateCapture`) rather than
+invoking entry points.
+
+Verified live (2026-08-17, re-checked after PR #60 opened): an
+unauthenticated POST to `https://magpieorelse.base44.app/functions/ingest-clip`
+returns `401 {"error":"A Magpie pairing token is required"}` — unchanged,
+confirming the old endpoint keeps working for already-paired Extensions. An
+unauthenticated POST to `https://magpiecapture.com/functions/ingest-clip`
+now returns the identical safe `401 {"error":"A Magpie pairing token is
+required"}` response — the custom domain has finished connecting to the
+Base44 app since the code was first written (an earlier check that same day
+still saw Squarespace's placeholder `404`; PR #54's note about the pending
+DNS hookup no longer applies). Both endpoints are confirmed live and
+correctly reject unauthenticated requests. An authenticated pairing +
+capture round-trip through the new URL was not performed, and no deployment
+or merge was performed as part of this work.
