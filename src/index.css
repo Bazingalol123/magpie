@@ -37,7 +37,7 @@ button:disabled { cursor: wait; opacity: .7; }
 .topbar-center, .user-menu, .capture-status, .workspace-footer { display: flex; align-items: center; gap: 8px; color: #647268; font-size: 12px; }
 .status-dot { width: 7px; height: 7px; display: inline-block; background: #66b56d; box-shadow: 0 0 0 4px #ddf1df; border-radius: 50%; }
 .user-menu { gap: 12px; }
-.icon-button { background: transparent; display: grid; place-items: center; width: 31px; height: 31px; border-radius: 8px; color: #56665b; transition: background .2s; }
+.icon-button { background: transparent; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; color: #56665b; transition: background .2s; }
 .icon-button:hover { background: #e8eee6; }
 .workspace-heading { padding: 48px 0 29px; display: flex; justify-content: space-between; align-items: end; }
 .workspace-heading h1 { margin: 9px 0 0; font-size: 36px; letter-spacing: -.05em; line-height: 1; }
@@ -364,6 +364,26 @@ button:disabled { cursor: wait; opacity: .7; }
   .ld-card { transform: none !important; }
   .ld-mock, .ld-scene-row.reverse .ld-mock { transform: none; }
   [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
+
+@media (max-width: 680px) {
+  .desktop-record-view { display: none; }
+  .mobile-record-view { display: block; }
+  .collection-list { scrollbar-width: none; }
+  .collection-list::-webkit-scrollbar { display: none; }
+  .collection-select { min-height: 44px; }
+  .collection-delete { width: 38px; height: 38px; margin-right: 2px; opacity: 1; }
+  .mobile-record-view .card-grid { grid-template-columns: 1fr; padding: 14px; gap: 10px; }
+  .mobile-record-view .record-card { min-height: 96px; display: grid; grid-template-columns: 92px minmax(0, 1fr); }
+  .mobile-record-view .record-card-media { aspect-ratio: auto; min-height: 96px; }
+  .mobile-record-view .record-card-body { min-width: 0; padding: 12px; }
+  .mobile-record-view .record-card-title { font-size: 14px; }
+  .detail-overlay { align-items: stretch; }
+  .detail-panel { width: 100%; border-left: 0; padding: 20px 16px 28px; }
+  .detail-head h2 { font-size: 24px; }
+  .detail-actions { align-items: stretch; flex-direction: column; gap: 8px; }
+  .detail-actions .secondary-button { min-height: 44px; justify-content: center; }
+  .secondary-button, .text-button, .danger-button, .candidate-actions button { min-height: 44px; }
 }
 
 .docs-shell { min-height: 100vh; }

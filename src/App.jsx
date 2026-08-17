@@ -492,37 +492,42 @@ function RecordTable({ collection, records, clips, onSelect }) {
         </div>
         <div className="live-indicator"><span /> live</div>
       </div>
-      {showCards ? (
+      <div className="desktop-record-view">
+        {showCards ? (
+          <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  {columns.map((column) => <th key={column.name}>{column.label}</th>)}
+                  <th aria-label="Open record" />
+                </tr>
+              </thead>
+              <tbody>
+                {pageRecords.length ? pageRecords.map((record) => {
+                  const fields = parseJson(record.fields_json, {});
+                  return (
+                    <tr key={record.id} onClick={() => onSelect(record)}>
+                      <td>
+                        <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
+                      </td>
+                      {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
+                      <td><ChevronRight size={17} /></td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="mobile-record-view">
         <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                {columns.map((column) => <th key={column.name}>{column.label}</th>)}
-                <th aria-label="Open record" />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRecords.length ? pageRecords.map((record) => {
-                const fields = parseJson(record.fields_json, {});
-                return (
-                  <tr key={record.id} onClick={() => onSelect(record)}>
-                    <td>
-                      <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
-                    </td>
-                    {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
-                    <td><ChevronRight size={17} /></td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </div>
       {records.length > pageSize && (
         <div className="table-pagination">
           <button className="secondary-button" disabled={safePage === 0} onClick={() => setPage((current) => current - 1)}>Previous</button>
