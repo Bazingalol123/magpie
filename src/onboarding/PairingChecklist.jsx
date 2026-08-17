@@ -24,7 +24,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
 
   return (
     <section className="onboarding-panel" role="region" aria-label="First-run checklist">
-      <div className="eyebrow">get set up</div>
+      <div className="eyebrow">{isReconnect ? "reconnect" : stage === OnboardingStage.NOT_PAIRED ? "welcome to magpie" : "your first capture"}</div>
       <div className="onboarding-explainer">
         <strong>Magpie has two parts</strong>
         <span><b>Dashboard</b> is where you view and organize saved Items. <b>Extension</b> is what you use to capture while browsing.</span>

@@ -39,7 +39,7 @@ import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
-import { deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
+import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
@@ -1459,6 +1459,10 @@ export default function App() {
     }),
     [data.extensionInstalls, data.clips, onboardingDismissed],
   );
+  const isFirstRun = onboardingStage === OnboardingStage.NOT_PAIRED
+    && data.collections.length === 0
+    && data.records.length === 0
+    && data.clips.length === 0;
   const dismissOnboarding = () => {
     window.localStorage.setItem("magpie.onboarding.dismissed", "true");
     setOnboardingDismissed(true);
@@ -1477,7 +1481,7 @@ export default function App() {
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${isFirstRun ? "first-run" : ""}`}>
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
