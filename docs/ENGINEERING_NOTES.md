@@ -1252,13 +1252,16 @@ so a test can assert the exact returned string without spinning up
 directly (`clip.test.ts`'s `canonicalizeUrl`/`validateCapture`) rather than
 invoking entry points.
 
-Verified live: an unauthenticated POST to
-`https://magpieorelse.base44.app/functions/ingest-clip` still returns the
-existing `401 {"error":"A Magpie pairing token is required"}` — unchanged,
-confirming the old endpoint keeps working for already-paired Extensions.
-An unauthenticated POST to `https://magpiecapture.com/functions/ingest-clip`
-returned Squarespace's `404` placeholder page, not a Base44 response — this
-matches PR #54's documented note that the custom domain isn't yet connected
-to the Base44 app (DNS/custom-domain hookup is a separate operational step,
-out of scope for this code change). New pairings will resolve correctly once
-that connection is completed; that live check can't be performed until then.
+Verified live (2026-08-17, re-checked after PR #60 opened): an
+unauthenticated POST to `https://magpieorelse.base44.app/functions/ingest-clip`
+returns `401 {"error":"A Magpie pairing token is required"}` — unchanged,
+confirming the old endpoint keeps working for already-paired Extensions. An
+unauthenticated POST to `https://magpiecapture.com/functions/ingest-clip`
+now returns the identical safe `401 {"error":"A Magpie pairing token is
+required"}` response — the custom domain has finished connecting to the
+Base44 app since the code was first written (an earlier check that same day
+still saw Squarespace's placeholder `404`; PR #54's note about the pending
+DNS hookup no longer applies). Both endpoints are confirmed live and
+correctly reject unauthenticated requests. An authenticated pairing +
+capture round-trip through the new URL was not performed, and no deployment
+or merge was performed as part of this work.
