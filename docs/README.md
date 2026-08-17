@@ -40,7 +40,7 @@ but must not silently change the product model or trust boundary.
 > run history for issue #47; see `docs/BETA_LIMITATIONS.md` for the full
 > supported-vs-unverified breakdown.
 
-- Production: <https://magpieorelse.base44.app>
+- Public app URL after Base44 custom-domain connection: <https://magpiecapture.com>
 - 17 backend functions exist in `base44/functions/`, including
   `resolve-routing`, `delete-record`/`delete-collection`/`delete-mission`,
   `refresh-capture`, and `report-bug`; a full `functions` redeploy (evidence:

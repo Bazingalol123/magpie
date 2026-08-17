@@ -10,7 +10,7 @@ reusable Collection, extracts comparable fields, routes uncertainty to you
 instead of guessing, and keeps source-backed fields current — even behind
 login walls, by piggybacking on your own browsing.
 
-**Production:** <https://magpieorelse.base44.app>
+**Public app URL after Base44 custom-domain connection:** <https://magpiecapture.com>
 
 ## Documentation
 

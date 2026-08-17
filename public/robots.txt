@@ -4,4 +4,4 @@ Disallow: /api/
 Disallow: /dashboard
 Disallow: /?review=
 
-Sitemap: https://magpieorelse.base44.app/sitemap.xml
+Sitemap: https://magpiecapture.com/sitemap.xml
