@@ -9,7 +9,7 @@ const EXTENSION_RELEASES_URL = "https://github.com/Bazingalol123/magpie/releases
 function statusCopy(overallStatus) {
   switch (overallStatus) {
     case PairingStepStatus.USED:
-      return "Extension connected. Right-click on any page, or press Alt+Shift+M (⌘+Shift+M on Mac), to capture your first item.";
+      return "Extension connected. Open the Side Panel on any webpage, or press Alt+Shift+M (⌘+Shift+M on Mac), then choose a page, link, element, text selection, or image to capture.";
     case PairingStepStatus.REVOKED:
       return "This browser's connection looks inactive. Pair again to reconnect.";
     case PairingStepStatus.UNUSED:
@@ -25,11 +25,17 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
   return (
     <section className="onboarding-panel" role="region" aria-label="First-run checklist">
       <div className="eyebrow">get set up</div>
+      <div className="onboarding-explainer">
+        <strong>Magpie has two parts</strong>
+        <span><b>Dashboard</b> is where you view and organize saved Items. <b>Extension</b> is what you use to capture while browsing.</span>
+        <span className="onboarding-flow">Browse a webpage <i>→</i> open the Side Panel <i>→</i> capture something <i>→</i> review it here</span>
+      </div>
       <ol className="onboarding-steps">
         <li className="onboarding-step">
           <span className="onboarding-step-icon"><Download size={15} /></span>
           <div>
             <p>Install the Chrome extension</p>
+            <span className="onboarding-step-body">It opens as a Side Panel that stays available while you browse.</span>
             <a className="onboarding-cta onboarding-cta-secondary" href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">
               Get extension
             </a>
@@ -43,6 +49,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
               {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
               {isReconnect ? "Reconnect extension" : "Pair extension"}
             </button>
+            <span className="onboarding-shortcut">Picker shortcut: <kbd>Alt + Shift + M</kbd> · Mac <kbd>⌘ + Shift + M</kbd></span>
           </div>
         </li>
         {stage === OnboardingStage.AWAITING_FIRST_CAPTURE && (
