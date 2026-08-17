@@ -48,6 +48,18 @@ export function createPairingToken() {
   return `mp_${encoded}`;
 }
 
+// req.url resolves to the internal Cloudflare dispatcher host in production
+// (base44-dispatcher-production.base44.workers.dev), not a public app domain,
+// so the ingest origin returned to new pairings must be hardcoded rather than
+// derived from the request. Existing pairings already have a URL stored in
+// chrome.storage.local and never call this again, so changing this constant
+// only affects new pairings (issue #59).
+const NEW_PAIRING_INGEST_ORIGIN = "https://magpiecapture.com";
+
+export function buildIngestUrl() {
+  return `${NEW_PAIRING_INGEST_ORIGIN}/functions/ingest-clip`;
+}
+
 export async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
