@@ -71,6 +71,6 @@ Deno.serve(async (req) => {
       },
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

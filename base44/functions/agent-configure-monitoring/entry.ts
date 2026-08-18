@@ -28,6 +28,6 @@ Deno.serve(async (req) => {
       },
     }, created ? 201 : 200);
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

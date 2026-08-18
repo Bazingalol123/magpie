@@ -18,6 +18,6 @@ Deno.serve(async (req) => {
     const result = await removeCollection(service, user.id, collectionId);
     return json({ deleted: result.deleted });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

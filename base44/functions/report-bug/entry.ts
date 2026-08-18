@@ -45,6 +45,6 @@ Deno.serve(async (req) => {
     const created = await response.json();
     return json({ issue_url: created.html_url, issue_number: created.number });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

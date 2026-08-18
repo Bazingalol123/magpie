@@ -33,6 +33,6 @@ Deno.serve(async (req) => {
 
     return json(buildComparison(records, collections, user.id));
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

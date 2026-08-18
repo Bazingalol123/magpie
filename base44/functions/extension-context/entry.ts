@@ -25,6 +25,6 @@ Deno.serve(async (req) => {
       missions: projects,
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
