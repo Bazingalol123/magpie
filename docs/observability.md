@@ -4,7 +4,7 @@
 
 Base44 `appLogs.logUserInApp()` records product-usage events for the Analytics page. It is useful for events such as page visits or feature usage, but it is not an HTTP/backend request log: it does not provide a reliable status code, latency, exception classification, or request correlation chain.
 
-Backend diagnostics use structured JSON written by the function runtime and a short-lived `DiagnosticEvent` entity. The client receives the same opaque `request_id` in error responses and the `X-Request-Id` response header. Entity persistence is best-effort: a logging failure never changes the original response.
+Backend diagnostics use structured JSON written by the function runtime and a short-lived `DiagnosticEvent` entity. Capture requests also persist one bounded success event or one error event with the last reached stage and total duration. The client receives the same opaque `request_id` in error responses and the `X-Request-Id` response header. Entity persistence is best-effort: a logging failure never changes the original response.
 
 ## Structured error event
 

@@ -3,14 +3,23 @@ import { requireExtensionPrincipal } from "../../shared/auth.ts";
 import { canonicalizeUrl, screenshotFile, validateCapture } from "../../shared/clip.ts";
 import { getOrNull } from "../../shared/service-entities.ts";
 import { corsHeaders, errorResponse, json, readJson, requirePost } from "../../shared/http.ts";
+import {
+  classifyError,
+  createDiagnosticContext,
+  diagnosticDurationMs,
+  persistDiagnosticEvent,
+} from "../../shared/observability.ts";
 import { markRoutingFailed, processStoredClip } from "../../shared/routing-persistence.ts";
 
 Deno.serve(async (req) => {
+  const diagnostic = createDiagnosticContext(req, "ingest-clip", "capture");
   try {
     if (requirePost(req)) return new Response(null, { status: 204, headers: corsHeaders });
 
+    diagnostic.stage = "auth";
     const base44 = createClientFromRequest(req);
     const { ownerId } = await requireExtensionPrincipal(base44, req);
+    diagnostic.stage = "validate";
     const capture = validateCapture(await readJson(req));
     if (capture.mission_id) {
       const mission = await getOrNull(base44.asServiceRole.entities.Mission, capture.mission_id);
@@ -18,6 +27,7 @@ Deno.serve(async (req) => {
         return json({ error: "The selected Project is unavailable" }, 409);
       }
     }
+    diagnostic.stage = "deduplication";
     if (capture.idempotency_key) {
       const existing = await base44.asServiceRole.entities.Clip.filter({
         owner_id: ownerId,
@@ -25,6 +35,8 @@ Deno.serve(async (req) => {
       }, "-created_date", 1);
       if (existing[0]) {
         const result = await processStoredClip(base44, existing[0].id);
+        diagnostic.stage = "routing";
+        await recordCaptureSuccess(base44, diagnostic, 202);
         return json({
           accepted: true,
           duplicate: true,
@@ -44,6 +56,7 @@ Deno.serve(async (req) => {
       content_hash: contentHash,
     }, "-created_date", 1);
     if (identicalClips[0] && identicalClips[0].routing_status !== "failed") {
+      await recordCaptureSuccess(base44, diagnostic, 202);
       return json({
         accepted: true,
         duplicate: true,
@@ -64,6 +77,7 @@ Deno.serve(async (req) => {
         console.warn("Screenshot upload failed; preserving the clip without an image", uploadError);
       }
     }
+    diagnostic.stage = "storage";
     const clip = await base44.asServiceRole.entities.Clip.create({
       owner_id: ownerId,
       ...clipData,
@@ -76,7 +90,9 @@ Deno.serve(async (req) => {
     });
 
     try {
+      diagnostic.stage = "routing";
       const result = await processStoredClip(base44, clip.id);
+      await recordCaptureSuccess(base44, diagnostic, 202);
       return json({
         accepted: true,
         capture_status: "new",
@@ -86,6 +102,8 @@ Deno.serve(async (req) => {
       }, 202);
     } catch (routingError) {
       console.error("Clip organization failed", routingError);
+      const classified = classifyError(routingError);
+      await recordCaptureError(base44, diagnostic, classified);
       const failed = await markRoutingFailed(base44, clip.id, routingError);
       return json({
         accepted: true,
@@ -95,9 +113,33 @@ Deno.serve(async (req) => {
       }, 202);
     }
   } catch (error) {
-    return errorResponse(error, req);
+    return errorResponse(error, req, diagnostic);
   }
 });
+
+async function recordCaptureSuccess(base44: any, diagnostic: ReturnType<typeof createDiagnosticContext>, status: number) {
+  await persistDiagnosticEvent(base44, {
+    event: "capture.request.finished",
+    ...diagnostic,
+    status,
+    duration_ms: diagnosticDurationMs(diagnostic),
+    outcome: "success",
+    environment: "production",
+  });
+}
+
+async function recordCaptureError(base44: any, diagnostic: ReturnType<typeof createDiagnosticContext>, classified: ReturnType<typeof classifyError>) {
+  await persistDiagnosticEvent(base44, {
+    event: "capture.request.error",
+    ...diagnostic,
+    status: classified.status ?? 500,
+    duration_ms: diagnosticDurationMs(diagnostic),
+    error_code: classified.error_code,
+    message: classified.message,
+    outcome: "error",
+    environment: "production",
+  });
+}
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));

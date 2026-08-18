@@ -6,10 +6,13 @@
     "event": { "type": "string", "maxLength": 80, "description": "Allowlisted operational event name" },
     "request_id": { "type": "string", "maxLength": 100, "description": "Opaque request correlation ID" },
     "function_name": { "type": "string", "maxLength": 80, "description": "Backend function name" },
+    "operation": { "type": "string", "maxLength": 80, "description": "Bounded operation class" },
+    "stage": { "type": "string", "maxLength": 80, "description": "Last bounded stage reached" },
     "status": { "type": "integer", "minimum": 100, "maximum": 599, "description": "HTTP status code" },
     "error_code": { "type": "string", "maxLength": 80, "description": "Stable safe error classification" },
     "message": { "type": "string", "maxLength": 240, "description": "Redacted bounded diagnostic message" },
     "duration_ms": { "type": "integer", "minimum": 0, "maximum": 600000, "description": "Bounded request duration when available" },
+    "outcome": { "type": "string", "enum": ["success", "error"], "description": "Request outcome" },
     "environment": { "type": "string", "enum": ["production", "preview", "local"], "default": "production" },
     "occurred_at": { "type": "string", "format": "date-time", "description": "When the diagnostic was emitted" },
     "expires_at": { "type": "string", "format": "date-time", "description": "Automatic retention boundary for cleanup" }

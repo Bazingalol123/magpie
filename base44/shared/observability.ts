@@ -19,6 +19,7 @@ export type StructuredLogEvent = {
   request_id?: string;
   function_name?: string;
   operation?: string;
+  stage?: string;
   status?: number;
   duration_ms?: number;
   error_code?: string;
@@ -41,6 +42,27 @@ export function requestIdFrom(request: Request | undefined) {
   return supplied && /^[A-Za-z0-9_-]{8,100}$/.test(supplied) ? supplied : createRequestId();
 }
 
+export type DiagnosticContext = {
+  request_id: string;
+  function_name: string;
+  operation: string;
+  started_at_ms: number;
+  stage: string;
+};
+
+export function createDiagnosticContext(request: Request | undefined, functionName: string, operation: string, startedAtMs = Date.now()): DiagnosticContext {
+  return {
+    request_id: requestIdFrom(request),
+    function_name: functionName.slice(0, 80),
+    operation: operation.slice(0, 80),
+    started_at_ms: startedAtMs,
+    stage: "request",
+  };
+}
+
+export function diagnosticDurationMs(context: DiagnosticContext, nowMs = Date.now()) {
+  return Math.min(Math.max(Math.round(nowMs - context.started_at_ms), 0), 600_000);
+}
 export function classifyError(error: unknown) {
   const candidate = error as {
     status?: unknown;
@@ -66,6 +88,7 @@ export function serializeLogEvent(input: Record<string, unknown>): StructuredLog
     "request_id",
     "function_name",
     "operation",
+    "stage",
     "status",
     "duration_ms",
     "error_code",
