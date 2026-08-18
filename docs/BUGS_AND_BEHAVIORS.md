@@ -194,23 +194,20 @@ harness is available.
 
 ## B7 — Collection panels grew without bound
 
-**Status:** UI rendering fix merged to `main`.
+**Status:** Server-side pagination and bounded Dashboard refresh are implemented locally in this change; production deployment is still pending.
 
-**Symptom:** Every Record in a Collection was rendered at once, making the panel
-grow indefinitely.
+**Symptom:** Every Record in a Collection was fetched before the UI showed only a small slice. A capture also triggered broad entity refreshes, sometimes more than once through realtime subscriptions.
 
-**Fix:** Client-side pagination was added:
+**Fix in this change:**
 
-- table mode: 30 Items per page;
-- card mode: 8 Items per page;
-- page resets on Collection change;
-- page is clamped when records disappear;
-- card/table mode is decided from the full loaded set.
+- Records are filtered by the active Collection on the server.
+- Each UI page requests 8 Records plus one lookahead row in one request.
+- Next/Previous changes the server `skip` offset instead of slicing an already-loaded global array.
+- General Dashboard entities use one bounded list request rather than `fetchAllPages`.
+- Dashboard refresh requests are single-flight, so an in-flight load is not duplicated.
+- Collection counts show `—` when the current page is not a complete count, rather than presenting a false number.
 
-**Important limitation:** This is not server-side pagination; it is
-rendering-layer pagination over whatever `loadDashboard` already fetched.
-The separate fetch-cap gap this note used to point at (G1) is fixed as of
-Build Guide checkpoint 35 — see the G1 entry below.
+**Verification:** `tests/dashboard-pagination.test.ts` covers one-request page windows and lookahead behavior. Full local suite and build pass. A production Network-panel check after deploy must confirm that a capture no longer creates the previous duplicated refresh burst.
 
 ## Docs deep-link anchor navigation
 
@@ -349,42 +346,11 @@ primitive and its fixtures.
 
 ## G1 — Dashboard data completeness beyond 200 rows
 
-**Status:** Fixed and deployed.
+**Status:** Superseded by the server-side Collection pagination change in this work; production deployment is pending.
 
-**Deployment update (2026-08-16, issue #47 audit):** the "needs a site
-deploy" note below is stale. GitHub Actions run
-[`31850021926`](https://github.com/Bazingalol123/magpie/actions/runs/31850021926)
-ran `deploy-base44.yml` with `target=site` against commit `f542c4e`
-(2026-08-14T23:20:40Z, an ancestor of every later `main` commit including the
-current HEAD) and succeeded — `npx base44 site deploy -y` builds and deploys
-whatever is checked out, so this frontend-only fix shipped with that run (and
-every subsequent site deploy). This confirms the code is live; it does not by
-itself confirm someone has manually exercised the >200-row path in the
-browser against production data, which remains unverified.
+The Dashboard no longer fetches every Record globally. It requests one bounded page for the active Collection using `filter(query, sort, limit, skip)`, with 8 visible rows plus one lookahead row. The old `fetchAllPages` helper remains for destructive/complete-read use cases and is not used by the Dashboard. This prevents a small UI page from causing a full-record download and keeps later pages lazy.
 
-`loadDashboard` (`src/App.jsx`) no
-longer issues a single hardcoded-limit `list()` call per entity; it pages
-every entity to completion via `fetchAllPages`
-(`src/dashboard-pagination.js`), matching the offset/`skip` contract Base44's
-SDK actually exposes (verified against
-`.agents/skills/base44-sdk/references/entities.md`, not assumed) and the same
-page-until-short-page convention `base44/shared/service-entities.ts`'s
-`listAllOwned` already uses server-side. An owner with more rows than the old
-20/100/200 caps in any entity now gets complete data, up to a 5,000-row
-ceiling per entity per load; `dataMeta.<entity>.hasMore`/`.total` are
-returned and the Items count in the dashboard header shows a `+` suffix and
-tooltip when Records are truncated at the ceiling. Record queries were
-deliberately kept global rather than scoped to the active Collection — see
-`docs/DECISIONS.md` for why. Full contract note: `docs/ENGINEERING_NOTES.md`
-(2026-08-14). Build Guide checkpoint 35. Fixtures:
-`tests/dashboard-pagination.test.ts`, including a 250-row fixture for the
-literal ">200 rows" case. Needs a site deploy (frontend-only change; no
-entity or function changes) before this is live — see Build Guide 35's
-"Not yet deployed" note.
-
-Do not claim that the current UI pagination (Build Guide 29.18, B7) is
-server-side pagination — that remains a separate, already-shipped,
-rendering-layer concern from this fetch-completeness fix.
+The remaining live verification gate is a production Network-panel check after deploy: confirm that page 1 uses `limit=9`, page 2 changes `skip=8`, and a capture does not trigger duplicate full refreshes.
 
 ## G2 — Concurrent ingestion serialization
 

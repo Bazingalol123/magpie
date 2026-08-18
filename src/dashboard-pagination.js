@@ -32,6 +32,18 @@ export const DEFAULT_PAGE_SIZE = 200;
  */
 export const DEFAULT_MAX_ROWS = 5000;
 
+export async function fetchPageWindow(fetchPage, page, { pageSize = 8 } = {}) {
+  if (!Number.isInteger(page) || page < 0) throw new Error("fetchPageWindow: page must be a non-negative integer");
+  if (!Number.isInteger(pageSize) || pageSize <= 0) throw new Error("fetchPageWindow: pageSize must be a positive integer");
+  const rows = await fetchPage(page * pageSize, pageSize + 1);
+  return {
+    items: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+    page,
+    pageSize,
+  };
+}
+
 /**
  * Pages through `fetchPage(skip, limit) => Promise<T[]>` (an offset-based
  * list call) collecting every row, stopping when a page comes back shorter
@@ -39,7 +51,6 @@ export const DEFAULT_MAX_ROWS = 5000;
  *
  * `total` is an exact count when every row was fetched, or `null` when the
  * ceiling cut the fetch short (a lower bound is available as `items.length`).
- *
  * Propagates any error from `fetchPage` immediately without resolving, so a
  * mid-pagination failure never yields a partial-but-reported-complete result
  * -- the caller's existing failure handling (e.g. `loadDashboard`'s

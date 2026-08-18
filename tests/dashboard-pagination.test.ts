@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "jsr:@std/assert";
-import { DEFAULT_PAGE_SIZE, fetchAllPages } from "../src/dashboard-pagination.js";
+import { DEFAULT_PAGE_SIZE, fetchAllPages, fetchPageWindow } from "../src/dashboard-pagination.js";
 
 // G1 (docs/BUGS_AND_BEHAVIORS.md): loadDashboard() used to fetch a single
 // page per entity with a hardcoded limit (20/100/200), so an owner with more
@@ -25,6 +25,24 @@ function makeRows(count: number) {
   return Array.from({ length: count }, (_, index) => ({ id: `row-${index}` }));
 }
 
+Deno.test("fetchPageWindow fetches one UI page plus one lookahead row", async () => {
+  const rows = makeRows(10);
+  const { fetchPage, calls } = fakeEntityList(rows);
+  const result = await fetchPageWindow(fetchPage, 0, { pageSize: 8 });
+  assertEquals(result.items.length, 8);
+  assertEquals(result.items[7].id, "row-7");
+  assertEquals(result.hasMore, true);
+  assertEquals(calls, [{ skip: 0, limit: 9 }]);
+});
+
+Deno.test("fetchPageWindow requests only one server page when the last page is short", async () => {
+  const rows = makeRows(10);
+  const { fetchPage, calls } = fakeEntityList(rows);
+  const result = await fetchPageWindow(fetchPage, 1, { pageSize: 8 });
+  assertEquals(result.items.map((row: { id: string }) => row.id), ["row-8", "row-9"]);
+  assertEquals(result.hasMore, false);
+  assertEquals(calls, [{ skip: 8, limit: 9 }]);
+});
 Deno.test("fetchAllPages returns every row in a single request when under one page", async () => {
   const rows = makeRows(5);
   const { fetchPage, calls } = fakeEntityList(rows);
