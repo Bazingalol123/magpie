@@ -1,0 +1,24 @@
+{
+  "name": "DiagnosticEvent",
+  "description": "Short-lived, redacted operational diagnostics for backend troubleshooting. Never contains user payloads or credentials.",
+  "type": "object",
+  "properties": {
+    "event": { "type": "string", "maxLength": 80, "description": "Allowlisted operational event name" },
+    "request_id": { "type": "string", "maxLength": 100, "description": "Opaque request correlation ID" },
+    "function_name": { "type": "string", "maxLength": 80, "description": "Backend function name" },
+    "status": { "type": "integer", "minimum": 100, "maximum": 599, "description": "HTTP status code" },
+    "error_code": { "type": "string", "maxLength": 80, "description": "Stable safe error classification" },
+    "message": { "type": "string", "maxLength": 240, "description": "Redacted bounded diagnostic message" },
+    "duration_ms": { "type": "integer", "minimum": 0, "maximum": 600000, "description": "Bounded request duration when available" },
+    "environment": { "type": "string", "enum": ["production", "preview", "local"], "default": "production" },
+    "occurred_at": { "type": "string", "format": "date-time", "description": "When the diagnostic was emitted" },
+    "expires_at": { "type": "string", "format": "date-time", "description": "Automatic retention boundary for cleanup" }
+  },
+  "required": ["event", "request_id", "status", "error_code", "occurred_at", "expires_at"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": false,
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

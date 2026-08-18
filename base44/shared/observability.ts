@@ -86,6 +86,27 @@ export function serializeLogEvent(input: Record<string, unknown>): StructuredLog
   return event;
 }
 
+export function toDiagnosticRecord(input: Record<string, unknown>, now = new Date()) {
+  const event = serializeLogEvent(input);
+  const occurredAt = now.toISOString();
+  return {
+    ...event,
+    environment: typeof input.environment === "string" ? redactLogValue(input.environment).slice(0, 32) : "production",
+    occurred_at: occurredAt,
+    expires_at: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1_000).toISOString(),
+  };
+}
+
+export async function persistDiagnosticEvent(base44: any, input: Record<string, unknown>) {
+  try {
+    const record = toDiagnosticRecord(input);
+    await base44.asServiceRole.entities.DiagnosticEvent.create(record);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function logStructuredEvent(input: Record<string, unknown>) {
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),

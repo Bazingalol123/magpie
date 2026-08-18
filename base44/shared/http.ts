@@ -1,6 +1,8 @@
+import { createClientFromRequest } from "npm:@base44/sdk";
 import {
   classifyError,
   logStructuredEvent,
+  persistDiagnosticEvent,
   requestIdFrom,
 } from "./observability.ts";
 
@@ -26,18 +28,29 @@ export function json(data: Record<string, unknown>, status = 200, requestId?: st
   return Response.json(data, { status, headers });
 }
 
-export function errorResponse(error: unknown, request?: Request) {
+export async function errorResponse(error: unknown, request?: Request) {
   const requestId = requestIdFrom(request);
   const classified = classifyError(error);
   const status = error instanceof HttpError ? error.status : classified.status ?? 500;
-  logStructuredEvent({
+  const functionName = request?.url.split("/").filter(Boolean).pop() ?? "unknown";
+  const diagnostic = {
     event: "function.request.error",
     request_id: requestId,
+    function_name: functionName,
     status,
     error_code: classified.error_code,
     message: classified.message,
     outcome: "error",
-  });
+    environment: "production",
+  };
+  logStructuredEvent(diagnostic);
+  if (request) {
+    try {
+      await persistDiagnosticEvent(createClientFromRequest(request), diagnostic);
+    } catch {
+      // Diagnostics must never change the original error response.
+    }
+  }
   if (error instanceof HttpError) {
     return json({ error: error.message, request_id: requestId }, error.status, requestId);
   }
