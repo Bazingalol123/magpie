@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -41,7 +41,7 @@ import Landing from "./Landing.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
-import { fetchAllPages } from "./dashboard-pagination.js";
+import { fetchPageWindow } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
 const markdownComponents = {
@@ -62,9 +62,10 @@ const emptyDataMeta = {
   extensionInstalls: emptyPageMeta,
 };
 
-/** Pages an entity handler's `list(sort, limit, skip)` through every row (see src/dashboard-pagination.js). */
-const listAllForDashboard = (entityHandler, sort) =>
-  fetchAllPages((skip, limit) => entityHandler.list(sort, limit, skip));
+const DASHBOARD_LIST_LIMIT = 100;
+const RECORDS_PAGE_SIZE = 8;
+
+const listDashboardPage = (entityHandler, sort) => entityHandler.list(sort, DASHBOARD_LIST_LIMIT, 0);
 
 const REASON_LABELS = {
   ai_unavailable: "Organization was temporarily unavailable",
@@ -411,8 +412,8 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
       </div>
       <div className="collection-list">
         {collections.map((collection) => {
-          const count = records.filter((record) => record.collection_id === collection.id).length;
           const isActive = collection.id === activeCollectionId;
+          const count = isActive ? records.filter((record) => record.collection_id === collection.id).length : null;
           const isConfirming = confirmingId === collection.id;
           const isDeleting = deletingId === collection.id;
           return (
@@ -420,11 +421,11 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
               <button className="collection-select" onClick={() => onSelect(collection.id)}>
                 <span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />
                 <span className="collection-name">{collection.name}</span>
-                <span className="collection-count">{count}</span>
+                <span className="collection-count">{count === null ? "—" : count}</span>
               </button>
               {isConfirming ? (
                 <span className="collection-confirm">
-                  <span>Delete {count} Item{count === 1 ? "" : "s"}?</span>
+                  <span>{count === null ? "Delete this Collection?" : `Delete ${count} Item${count === 1 ? "" : "s"}?`}</span>
                   <button
                     type="button"
                     className="danger-button danger-button-compact"
@@ -458,31 +459,17 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
   );
 }
 
-const RECORDS_PAGE_SIZE = 30;
-const RECORDS_PAGE_SIZE_CARDS = 8;
-
-function RecordTable({ collection, records, clips, onSelect }) {
+function RecordTable({ collection, records, clips, page, hasMore, isLoading, onPageChange, onSelect }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
-  const [page, setPage] = useState(0);
-  // A Collection can accumulate hundreds of Items with no bound otherwise,
-  // making the panel grow indefinitely (Bug B7). Reset to page 1 whenever
-  // the selected Collection changes so switching collections never leaves
-  // the user stranded on an out-of-range page.
-  useEffect(() => { setPage(0); }, [collection?.id]);
 
   if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
   const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
   const showCards = records.length > 0 && withImageCount / records.length > 0.5;
-  // Card tiles take much more vertical space per item than table rows, so
-  // they use a smaller page size to keep a page to roughly one screen.
-  const pageSize = showCards ? RECORDS_PAGE_SIZE_CARDS : RECORDS_PAGE_SIZE;
-  const pageCount = Math.max(1, Math.ceil(records.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageStart = safePage * pageSize;
-  const pageRecords = records.slice(pageStart, pageStart + pageSize);
+  const pageStart = page * RECORDS_PAGE_SIZE;
+  const pageRecords = records;
 
   return (
     <section className="table-panel">
@@ -529,11 +516,11 @@ function RecordTable({ collection, records, clips, onSelect }) {
       <div className="mobile-record-view">
         <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
       </div>
-      {records.length > pageSize && (
+      {(page > 0 || hasMore) && (
         <div className="table-pagination">
-          <button className="secondary-button" disabled={safePage === 0} onClick={() => setPage((current) => current - 1)}>Previous</button>
-          <span>{pageStart + 1}–{Math.min(pageStart + pageSize, records.length)} of {records.length}</span>
-          <button className="secondary-button" disabled={safePage >= pageCount - 1} onClick={() => setPage((current) => current + 1)}>Next</button>
+          <button className="secondary-button" disabled={page === 0 || isLoading} onClick={() => onPageChange(page - 1)}>Previous</button>
+          <span>{records.length ? `${pageStart + 1}–${pageStart + records.length}${hasMore ? "+" : ""}` : "No Items"}</span>
+          <button className="secondary-button" disabled={!hasMore || isLoading} onClick={() => onPageChange(page + 1)}>{isLoading ? "Loading…" : "Next"}</button>
         </div>
       )}
     </section>
@@ -1101,6 +1088,11 @@ export default function App() {
   const [data, setData] = useState(emptyData);
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeCollectionId, setActiveCollectionId] = useState(null);
+  const [recordPage, setRecordPage] = useState(0);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const activeCollectionIdRef = useRef(null);
+  const recordPageRef = useRef(0);
+  const dashboardLoadRef = useRef(null);
   const [activeMissionId, setActiveMissionId] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1129,51 +1121,90 @@ export default function App() {
     () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
   );
 
+  const fetchRecordsPage = useCallback(async (collectionId, page) => {
+    if (!collectionId) return { items: [], hasMore: false, page, pageSize: RECORDS_PAGE_SIZE };
+    return fetchPageWindow(
+      (skip, limit) => base44.entities.Record.filter({ collection_id: collectionId }, "-created_date", limit, skip),
+      page,
+      { pageSize: RECORDS_PAGE_SIZE },
+    );
+  }, []);
+
+  const loadRecordPage = useCallback(async (collectionId, page) => {
+    setIsLoadingRecords(true);
+    try {
+      const result = await fetchRecordsPage(collectionId, page);
+      recordPageRef.current = page;
+      setRecordPage(page);
+      setData((current) => ({ ...current, records: result.items }));
+      setDataMeta((current) => ({ ...current, records: { hasMore: result.hasMore, total: null } }));
+      return result;
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  }, [fetchRecordsPage]);
+
   const loadDashboard = useCallback(async () => {
-    // Each entity is paged to completion (src/dashboard-pagination.js)
-    // instead of a single hardcoded-limit list() call, so an owner with more
-    // rows than the old 20/100/200 caps no longer has older rows silently
-    // missing (docs/BUGS_AND_BEHAVIORS.md G1). If any page fetch fails, this
-    // rejects before setData/setDataMeta run, so a partial fetch never
-    // overwrites the last good `data`/`dataMeta` -- the existing catch block
-    // in the calling effect surfaces `loadError` and leaves prior state
-    // in place, unchanged from before this change.
-    const [missionsPage, collectionsPage, recordsPage, clipsPage, enrichmentsPage, routingDecisionsPage, watchRulesPage, extensionInstallsPage] = await Promise.all([
-      listAllForDashboard(base44.entities.Mission, "-created_date"),
-      listAllForDashboard(base44.entities.Collection, "name"),
-      listAllForDashboard(base44.entities.Record, "-created_date"),
-      listAllForDashboard(base44.entities.Clip, "-captured_at"),
-      listAllForDashboard(base44.entities.Enrichment, "-checked_at"),
-      listAllForDashboard(base44.entities.RoutingDecision, "-decided_at"),
-      listAllForDashboard(base44.entities.WatchRule, "-created_date"),
-      listAllForDashboard(base44.entities.ExtensionInstall, "-created_at"),
+    const [missions, collections, clips, enrichments, routingDecisions, watchRules, extensionInstalls] = await Promise.all([
+      listDashboardPage(base44.entities.Mission, "-created_date"),
+      listDashboardPage(base44.entities.Collection, "name"),
+      listDashboardPage(base44.entities.Clip, "-captured_at"),
+      listDashboardPage(base44.entities.Enrichment, "-checked_at"),
+      listDashboardPage(base44.entities.RoutingDecision, "-decided_at"),
+      listDashboardPage(base44.entities.WatchRule, "-created_date"),
+      listDashboardPage(base44.entities.ExtensionInstall, "-created_at"),
     ]);
+    const selectedCollectionId = activeCollectionIdRef.current && collections.some((item) => item.id === activeCollectionIdRef.current)
+      ? activeCollectionIdRef.current
+      : collections[0]?.id ?? null;
+    activeCollectionIdRef.current = selectedCollectionId;
+    setActiveCollectionId(selectedCollectionId);
+    setActiveMissionId((current) => current && missions.some((item) => item.id === current) ? current : "");
+    const recordsPage = await fetchRecordsPage(selectedCollectionId, recordPageRef.current);
     const next = {
-      missions: missionsPage.items,
-      collections: collectionsPage.items,
+      missions,
+      collections,
       records: recordsPage.items,
-      clips: clipsPage.items,
-      enrichments: enrichmentsPage.items,
-      routingDecisions: routingDecisionsPage.items,
-      watchRules: watchRulesPage.items,
-      extensionInstalls: extensionInstallsPage.items,
-    };
-    const meta = {
-      missions: { hasMore: missionsPage.hasMore, total: missionsPage.total },
-      collections: { hasMore: collectionsPage.hasMore, total: collectionsPage.total },
-      records: { hasMore: recordsPage.hasMore, total: recordsPage.total },
-      clips: { hasMore: clipsPage.hasMore, total: clipsPage.total },
-      enrichments: { hasMore: enrichmentsPage.hasMore, total: enrichmentsPage.total },
-      routingDecisions: { hasMore: routingDecisionsPage.hasMore, total: routingDecisionsPage.total },
-      watchRules: { hasMore: watchRulesPage.hasMore, total: watchRulesPage.total },
-      extensionInstalls: { hasMore: extensionInstallsPage.hasMore, total: extensionInstallsPage.total },
+      clips,
+      enrichments,
+      routingDecisions,
+      watchRules,
+      extensionInstalls,
     };
     setData(next);
-    setDataMeta(meta);
-    setActiveCollectionId((current) => current && next.collections.some((item) => item.id === current) ? current : next.collections[0]?.id ?? null);
-    setActiveMissionId((current) => current && next.missions.some((item) => item.id === current) ? current : "");
+    setDataMeta({
+      missions: { hasMore: missions.length >= DASHBOARD_LIST_LIMIT, total: null },
+      collections: { hasMore: collections.length >= DASHBOARD_LIST_LIMIT, total: null },
+      records: { hasMore: recordsPage.hasMore, total: null },
+      clips: { hasMore: clips.length >= DASHBOARD_LIST_LIMIT, total: null },
+      enrichments: { hasMore: enrichments.length >= DASHBOARD_LIST_LIMIT, total: null },
+      routingDecisions: { hasMore: routingDecisions.length >= DASHBOARD_LIST_LIMIT, total: null },
+      watchRules: { hasMore: watchRules.length >= DASHBOARD_LIST_LIMIT, total: null },
+      extensionInstalls: { hasMore: extensionInstalls.length >= DASHBOARD_LIST_LIMIT, total: null },
+    });
     return next;
-  }, []);
+  }, [fetchRecordsPage]);
+
+  const requestDashboardLoad = useCallback(() => {
+    if (dashboardLoadRef.current) return dashboardLoadRef.current;
+    const pending = loadDashboard().finally(() => {
+      dashboardLoadRef.current = null;
+    });
+    dashboardLoadRef.current = pending;
+    return pending;
+  }, [loadDashboard]);
+
+  const selectCollection = useCallback((collectionId) => {
+    activeCollectionIdRef.current = collectionId;
+    recordPageRef.current = 0;
+    setActiveCollectionId(collectionId);
+    setRecordPage(0);
+    loadRecordPage(collectionId, 0).catch((error) => setLoadError(error.message || "Could not load this Collection."));
+  }, [loadRecordPage]);
+
+  const changeRecordPage = useCallback((page) => {
+    loadRecordPage(activeCollectionIdRef.current, page).catch((error) => setLoadError(error.message || "Could not load this page."));
+  }, [loadRecordPage]);
 
   useEffect(() => {
     let active = true;
@@ -1190,7 +1221,7 @@ export default function App() {
     let debounceTimer = null;
     const load = async () => {
       try {
-        await loadDashboard();
+        await requestDashboardLoad();
         if (!cancelled) setLoadError("");
       } catch (error) {
         if (!cancelled) setLoadError(error.message || "Could not load your workspace.");
@@ -1276,7 +1307,7 @@ export default function App() {
         last_check_at: response.data.checked_at,
         enrichment_status: response.data.outcome,
       } : current);
-      await loadDashboard();
+      await requestDashboardLoad();
     } catch (error) {
       setLoadError(error.response?.data?.error || error.message || "Could not check this source.");
     } finally {
@@ -1288,7 +1319,7 @@ export default function App() {
     setIsCreatingMission(true);
     try {
       await base44.functions.invoke("create-mission", form);
-      await loadDashboard();
+      await requestDashboardLoad();
       setIsProjectDialogOpen(false);
     } catch (error) {
       setLoadError(error.response?.data?.error || error.message || "Could not start this mission.");
@@ -1326,7 +1357,7 @@ export default function App() {
       const nextAction = decisionStatus === "contacted" ? "Wait for a reply, then schedule a viewing." : decisionStatus === "shortlisted" ? "Compare against your constraints before contacting." : "No further action needed.";
       await base44.entities.Record.update(selectedRecord.id, { decision_status: decisionStatus, next_action: nextAction });
       setSelectedRecord((current) => ({ ...current, decision_status: decisionStatus, next_action: nextAction }));
-      await loadDashboard();
+      await requestDashboardLoad();
     } catch (error) {
       setLoadError(error.message || "Could not update this candidate.");
     }
@@ -1350,7 +1381,7 @@ export default function App() {
       }
     }
     try {
-      const refreshed = await loadDashboard();
+      const refreshed = await requestDashboardLoad();
       const remaining = refreshed.clips.filter((clip) => clip.routing_status === "needs_review" && clip.id !== clipId);
       setSelectedReviewClipId(remaining[0]?.id ?? null);
     } finally {
@@ -1372,7 +1403,7 @@ export default function App() {
     }
     setSelectedRecord(null);
     setRefreshNotice(null);
-    await loadDashboard();
+    await requestDashboardLoad();
     setIsDeletingRecord(false);
   };
 
@@ -1391,7 +1422,7 @@ export default function App() {
       setSelectedRecord(null);
       setRefreshNotice(null);
     }
-    await loadDashboard();
+    await requestDashboardLoad();
     setDeletingCollectionId(null);
   };
 
@@ -1410,7 +1441,7 @@ export default function App() {
       setSelectedRecord(null);
       setRefreshNotice(null);
     }
-    await loadDashboard();
+    await requestDashboardLoad();
     setDeletingMissionId(null);
   };
 
@@ -1423,7 +1454,7 @@ export default function App() {
         record_id: selectedRecord.id,
         watch_rule_id: watch.id,
       });
-      await loadDashboard();
+      await requestDashboardLoad();
     } catch (error) {
       setLoadError(error.response?.data?.error || error.message || "Could not update this watch.");
     } finally {
@@ -1433,7 +1464,7 @@ export default function App() {
 
   const createProjectInline = async (title) => {
     const response = await base44.functions.invoke("create-mission", { title });
-    await loadDashboard();
+    await requestDashboardLoad();
     return response.data.mission;
   };
 
@@ -1491,7 +1522,7 @@ export default function App() {
         <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
-        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
+        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); const first = data.collections.find((collection) => collection.mission_id === missionId); selectCollection(first?.id ?? null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
         <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
@@ -1503,14 +1534,14 @@ export default function App() {
         isPairing={isPairing}
         onPair={handleCreatePairing}
         onDismiss={dismissOnboarding}
-        onViewCollection={setActiveCollectionId}
+        onViewCollection={selectCollection}
         onOpenReview={openOnboardingReview}
         onReportIssue={() => setIsBugReportOpen(true)}
         onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
       />
       <section className="workspace-grid">
-        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} onSelect={selectRecord} />
+        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} page={recordPage} hasMore={dataMeta.records.hasMore} isLoading={isLoadingRecords} onPageChange={changeRecordPage} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
