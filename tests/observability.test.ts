@@ -5,6 +5,7 @@ import {
   createRequestId,
   redactLogValue,
   serializeLogEvent,
+  toDiagnosticRecord,
 } from "../base44/shared/observability.ts";
 
 Deno.test("createRequestId returns a non-secret correlation id", () => {
@@ -54,8 +55,33 @@ Deno.test("redactLogValue removes bearer tokens and email addresses", () => {
   assertEquals(value.includes("[REDACTED]"), true);
 });
 
+Deno.test("toDiagnosticRecord stores only bounded operational fields with an expiry", () => {
+  const record = toDiagnosticRecord({
+    event: "function.request.error",
+    request_id: "req_test_1234567890",
+    function_name: "ingest-clip",
+    status: 429,
+    error_code: "RATE_LIMITED",
+    message: "Bearer mp_secret-token user@example.com",
+    duration_ms: 321,
+    environment: "production",
+  }, new Date("2026-08-18T19:00:00.000Z"));
+
+  assertEquals(record, {
+    event: "function.request.error",
+    request_id: "req_test_1234567890",
+    function_name: "ingest-clip",
+    status: 429,
+    error_code: "RATE_LIMITED",
+    message: "[REDACTED] [REDACTED]",
+    duration_ms: 321,
+    environment: "production",
+    occurred_at: "2026-08-18T19:00:00.000Z",
+    expires_at: "2026-08-25T19:00:00.000Z",
+  });
+});
 Deno.test("errorResponse returns status and a correlation id for safe client diagnostics", async () => {
-  const response = errorResponse(new HttpError(429, "Rate limit exceeded"), new Request("https://example.test/functions/ingest-clip", {
+  const response = await errorResponse(new HttpError(429, "Rate limit exceeded"), new Request("https://example.test/functions/ingest-clip", {
     headers: { "x-request-id": "req_client_12345678" },
   }));
   assertEquals(response.status, 429);
