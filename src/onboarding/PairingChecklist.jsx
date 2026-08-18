@@ -18,7 +18,7 @@ function statusCopy(overallStatus) {
   }
 }
 
-export default function PairingChecklist({ stage, extensionInstalls, isPairing, onPair }) {
+export default function PairingChecklist({ stage, extensionInstalls, isPairing, onPair, onOpenWorkspace }) {
   const overallStatus = deriveOverallPairingStatus(extensionInstalls);
   const isReconnect = stage === OnboardingStage.NOT_PAIRED && overallStatus === PairingStepStatus.REVOKED;
 
@@ -71,6 +71,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
       <div className="onboarding-mobile-note">
         <strong>Using Magpie on your phone</strong>
         <span>Use the Dashboard to review and organize saved Items. Mobile capture is coming next — you do not need to install or pair an Extension on your phone.</span>
+        <button type="button" className="onboarding-cta onboarding-cta-secondary onboarding-mobile-workspace-cta" onClick={onOpenWorkspace}>Open workspace</button>
       </div>
       <div className="pairing-note"><ShieldCheck size={16} /> The extension only ever submits clips. It cannot read anything from Magpie.</div>
     </section>
