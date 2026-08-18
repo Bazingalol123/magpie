@@ -1,9 +1,12 @@
-import { createClientFromRequest } from "npm:@base44/sdk";
 import {
+  captureSentryEvent,
+  captureSentryTransaction,
   classifyError,
+  createDiagnosticContext,
+  diagnosticDurationMs,
   logStructuredEvent,
-  persistDiagnosticEvent,
   requestIdFrom,
+  type DiagnosticContext,
 } from "./observability.ts";
 
 export class HttpError extends Error {
@@ -28,29 +31,27 @@ export function json(data: Record<string, unknown>, status = 200, requestId?: st
   return Response.json(data, { status, headers });
 }
 
-export async function errorResponse(error: unknown, request?: Request) {
-  const requestId = requestIdFrom(request);
+export async function errorResponse(error: unknown, request?: Request, context?: DiagnosticContext) {
+  const diagnosticContext = context ?? createDiagnosticContext(
+    request,
+    request?.url.split("/").filter(Boolean).pop() ?? "unknown",
+    "request",
+  );
+  const requestId = diagnosticContext.request_id || requestIdFrom(request);
   const classified = classifyError(error);
   const status = error instanceof HttpError ? error.status : classified.status ?? 500;
-  const functionName = request?.url.split("/").filter(Boolean).pop() ?? "unknown";
   const diagnostic = {
     event: "function.request.error",
-    request_id: requestId,
-    function_name: functionName,
+    ...diagnosticContext,
     status,
+    duration_ms: diagnosticDurationMs(diagnosticContext),
     error_code: classified.error_code,
     message: classified.message,
     outcome: "error",
     environment: "production",
   };
   logStructuredEvent(diagnostic);
-  if (request) {
-    try {
-      await persistDiagnosticEvent(createClientFromRequest(request), diagnostic);
-    } catch {
-      // Diagnostics must never change the original error response.
-    }
-  }
+  await (context ? captureSentryTransaction(diagnostic, context) : captureSentryEvent(diagnostic));
   if (error instanceof HttpError) {
     return json({ error: error.message, request_id: requestId }, error.status, requestId);
   }

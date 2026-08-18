@@ -63,6 +63,12 @@ Deno.test("the retired popup surface has no leftover files or manifest reference
   assertEquals(await fileExists("popup.css"), false, "extension/popup.css should have been removed");
 });
 
+Deno.test("capture errors preserve the backend request ID for user-visible support references", async () => {
+  const serviceWorker = await Deno.readTextFile(new URL("service-worker.js", extensionDirUrl));
+  assert(serviceWorker.includes("body.request_id"), "service worker must read request_id from error responses");
+  assert(serviceWorker.includes("Reference ID:"), "service worker must expose a safe reference ID in capture errors");
+});
+
 Deno.test("the Side Panel script never imports @base44/sdk (extension trust boundary)", async () => {
   const sidepanelJs = await Deno.readTextFile(new URL("sidepanel.js", extensionDirUrl));
   assert(!sidepanelJs.includes("@base44/sdk"), "extension/sidepanel.js must not import @base44/sdk");

@@ -152,7 +152,9 @@ async function submitCapture(payload) {
 
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(body.error || `Capture failed with status ${response.status}`);
+    const requestId = typeof body.request_id === "string" ? body.request_id : response.headers.get("x-request-id");
+    const reference = requestId ? ` Reference ID: ${requestId}` : "";
+    throw new Error(`${body.error || `Capture failed with status ${response.status}`}${reference}`);
   }
 
   await rememberSavedUrl(payload.source_url);
