@@ -217,6 +217,8 @@ export async function captureSentryTransaction(
     const startMs = cursorMs;
     cursorMs += span.duration_ms;
     return {
+      span_id: crypto.randomUUID().replaceAll("-", "").slice(0, 16),
+      trace_id: traceId,
       op: "capture.stage",
       description: span.name,
       start_timestamp: startMs / 1_000,
@@ -307,6 +309,8 @@ export function logStructuredEvent(input: Record<string, unknown>) {
 export function redactLogValue(value: string) {
   return value
     .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, REDACTED)
-    .replace(/mp_[A-Za-z0-9_-]{20,}/g, REDACTED)
+    .replace(/https?:\/\/[^\s]+/gi, REDACTED)
+    .replace(/(?:token|secret|password|api[_-]?key|pairing[_-]?token)\s*[:=]\s*[^\s,;]+/gi, REDACTED)
+    .replace(/\b(?:mp|sk|pk|rk|tok|pair)_[A-Za-z0-9_-]{8,}/gi, REDACTED)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, REDACTED);
 }

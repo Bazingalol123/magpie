@@ -55,9 +55,10 @@ Deno.test("serializeLogEvent emits bounded structured diagnostics without secret
 });
 
 Deno.test("redactLogValue removes bearer tokens and email addresses", () => {
-  const value = redactLogValue("Bearer mp_abcdefghijklmnopqrstuv1234567890 sent to user@example.com");
+  const value = redactLogValue("Bearer mp_abcdefghijklmnopqrstuv1234567890 sent to user@example.com url=https://example.test/path?token=secret");
   assertEquals(value.includes("mp_abcdefghijkl"), false);
   assertEquals(value.includes("user@example.com"), false);
+  assertEquals(value.includes("https://example.test"), false);
   assertEquals(value.includes("[REDACTED]"), true);
 });
 
