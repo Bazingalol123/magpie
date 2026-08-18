@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   LogOut,
+  Menu,
   MessageCircle,
   Target,
   Plus,
@@ -39,7 +40,7 @@ import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
-import { deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
+import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
@@ -330,7 +331,7 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
       >
-        <h1>{active ? active.title : "Library"}</h1>
+        <h1>{active ? active.title : "Your collections"}</h1>
         <ChevronDown size={22} aria-hidden="true" />
       </button>
       {isOpen && (
@@ -492,37 +493,42 @@ function RecordTable({ collection, records, clips, onSelect }) {
         </div>
         <div className="live-indicator"><span /> live</div>
       </div>
-      {showCards ? (
+      <div className="desktop-record-view">
+        {showCards ? (
+          <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  {columns.map((column) => <th key={column.name}>{column.label}</th>)}
+                  <th aria-label="Open record" />
+                </tr>
+              </thead>
+              <tbody>
+                {pageRecords.length ? pageRecords.map((record) => {
+                  const fields = parseJson(record.fields_json, {});
+                  return (
+                    <tr key={record.id} onClick={() => onSelect(record)}>
+                      <td>
+                        <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
+                      </td>
+                      {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
+                      <td><ChevronRight size={17} /></td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <div className="mobile-record-view">
         <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
-      ) : (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                {columns.map((column) => <th key={column.name}>{column.label}</th>)}
-                <th aria-label="Open record" />
-              </tr>
-            </thead>
-            <tbody>
-              {pageRecords.length ? pageRecords.map((record) => {
-                const fields = parseJson(record.fields_json, {});
-                return (
-                  <tr key={record.id} onClick={() => onSelect(record)}>
-                    <td>
-                      <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
-                    </td>
-                    {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
-                    <td><ChevronRight size={17} /></td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </div>
       {records.length > pageSize && (
         <div className="table-pagination">
           <button className="secondary-button" disabled={safePage === 0} onClick={() => setPage((current) => current - 1)}>Previous</button>
@@ -547,7 +553,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
         const image = screenshotUrlFor(clipsById.get(record.clip_id));
         const title = (primaryColumn && fields[primaryColumn.name]) || hostFromUrl(record.source_url);
         return (
-          <button key={record.id} className="record-card" onClick={() => onSelect(record)}>
+          <div key={record.id} className={`record-card ${image ? "has-media" : "no-media"}`} onClick={() => onSelect(record)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(record); } }}>
             <div className="record-card-media">
               {image ? (
                 <img src={image} alt="" loading="lazy" />
@@ -571,7 +577,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
               })}
               <div className="record-card-source"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}</div>
             </div>
-          </button>
+          </div>
         );
       })}
     </div>
@@ -1103,6 +1109,8 @@ export default function App() {
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshNotice, setRefreshNotice] = useState(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -1454,6 +1462,10 @@ export default function App() {
     }),
     [data.extensionInstalls, data.clips, onboardingDismissed],
   );
+  const isFirstRun = onboardingStage === OnboardingStage.NOT_PAIRED
+    && data.collections.length === 0
+    && data.records.length === 0
+    && data.clips.length === 0;
   const dismissOnboarding = () => {
     window.localStorage.setItem("magpie.onboarding.dismissed", "true");
     setOnboardingDismissed(true);
@@ -1472,11 +1484,11 @@ export default function App() {
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${isFirstRun && !isWorkspacePreviewOpen ? "first-run" : ""}`}>
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); setActiveCollectionId(null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
@@ -1494,6 +1506,7 @@ export default function App() {
         onViewCollection={setActiveCollectionId}
         onOpenReview={openOnboardingReview}
         onReportIssue={() => setIsBugReportOpen(true)}
+        onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={setActiveCollectionId} onDelete={deleteCollection} deletingId={deletingCollectionId} />

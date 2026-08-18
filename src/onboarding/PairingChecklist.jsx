@@ -9,7 +9,7 @@ const EXTENSION_RELEASES_URL = "https://github.com/Bazingalol123/magpie/releases
 function statusCopy(overallStatus) {
   switch (overallStatus) {
     case PairingStepStatus.USED:
-      return "Extension connected. Right-click on any page, or press Alt+Shift+M (⌘+Shift+M on Mac), to capture your first item.";
+      return "Extension connected. Open the Side Panel on any webpage, or press Alt+Shift+M (⌘+Shift+M on Mac), then choose a page, link, element, text selection, or image to capture.";
     case PairingStepStatus.REVOKED:
       return "This browser's connection looks inactive. Pair again to reconnect.";
     case PairingStepStatus.UNUSED:
@@ -18,24 +18,30 @@ function statusCopy(overallStatus) {
   }
 }
 
-export default function PairingChecklist({ stage, extensionInstalls, isPairing, onPair }) {
+export default function PairingChecklist({ stage, extensionInstalls, isPairing, onPair, onOpenWorkspace }) {
   const overallStatus = deriveOverallPairingStatus(extensionInstalls);
   const isReconnect = stage === OnboardingStage.NOT_PAIRED && overallStatus === PairingStepStatus.REVOKED;
 
   return (
     <section className="onboarding-panel" role="region" aria-label="First-run checklist">
-      <div className="eyebrow">get set up</div>
+      <div className="eyebrow">{isReconnect ? "reconnect" : stage === OnboardingStage.NOT_PAIRED ? "welcome to magpie" : "your first capture"}</div>
+      <div className="onboarding-explainer">
+        <strong>Magpie has two parts</strong>
+        <span><b>Dashboard</b> is where you view and organize saved Items. <b>Extension</b> is what you use to capture while browsing.</span>
+        <span className="onboarding-flow">Browse a webpage <i>→</i> open the Side Panel <i>→</i> capture something <i>→</i> review it here</span>
+      </div>
       <ol className="onboarding-steps">
-        <li className="onboarding-step">
+        <li className="onboarding-step onboarding-desktop-only">
           <span className="onboarding-step-icon"><Download size={15} /></span>
           <div>
             <p>Install the Chrome extension</p>
+            <span className="onboarding-step-body">It opens as a Side Panel that stays available while you browse.</span>
             <a className="onboarding-cta onboarding-cta-secondary" href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">
               Get extension
             </a>
           </div>
         </li>
-        <li className="onboarding-step">
+        <li className="onboarding-step onboarding-desktop-only">
           <span className="onboarding-step-icon"><Key size={15} /></span>
           <div>
             <p>Pair the extension to your library</p>
@@ -43,10 +49,11 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
               {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
               {isReconnect ? "Reconnect extension" : "Pair extension"}
             </button>
+            <span className="onboarding-shortcut">Picker shortcut: <kbd>Alt + Shift + M</kbd> · Mac <kbd>⌘ + Shift + M</kbd></span>
           </div>
         </li>
         {stage === OnboardingStage.AWAITING_FIRST_CAPTURE && (
-          <li className="onboarding-step">
+          <li className="onboarding-step onboarding-desktop-only">
             <span className="onboarding-step-icon">
               {overallStatus === PairingStepStatus.USED ? <Check size={15} /> : <LoaderCircle className="spin" size={15} />}
             </span>
@@ -61,6 +68,11 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
           </li>
         )}
       </ol>
+      <div className="onboarding-mobile-note">
+        <strong>Using Magpie on your phone</strong>
+        <span>Use the Dashboard to review and organize saved Items. Mobile capture is coming next — you do not need to install or pair an Extension on your phone.</span>
+        <button type="button" className="onboarding-cta onboarding-cta-secondary onboarding-mobile-workspace-cta" onClick={onOpenWorkspace}>Open workspace</button>
+      </div>
       <div className="pairing-note"><ShieldCheck size={16} /> The extension only ever submits clips. It cannot read anything from Magpie.</div>
     </section>
   );

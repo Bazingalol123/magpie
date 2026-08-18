@@ -13,9 +13,10 @@ export default function OnboardingPanel({
   onViewCollection,
   onOpenReview,
   onReportIssue,
+  onOpenWorkspace,
 }) {
   if (stage === OnboardingStage.NOT_PAIRED || stage === OnboardingStage.AWAITING_FIRST_CAPTURE) {
-    return <PairingChecklist stage={stage} extensionInstalls={extensionInstalls} isPairing={isPairing} onPair={onPair} />;
+    return <PairingChecklist stage={stage} extensionInstalls={extensionInstalls} isPairing={isPairing} onPair={onPair} onOpenWorkspace={onOpenWorkspace} />;
   }
   if (stage === OnboardingStage.FIRST_CAPTURE_RECEIVED) {
     return (
