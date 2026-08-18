@@ -373,6 +373,9 @@ button:disabled { cursor: wait; opacity: .7; }
   [data-reveal] { opacity: 1; transform: none; transition: none; }
 }
 
+.mobile-record-view { display: none; }
+.desktop-record-view { display: block; }
+
 @media (max-width: 680px) {
   .desktop-record-view { display: none; }
   .mobile-record-view { display: block; }
