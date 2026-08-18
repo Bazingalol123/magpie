@@ -1,11 +1,10 @@
-import { createClientFromRequest } from "npm:@base44/sdk";
 import {
   captureSentryEvent,
+  captureSentryTransaction,
   classifyError,
   createDiagnosticContext,
   diagnosticDurationMs,
   logStructuredEvent,
-  persistDiagnosticEvent,
   requestIdFrom,
   type DiagnosticContext,
 } from "./observability.ts";
@@ -52,14 +51,7 @@ export async function errorResponse(error: unknown, request?: Request, context?:
     environment: "production",
   };
   logStructuredEvent(diagnostic);
-  await captureSentryEvent(diagnostic);
-  if (request) {
-    try {
-      await persistDiagnosticEvent(createClientFromRequest(request), diagnostic);
-    } catch {
-      // Diagnostics must never change the original error response.
-    }
-  }
+  await (context ? captureSentryTransaction(diagnostic, context) : captureSentryEvent(diagnostic));
   if (error instanceof HttpError) {
     return json({ error: error.message, request_id: requestId }, error.status, requestId);
   }

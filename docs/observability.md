@@ -4,11 +4,11 @@
 
 Base44 `appLogs.logUserInApp()` records product-usage events for the Analytics page. It is useful for events such as page visits or feature usage, but it is not an HTTP/backend request log: it does not provide a reliable status code, latency, exception classification, or request correlation chain.
 
-Backend diagnostics use structured JSON written by the function runtime, a short-lived `DiagnosticEvent` fallback entity, and Sentry for durable error delivery. Runtime stdout is supplementary only; Base44's production log retrieval is not currently reliable enough to treat it as the primary incident source.
+Backend diagnostics use one Sentry transaction per capture. The transaction contains bounded stage spans and is the primary durable error/success trace. Structured JSON written by the function runtime is supplementary only; Base44's production log retrieval is not currently reliable enough to treat it as the primary incident source.
 
 Sentry receives backend errors through the HTTP Envelope API using the `SENTRY_DSN` Base44 secret. Events contain only bounded operational fields: request ID, function, operation, stage, status, error code, duration, environment, and a redacted message. No Sentry browser SDK is loaded by the React app or Extension, and no user/session/replay data is sent.
 
-Capture successes emit a structured runtime event only; they do not create a database row. Capture errors emit to Sentry and make one best-effort `DiagnosticEvent` write. A failure in either diagnostic transport never changes the original product response.
+Capture successes and errors each send one transaction to Sentry with the same opaque request ID. No capture path creates a diagnostic database row. A Sentry transport failure never changes the original product response.
 
 
 ## Sentry configuration

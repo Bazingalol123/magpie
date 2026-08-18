@@ -2,12 +2,15 @@ import { assertEquals, assertMatch } from "jsr:@std/assert";
 import { errorResponse, HttpError } from "../base44/shared/http.ts";
 import {
   captureSentryEvent,
+  captureSentryTransaction,
   classifyError,
   createDiagnosticContext,
   createRequestId,
   diagnosticDurationMs,
+  diagnosticStageSpans,
   redactLogValue,
   serializeLogEvent,
+  setDiagnosticStage,
   toDiagnosticRecord,
 } from "../base44/shared/observability.ts";
 
@@ -99,10 +102,39 @@ Deno.test("diagnostic context keeps one request id and reports bounded duration"
     operation: "capture",
     started_at_ms: 1_000,
     stage: "request",
+    stage_started_at_ms: 1_000,
   });
   assertEquals(diagnosticDurationMs(context, 1_321), 321);
 });
 
+Deno.test("diagnostic stages become bounded Sentry transaction spans", async () => {
+  const context = createDiagnosticContext(undefined, "ingest-clip", "capture", 1_000);
+  setDiagnosticStage(context, "auth", 1_100);
+  setDiagnosticStage(context, "storage", 1_250);
+  assertEquals(diagnosticStageSpans(context, 1_500), [
+    { name: "request", duration_ms: 100 },
+    { name: "auth", duration_ms: 150 },
+    { name: "storage", duration_ms: 250 },
+  ]);
+
+  let body = "";
+  const sent = await captureSentryTransaction({
+    event: "capture.request.finished",
+    request_id: context.request_id,
+    status: 202,
+    error_code: "NONE",
+    outcome: "success",
+    environment: "production",
+  }, context, "https://public@example.ingest.sentry.io/12345", async (_input, init) => {
+    body = String(init?.body);
+    return new Response(null, { status: 200 });
+  });
+  const payload = JSON.parse(body.split("\n")[2]);
+  assertEquals(sent, true);
+  assertEquals(payload.type, "transaction");
+  assertEquals(payload.tags.request_id, context.request_id);
+  assertEquals(payload.spans.map((span: { description: string }) => span.description), ["request", "auth", "storage"]);
+});
 Deno.test("success diagnostic records contain outcome and stage without payload data", () => {
   const record = toDiagnosticRecord({
     event: "capture.request.finished",

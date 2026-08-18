@@ -4,12 +4,12 @@ import { canonicalizeUrl, screenshotFile, validateCapture } from "../../shared/c
 import { getOrNull } from "../../shared/service-entities.ts";
 import { corsHeaders, errorResponse, HttpError, json, readJson, requirePost } from "../../shared/http.ts";
 import {
-  captureSentryEvent,
+  captureSentryTransaction,
   classifyError,
   createDiagnosticContext,
   diagnosticDurationMs,
   logStructuredEvent,
-  persistDiagnosticEvent,
+  setDiagnosticStage,
 } from "../../shared/observability.ts";
 import { markRoutingFailed, processStoredClip } from "../../shared/routing-persistence.ts";
 
@@ -18,10 +18,10 @@ Deno.serve(async (req) => {
   try {
     if (requirePost(req)) return new Response(null, { status: 204, headers: corsHeaders });
 
-    diagnostic.stage = "auth";
+    setDiagnosticStage(diagnostic, "auth");
     const base44 = createClientFromRequest(req);
     const { ownerId } = await requireExtensionPrincipal(base44, req);
-    diagnostic.stage = "validate";
+    setDiagnosticStage(diagnostic, "validate");
     const capture = validateCapture(await readJson(req));
     if (capture.mission_id) {
       const mission = await getOrNull(base44.asServiceRole.entities.Mission, capture.mission_id);
@@ -29,16 +29,16 @@ Deno.serve(async (req) => {
         return errorResponse(new HttpError(409, "The selected Project is unavailable"), req, diagnostic);
       }
     }
-    diagnostic.stage = "deduplication";
+    setDiagnosticStage(diagnostic, "deduplication");
     if (capture.idempotency_key) {
       const existing = await base44.asServiceRole.entities.Clip.filter({
         owner_id: ownerId,
         idempotency_key: capture.idempotency_key,
       }, "-created_date", 1);
       if (existing[0]) {
-        diagnostic.stage = "routing";
+        setDiagnosticStage(diagnostic, "routing");
         const result = await processStoredClip(base44, existing[0].id);
-        recordCaptureSuccess(diagnostic, 202);
+        await recordCaptureSuccess(diagnostic, 202);
         return json({
           accepted: true,
           duplicate: true,
@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
       content_hash: contentHash,
     }, "-created_date", 1);
     if (identicalClips[0] && identicalClips[0].routing_status !== "failed") {
-      recordCaptureSuccess(diagnostic, 202);
+      await recordCaptureSuccess(diagnostic, 202);
       return json({
         accepted: true,
         duplicate: true,
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
         console.warn("Screenshot upload failed; preserving the clip without an image", uploadError);
       }
     }
-    diagnostic.stage = "storage";
+    setDiagnosticStage(diagnostic, "storage");
     const clip = await base44.asServiceRole.entities.Clip.create({
       owner_id: ownerId,
       ...clipData,
@@ -92,9 +92,9 @@ Deno.serve(async (req) => {
     });
 
     try {
-      diagnostic.stage = "routing";
+      setDiagnosticStage(diagnostic, "routing");
       const result = await processStoredClip(base44, clip.id);
-      recordCaptureSuccess(diagnostic, 202);
+      await recordCaptureSuccess(diagnostic, 202);
       return json({
         accepted: true,
         capture_status: "new",
@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     } catch (routingError) {
       console.error("Clip organization failed", routingError);
       const classified = classifyError(routingError);
-      await recordCaptureError(base44, diagnostic, classified);
+      await recordCaptureError(diagnostic, classified);
       let failed;
       try {
         failed = await markRoutingFailed(base44, clip.id, routingError);
@@ -124,8 +124,8 @@ Deno.serve(async (req) => {
   }
 });
 
-function recordCaptureSuccess(diagnostic: ReturnType<typeof createDiagnosticContext>, status: number) {
-  logStructuredEvent({
+async function recordCaptureSuccess(diagnostic: ReturnType<typeof createDiagnosticContext>, status: number) {
+  const event = {
     event: "capture.request.finished",
     ...diagnostic,
     status,
@@ -133,10 +133,12 @@ function recordCaptureSuccess(diagnostic: ReturnType<typeof createDiagnosticCont
     error_code: "NONE",
     outcome: "success",
     environment: "production",
-  });
+  };
+  logStructuredEvent(event);
+  await captureSentryTransaction(event, diagnostic);
 }
 
-async function recordCaptureError(base44: any, diagnostic: ReturnType<typeof createDiagnosticContext>, classified: ReturnType<typeof classifyError>) {
+async function recordCaptureError(diagnostic: ReturnType<typeof createDiagnosticContext>, classified: ReturnType<typeof classifyError>) {
   const event = {
     event: "capture.request.error",
     ...diagnostic,
@@ -148,8 +150,7 @@ async function recordCaptureError(base44: any, diagnostic: ReturnType<typeof cre
     environment: "production",
   };
   logStructuredEvent(event);
-  await captureSentryEvent(event);
-  await persistDiagnosticEvent(base44, event);
+  await captureSentryTransaction(event, diagnostic);
 }
 
 async function sha256(value: string) {
