@@ -1470,9 +1470,8 @@ export default function App() {
 
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
   const missionRecords = activeMission ? data.records.filter((record) => record.mission_id === activeMission.id) : data.records;
-  const missionCollectionIds = new Set(missionRecords.map((record) => record.collection_id));
   const missionCollections = activeMission
-    ? data.collections.filter((collection) => collection.mission_id === activeMission.id || missionCollectionIds.has(collection.id))
+    ? data.collections.filter((collection) => collection.mission_id === activeMission.id || !collection.mission_id)
     : data.collections;
   const activeCollection = missionCollections.find((collection) => collection.id === activeCollectionId) ?? missionCollections[0];
   const activeRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
