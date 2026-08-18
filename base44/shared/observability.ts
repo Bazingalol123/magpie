@@ -111,6 +111,7 @@ export function serializeLogEvent(input: Record<string, unknown>): StructuredLog
 
 export function toDiagnosticRecord(input: Record<string, unknown>, now = new Date()) {
   const event = serializeLogEvent(input);
+  if (!event.error_code) event.error_code = input.outcome === "success" ? "NONE" : "INTERNAL_ERROR";
   const occurredAt = now.toISOString();
   return {
     ...event,
@@ -120,6 +121,66 @@ export function toDiagnosticRecord(input: Record<string, unknown>, now = new Dat
   };
 }
 
+export async function captureSentryEvent(
+  input: Record<string, unknown>,
+  dsn = Deno.env.get("SENTRY_DSN") ?? "",
+  fetchImpl: typeof fetch = fetch,
+) {
+  const parsed = parseSentryDsn(dsn);
+  if (!parsed) return false;
+
+  const event = serializeLogEvent(input);
+  const eventId = crypto.randomUUID().replaceAll("-", "");
+  const endpoint = `${parsed.origin}/api/${encodeURIComponent(parsed.projectId)}/envelope/?sentry_version=7&sentry_key=${encodeURIComponent(parsed.publicKey)}&sentry_client=magpie/1.0`;
+  const payload = {
+    event_id: eventId,
+    timestamp: Date.now() / 1_000,
+    platform: "javascript",
+    level: "error",
+    message: { formatted: event.message ?? "Backend diagnostic error" },
+    tags: Object.fromEntries([
+      ["function_name", event.function_name],
+      ["operation", event.operation],
+      ["stage", event.stage],
+      ["error_code", event.error_code],
+      ["environment", input.environment],
+      ["runtime", "backend"],
+    ].filter(([, value]) => typeof value === "string")),
+    extra: Object.fromEntries([
+      ["request_id", event.request_id],
+      ["status", event.status],
+      ["duration_ms", event.duration_ms],
+    ].filter(([, value]) => value !== undefined)),
+  };
+  const envelope = `${JSON.stringify({ event_id: eventId, sent_at: new Date().toISOString() })}\n${JSON.stringify({ type: "event" })}\n${JSON.stringify(payload)}\n`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1_500);
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-sentry-envelope" },
+      body: envelope,
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function parseSentryDsn(value: string) {
+  try {
+    const url = new URL(value);
+    const projectId = url.pathname.split("/").filter(Boolean).at(-1) ?? "";
+    if (url.protocol !== "https:" || !url.username || !projectId) return null;
+    return { origin: url.origin, publicKey: decodeURIComponent(url.username), projectId };
+  } catch {
+    return null;
+  }
+}
 export async function persistDiagnosticEvent(base44: any, input: Record<string, unknown>) {
   try {
     const record = toDiagnosticRecord(input);

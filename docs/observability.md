@@ -4,7 +4,18 @@
 
 Base44 `appLogs.logUserInApp()` records product-usage events for the Analytics page. It is useful for events such as page visits or feature usage, but it is not an HTTP/backend request log: it does not provide a reliable status code, latency, exception classification, or request correlation chain.
 
-Backend diagnostics use structured JSON written by the function runtime and a short-lived `DiagnosticEvent` entity. Capture requests also persist one bounded success event or one error event with the last reached stage and total duration. The client receives the same opaque `request_id` in error responses and the `X-Request-Id` response header. Entity persistence is best-effort: a logging failure never changes the original response.
+Backend diagnostics use structured JSON written by the function runtime, a short-lived `DiagnosticEvent` fallback entity, and Sentry for durable error delivery. Runtime stdout is supplementary only; Base44's production log retrieval is not currently reliable enough to treat it as the primary incident source.
+
+Sentry receives backend errors through the HTTP Envelope API using the `SENTRY_DSN` Base44 secret. Events contain only bounded operational fields: request ID, function, operation, stage, status, error code, duration, environment, and a redacted message. No Sentry browser SDK is loaded by the React app or Extension, and no user/session/replay data is sent.
+
+Capture successes emit a structured runtime event only; they do not create a database row. Capture errors emit to Sentry and make one best-effort `DiagnosticEvent` write. A failure in either diagnostic transport never changes the original product response.
+
+
+## Sentry configuration
+
+Create or use a Sentry project, copy its DSN without committing it, and store it in Base44 as the `SENTRY_DSN` secret. Do not install `@sentry/react` for this backend integration and do not place the DSN in the frontend or Extension. The backend transport tags events with `runtime=backend` so it can share a project with the React setup while remaining distinguishable.
+
+The safe verification path is: set the secret, deploy Functions, trigger a controlled unauthenticated request, and confirm the event in Sentry by its request ID. Never use a real capture payload as the first test.
 
 ## Structured error event
 

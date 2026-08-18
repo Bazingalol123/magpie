@@ -1,6 +1,7 @@
 import { assertEquals, assertMatch } from "jsr:@std/assert";
 import { errorResponse, HttpError } from "../base44/shared/http.ts";
 import {
+  captureSentryEvent,
   classifyError,
   createDiagnosticContext,
   createRequestId,
@@ -118,7 +119,56 @@ Deno.test("success diagnostic records contain outcome and stage without payload 
 
   assertEquals(record.stage, "routing");
   assertEquals(record.outcome, "success");
+  assertEquals(record.error_code, "NONE");
   assertEquals((record as Record<string, unknown>).raw_text, undefined);
+});
+Deno.test("captureSentryEvent sends only redacted operational fields to the configured DSN", async () => {
+  let capturedUrl = "";
+  let capturedBody: Record<string, unknown> | undefined;
+  const result = await captureSentryEvent({
+    event: "function.request.error",
+    request_id: "req_sentry_12345678",
+    function_name: "ingest-clip",
+    operation: "capture",
+    stage: "storage",
+    status: 429,
+    error_code: "RATE_LIMITED",
+    message: "Bearer mp_secret-token user@example.com",
+    duration_ms: 412,
+    outcome: "error",
+    environment: "production",
+    raw_text: "must not be sent",
+  }, "https://public@example.ingest.sentry.io/12345", async (input: Request | URL | string, init?: RequestInit) => {
+    capturedUrl = String(input);
+    const lines = String(init?.body).split("\n");
+    capturedBody = JSON.parse(lines[2]);
+    return new Response(null, { status: 200 });
+  });
+
+  assertEquals(result, true);
+  assertMatch(capturedUrl, /\/api\/12345\/envelope\//);
+  assertEquals(capturedBody?.message, { formatted: "[REDACTED] [REDACTED]" });
+  assertEquals(capturedBody?.tags, {
+    function_name: "ingest-clip",
+    operation: "capture",
+    stage: "storage",
+    error_code: "RATE_LIMITED",
+    environment: "production",
+    runtime: "backend",
+  });
+  assertEquals(capturedBody?.extra, {
+    request_id: "req_sentry_12345678",
+    status: 429,
+    duration_ms: 412,
+  });
+  assertEquals((capturedBody as Record<string, unknown>).raw_text, undefined);
+});
+
+Deno.test("captureSentryEvent is a no-op without a DSN and never throws on transport failure", async () => {
+  assertEquals(await captureSentryEvent({ event: "test" }, "", fetch), false);
+  assertEquals(await captureSentryEvent({ event: "test" }, "https://public@example.ingest.sentry.io/12345", async () => {
+    throw new Error("network down");
+  }), false);
 });
 Deno.test("errorResponse returns status and a correlation id for safe client diagnostics", async () => {
   const response = await errorResponse(new HttpError(429, "Rate limit exceeded"), new Request("https://example.test/functions/ingest-clip", {

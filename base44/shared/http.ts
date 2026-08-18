@@ -1,5 +1,6 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 import {
+  captureSentryEvent,
   classifyError,
   createDiagnosticContext,
   diagnosticDurationMs,
@@ -51,6 +52,7 @@ export async function errorResponse(error: unknown, request?: Request, context?:
     environment: "production",
   };
   logStructuredEvent(diagnostic);
+  await captureSentryEvent(diagnostic);
   if (request) {
     try {
       await persistDiagnosticEvent(createClientFromRequest(request), diagnostic);

@@ -2,11 +2,13 @@ import { createClientFromRequest } from "npm:@base44/sdk";
 import { requireExtensionPrincipal } from "../../shared/auth.ts";
 import { canonicalizeUrl, screenshotFile, validateCapture } from "../../shared/clip.ts";
 import { getOrNull } from "../../shared/service-entities.ts";
-import { corsHeaders, errorResponse, json, readJson, requirePost } from "../../shared/http.ts";
+import { corsHeaders, errorResponse, HttpError, json, readJson, requirePost } from "../../shared/http.ts";
 import {
+  captureSentryEvent,
   classifyError,
   createDiagnosticContext,
   diagnosticDurationMs,
+  logStructuredEvent,
   persistDiagnosticEvent,
 } from "../../shared/observability.ts";
 import { markRoutingFailed, processStoredClip } from "../../shared/routing-persistence.ts";
@@ -24,7 +26,7 @@ Deno.serve(async (req) => {
     if (capture.mission_id) {
       const mission = await getOrNull(base44.asServiceRole.entities.Mission, capture.mission_id);
       if (!mission || mission.owner_id !== ownerId || mission.status !== "active") {
-        return json({ error: "The selected Project is unavailable" }, 409);
+        return errorResponse(new HttpError(409, "The selected Project is unavailable"), req, diagnostic);
       }
     }
     diagnostic.stage = "deduplication";
@@ -34,9 +36,9 @@ Deno.serve(async (req) => {
         idempotency_key: capture.idempotency_key,
       }, "-created_date", 1);
       if (existing[0]) {
-        const result = await processStoredClip(base44, existing[0].id);
         diagnostic.stage = "routing";
-        await recordCaptureSuccess(base44, diagnostic, 202);
+        const result = await processStoredClip(base44, existing[0].id);
+        recordCaptureSuccess(diagnostic, 202);
         return json({
           accepted: true,
           duplicate: true,
@@ -44,7 +46,7 @@ Deno.serve(async (req) => {
           clip_id: existing[0].id,
           routing_status: result.clip.routing_status,
           routing_reason_code: result.clip.routing_reason_code,
-        }, 202);
+        }, 202, diagnostic.request_id);
       }
     }
     const canonicalUrl = canonicalizeUrl(capture.source_url);
@@ -56,7 +58,7 @@ Deno.serve(async (req) => {
       content_hash: contentHash,
     }, "-created_date", 1);
     if (identicalClips[0] && identicalClips[0].routing_status !== "failed") {
-      await recordCaptureSuccess(base44, diagnostic, 202);
+      recordCaptureSuccess(diagnostic, 202);
       return json({
         accepted: true,
         duplicate: true,
@@ -64,7 +66,7 @@ Deno.serve(async (req) => {
         clip_id: identicalClips[0].id,
         routing_status: identicalClips[0].routing_status,
         routing_reason_code: identicalClips[0].routing_reason_code,
-      }, 202);
+      }, 202, diagnostic.request_id);
     }
     const { screenshot_data_url: screenshotDataUrl, ...clipData } = capture;
     const screenshot = screenshotFile(screenshotDataUrl);
@@ -92,44 +94,50 @@ Deno.serve(async (req) => {
     try {
       diagnostic.stage = "routing";
       const result = await processStoredClip(base44, clip.id);
-      await recordCaptureSuccess(base44, diagnostic, 202);
+      recordCaptureSuccess(diagnostic, 202);
       return json({
         accepted: true,
         capture_status: "new",
         clip_id: clip.id,
         routing_status: result.clip.routing_status,
         routing_reason_code: result.clip.routing_reason_code,
-      }, 202);
+      }, 202, diagnostic.request_id);
     } catch (routingError) {
       console.error("Clip organization failed", routingError);
       const classified = classifyError(routingError);
       await recordCaptureError(base44, diagnostic, classified);
-      const failed = await markRoutingFailed(base44, clip.id, routingError);
+      let failed;
+      try {
+        failed = await markRoutingFailed(base44, clip.id, routingError);
+      } catch (markError) {
+        console.error("Clip failure state could not be persisted", markError);
+      }
       return json({
         accepted: true,
         clip_id: clip.id,
         routing_status: failed?.clip?.routing_status ?? "failed",
         routing_reason_code: failed?.clip?.routing_reason_code ?? "unexpected_failure",
-      }, 202);
+      }, 202, diagnostic.request_id);
     }
   } catch (error) {
     return errorResponse(error, req, diagnostic);
   }
 });
 
-async function recordCaptureSuccess(base44: any, diagnostic: ReturnType<typeof createDiagnosticContext>, status: number) {
-  await persistDiagnosticEvent(base44, {
+function recordCaptureSuccess(diagnostic: ReturnType<typeof createDiagnosticContext>, status: number) {
+  logStructuredEvent({
     event: "capture.request.finished",
     ...diagnostic,
     status,
     duration_ms: diagnosticDurationMs(diagnostic),
+    error_code: "NONE",
     outcome: "success",
     environment: "production",
   });
 }
 
 async function recordCaptureError(base44: any, diagnostic: ReturnType<typeof createDiagnosticContext>, classified: ReturnType<typeof classifyError>) {
-  await persistDiagnosticEvent(base44, {
+  const event = {
     event: "capture.request.error",
     ...diagnostic,
     status: classified.status ?? 500,
@@ -138,7 +146,10 @@ async function recordCaptureError(base44: any, diagnostic: ReturnType<typeof cre
     message: classified.message,
     outcome: "error",
     environment: "production",
-  });
+  };
+  logStructuredEvent(event);
+  await captureSentryEvent(event);
+  await persistDiagnosticEvent(base44, event);
 }
 
 async function sha256(value: string) {
