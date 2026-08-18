@@ -330,7 +330,7 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
       >
-        <h1>{active ? active.title : "Library"}</h1>
+        <h1>{active ? active.title : "Your collections"}</h1>
         <ChevronDown size={22} aria-hidden="true" />
       </button>
       {isOpen && (
@@ -552,7 +552,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
         const image = screenshotUrlFor(clipsById.get(record.clip_id));
         const title = (primaryColumn && fields[primaryColumn.name]) || hostFromUrl(record.source_url);
         return (
-          <button key={record.id} className="record-card" onClick={() => onSelect(record)}>
+          <div key={record.id} className={`record-card ${image ? "has-media" : "no-media"}`} onClick={() => onSelect(record)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(record); } }}>
             <div className="record-card-media">
               {image ? (
                 <img src={image} alt="" loading="lazy" />
@@ -576,7 +576,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
               })}
               <div className="record-card-source"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}</div>
             </div>
-          </button>
+          </div>
         );
       })}
     </div>

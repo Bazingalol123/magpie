@@ -31,7 +31,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
         <span className="onboarding-flow">Browse a webpage <i>→</i> open the Side Panel <i>→</i> capture something <i>→</i> review it here</span>
       </div>
       <ol className="onboarding-steps">
-        <li className="onboarding-step">
+        <li className="onboarding-step onboarding-desktop-only">
           <span className="onboarding-step-icon"><Download size={15} /></span>
           <div>
             <p>Install the Chrome extension</p>
@@ -41,7 +41,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
             </a>
           </div>
         </li>
-        <li className="onboarding-step">
+        <li className="onboarding-step onboarding-desktop-only">
           <span className="onboarding-step-icon"><Key size={15} /></span>
           <div>
             <p>Pair the extension to your library</p>
@@ -53,7 +53,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
           </div>
         </li>
         {stage === OnboardingStage.AWAITING_FIRST_CAPTURE && (
-          <li className="onboarding-step">
+          <li className="onboarding-step onboarding-desktop-only">
             <span className="onboarding-step-icon">
               {overallStatus === PairingStepStatus.USED ? <Check size={15} /> : <LoaderCircle className="spin" size={15} />}
             </span>
@@ -68,6 +68,10 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
           </li>
         )}
       </ol>
+      <div className="onboarding-mobile-note">
+        <strong>Using Magpie on your phone</strong>
+        <span>Use the Dashboard to review and organize saved Items. Mobile capture is coming next — you do not need to install or pair an Extension on your phone.</span>
+      </div>
       <div className="pairing-note"><ShieldCheck size={16} /> The extension only ever submits clips. It cannot read anything from Magpie.</div>
     </section>
   );
