@@ -1,3 +1,9 @@
+import {
+  classifyError,
+  logStructuredEvent,
+  requestIdFrom,
+} from "./observability.ts";
+
 export class HttpError extends Error {
   status: number;
 
@@ -9,21 +15,34 @@ export class HttpError extends Error {
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-app-id, base44-app-id",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-app-id, base44-app-id, x-request-id",
+  "Access-Control-Expose-Headers": "x-request-id",
   "Access-Control-Allow-Methods": "POST, PUT, OPTIONS",
 };
 
-export function json(data: Record<string, unknown>, status = 200) {
-  return Response.json(data, { status, headers: corsHeaders });
+export function json(data: Record<string, unknown>, status = 200, requestId?: string) {
+  const headers: Record<string, string> = { ...corsHeaders };
+  if (requestId) headers["X-Request-Id"] = requestId;
+  return Response.json(data, { status, headers });
 }
 
-export function errorResponse(error: unknown) {
+export function errorResponse(error: unknown, request?: Request) {
+  const requestId = requestIdFrom(request);
+  const classified = classifyError(error);
+  const status = error instanceof HttpError ? error.status : classified.status ?? 500;
+  logStructuredEvent({
+    event: "function.request.error",
+    request_id: requestId,
+    status,
+    error_code: classified.error_code,
+    message: classified.message,
+    outcome: "error",
+  });
   if (error instanceof HttpError) {
-    return json({ error: error.message }, error.status);
+    return json({ error: error.message, request_id: requestId }, error.status, requestId);
   }
 
-  console.error(error);
-  return json({ error: "Unexpected server error" }, 500);
+  return json({ error: "Unexpected server error", request_id: requestId }, 500, requestId);
 }
 
 export async function readJson(req: Request) {

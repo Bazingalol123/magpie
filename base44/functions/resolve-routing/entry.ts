@@ -25,6 +25,6 @@ Deno.serve(async (req) => {
       duplicate: result.duplicate,
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

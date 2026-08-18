@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
 
     return json({ processed: results.length, results });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
 

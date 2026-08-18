@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
       }, 202);
     }
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
 

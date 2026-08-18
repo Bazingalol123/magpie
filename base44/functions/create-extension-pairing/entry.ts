@@ -27,6 +27,6 @@ Deno.serve(async (req) => {
       ingest_url: buildIngestUrl(),
     }, 201);
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

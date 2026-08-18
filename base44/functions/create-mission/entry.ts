@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
 
     return json({ mission }, 201);
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
 

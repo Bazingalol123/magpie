@@ -4,6 +4,10 @@ const DEFAULT_CONFIG = {
   activeMissionId: "",
   captureIntent: "compare",
 };
+
+function createRequestId() {
+  return `req_${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+}
 const REFRESH_MIN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const MAX_REMEMBERED_URLS = 500;
 
@@ -136,6 +140,7 @@ async function submitCapture(payload) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${extensionToken}`,
+      "X-Request-Id": createRequestId(),
       ...appHeaders(ingestUrl),
     },
     body: JSON.stringify({
@@ -204,6 +209,7 @@ async function maybeAutoRefresh(tabId, url) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${extensionToken}`,
+      "X-Request-Id": createRequestId(),
       ...appHeaders(ingestUrl),
     },
     body: JSON.stringify({ source_url: key, raw_text: evidence.raw_text }),

@@ -27,6 +27,6 @@ Deno.serve(async (req) => {
       message: result.message,
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });

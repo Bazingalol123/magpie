@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       checked_at: result.checkedAt,
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
 

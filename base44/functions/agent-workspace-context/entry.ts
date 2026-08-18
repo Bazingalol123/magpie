@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
       limits: { per_section: limit },
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, req);
   }
 });
 
