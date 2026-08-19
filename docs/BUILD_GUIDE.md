@@ -1297,3 +1297,73 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **No backend/entity/site change; no deploy needed.** Ships as GitHub
   Release `extension-v0.3.1` after merge and explicit owner approval — this
   task opens the PR only and does not push that tag.
+
+### 41. Extension pairing lifecycle — research and design (issue #61)
+
+- [x] **Build:** Discovery-only pass, per issue #61's explicit non-goal of
+  not implementing revoke/rotate yet. Audited every file the issue named
+  (`base44/entities/extension-install.jsonc`, `base44/shared/auth.ts`,
+  `create-extension-pairing`, all three `requireExtensionPrincipal` callers,
+  onboarding state/UI, `App.jsx` pairing dialog, extension service
+  worker/side panel, `tests/extension-pairing.test.ts`, and the relevant
+  sections of `API_AND_FAILURE_MAP.md`/`DECISIONS.md`/`BETA_LIMITATIONS.md`/
+  `BUILD_GUIDE.md`/`BUGS_AND_BEHAVIORS.md`), plus issues #27, #38, #48, #20
+  for overlap. Produced `docs/PAIRING_LIFECYCLE_DESIGN.md`: verified current
+  behavior with evidence, a "multiple active pairings, explicit revoke only"
+  product decision, a threat model, a proposed
+  `list-extension-pairings`/`revoke-extension-pairing`/
+  `revoke-all-extension-pairings` API contract plus an additive
+  `replace_installation_id` option on `create-extension-pairing`, UI/UX
+  proposal (including a real gap found: the extension never stores its own
+  non-secret `extension_id` locally, so the dashboard currently has no way
+  to highlight "this browser's" pairing), extension `403`-handling gap
+  (current code shows a generic error and never clears the stale local
+  token on revoke), compatibility/rollback/test-matrix/doc-impact sections,
+  and resolved #27/#38/#48/#20 overlap (recommends closing #27 as
+  superseded once follow-up PRs exist; #20's hosted two-owner gate is a
+  hard prerequisite before calling any follow-up "hosted-verified").
+- **Files:** `docs/PAIRING_LIFECYCLE_DESIGN.md` (new).
+- **Verify:** Documentation-only; no code changed, so the standard release
+  gates were not re-run (nothing in them exercises this file). No
+  entity/function/site change; nothing to deploy.
+- **Next:** owner review/approval of the design, then split
+  implementation into small follow-up PRs per issue #61's acceptance
+  criteria — not started in this pass.
+
+**Review round 1 (2026-08-17, Hermes comments on PR #62):** three findings
+addressed, still discovery-only (no code/schema/Function/Extension change):
+(1) verified Base44 has no cross-entity transaction primitive
+(`.agents/skills/base44-sdk/references/entities.md`) and rewrote
+`replace_installation_id` from "atomic" to an honestly-described non-atomic
+two-step sequence with explicit failure/retry semantics; (2) resolved a
+mismatch where the design called `revoke-all-extension-pairings` an
+"optional bulk action" while issue #27 requires it unconditionally — it is
+now explicit MVP scope; (3) rewrote the rollback section's "manual
+`active: true` production edit" from an implied normal recovery path to
+`Unknown`/unverified status, stating plainly that no supported recovery
+mechanism exists today and listing minimum requirements (owner-only
+authorization, first-party Base44 tooling only, an audit trail, documented
+operational ownership) a future break-glass mechanism would need before it
+could be called supported. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
+round 1" section for the full detail.
+
+**Review round 2 (2026-08-17, Hermes comments on PR #62):** one remaining
+gap addressed, still discovery-only: round 1's non-atomic
+`replace_installation_id` design still left the *create* half of the
+create-then-revoke sequence unsafe to retry after an ambiguous
+timeout/network failure — retrying could mint a duplicate active pairing
+while the first pairing's raw token, deliberately never persisted, would be
+unrecoverable. A client-supplied idempotency key (this codebase's existing
+`ingest-clip` pattern) can't fix this the way it fixes `ingest-clip`,
+because `ingest-clip`'s retry safely re-returns already-stored data while
+`create-extension-pairing`'s retry cannot re-return a secret that was never
+stored. Resolution: `replace_installation_id` is deferred out of MVP
+entirely — `create-extension-pairing` ships unmodified, and "replace this
+browser's pairing" becomes a two-step, separately-confirmed UI flow over the
+already-safe `create-extension-pairing` (unchanged) and
+`revoke-extension-pairing` (idempotent) primitives, with no new backend
+surface that could itself have an ambiguous-retry failure mode. The
+pre-existing ambiguous-retry gap in plain `create-extension-pairing` is
+recorded as a candidate future hardening item (§11.5 of the design doc), not
+solved by this issue. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
+round 2" section for the full detail.
