@@ -165,6 +165,13 @@ function screenshotUrlFor(clip) {
   return clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url) || "";
 }
 
+function inferCollectionDisplayMode(records, clips) {
+  if (!records.length) return "table";
+  const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
+  const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
+  return withImageCount / records.length > 0.5 ? "cards" : "table";
+}
+
 function truncate(value, maxLength) {
   return value.length > maxLength ? `${value.slice(0, maxLength).trimEnd()}…` : value;
 }
@@ -459,15 +466,14 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
   );
 }
 
-function RecordTable({ collection, records, clips, page, hasMore, isLoading, onPageChange, onSelect }) {
+function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, isLoading, onPageChange, onSelect }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
   if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
-  const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
-  const showCards = records.length > 0 && withImageCount / records.length > 0.5;
+  const showCards = displayMode === "cards";
   const pageStart = page * RECORDS_PAGE_SIZE;
   const pageRecords = records;
 
@@ -1089,6 +1095,7 @@ export default function App() {
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeCollectionId, setActiveCollectionId] = useState(null);
   const [recordPage, setRecordPage] = useState(0);
+  const [collectionDisplayModes, setCollectionDisplayModes] = useState({});
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   const activeCollectionIdRef = useRef(null);
   const recordPageRef = useRef(0);
@@ -1134,6 +1141,9 @@ export default function App() {
     setIsLoadingRecords(true);
     try {
       const result = await fetchRecordsPage(collectionId, page);
+      setCollectionDisplayModes((current) => current[collectionId]
+        ? current
+        : { ...current, [collectionId]: inferCollectionDisplayMode(result.items, data.clips) });
       recordPageRef.current = page;
       setRecordPage(page);
       setData((current) => ({ ...current, records: result.items }));
@@ -1142,7 +1152,7 @@ export default function App() {
     } finally {
       setIsLoadingRecords(false);
     }
-  }, [fetchRecordsPage]);
+  }, [fetchRecordsPage, data.clips]);
 
   const loadDashboard = useCallback(async () => {
     const [missions, collections, clips, enrichments, routingDecisions, watchRules, extensionInstalls] = await Promise.all([
@@ -1171,6 +1181,9 @@ export default function App() {
       watchRules,
       extensionInstalls,
     };
+    setCollectionDisplayModes((current) => selectedCollectionId && !current[selectedCollectionId]
+      ? { ...current, [selectedCollectionId]: inferCollectionDisplayMode(recordsPage.items, clips) }
+      : current);
     setData(next);
     setDataMeta({
       missions: { hasMore: missions.length >= DASHBOARD_LIST_LIMIT, total: null },
@@ -1470,9 +1483,8 @@ export default function App() {
 
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
   const missionRecords = activeMission ? data.records.filter((record) => record.mission_id === activeMission.id) : data.records;
-  const missionCollectionIds = new Set(missionRecords.map((record) => record.collection_id));
   const missionCollections = activeMission
-    ? data.collections.filter((collection) => collection.mission_id === activeMission.id || missionCollectionIds.has(collection.id))
+    ? data.collections.filter((collection) => collection.mission_id === activeMission.id || !collection.mission_id)
     : data.collections;
   const activeCollection = missionCollections.find((collection) => collection.id === activeCollectionId) ?? missionCollections[0];
   const activeRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
@@ -1541,7 +1553,7 @@ export default function App() {
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} page={recordPage} hasMore={dataMeta.records.hasMore} isLoading={isLoadingRecords} onPageChange={changeRecordPage} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={dataMeta.records.hasMore} isLoading={isLoadingRecords} onPageChange={changeRecordPage} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
