@@ -37,6 +37,13 @@ Deno.test("expired claimed attempt becomes claimable", () => {
   }, Date.parse("2026-08-19T12:00:11.000Z")));
 });
 
+Deno.test("expired running attempt becomes claimable", () => {
+  assert(isRefreshAttemptClaimable({
+    ...baseAttempt,
+    status: "running",
+    lease_expires_at: "2026-08-19T12:00:10.000Z",
+  }, Date.parse("2026-08-19T12:00:11.000Z")));
+});
 Deno.test("claim update records bounded worker and lease metadata", () => {
   const claim = buildLeaseClaim(baseAttempt, {
     workerId: "pairing-1",

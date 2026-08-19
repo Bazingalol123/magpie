@@ -39,7 +39,7 @@
     "lease_expires_at": { "type": "string", "format": "date-time", "description": "When an uncompleted lease can be reclaimed" },
     "started_at": { "type": "string", "format": "date-time", "description": "When a worker claimed the attempt" },
     "finished_at": { "type": "string", "format": "date-time", "description": "When the attempt reached a terminal state" },
-    "outcome": { "type": "string", "description": "Typed provider outcome" },
+    "outcome": { "type": "string", "maxLength": 80, "description": "Typed provider outcome" },
     "error_code": { "type": "string", "maxLength": 80, "description": "Stable provider or validation error" },
     "provider_request_id": { "type": "string", "maxLength": 160, "description": "Provider correlation ID when available" },
     "evidence_hash": { "type": "string", "maxLength": 160, "description": "Hash of bounded evidence, never the evidence itself" },

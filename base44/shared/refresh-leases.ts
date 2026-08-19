@@ -39,7 +39,7 @@ function validDate(value: unknown) {
 export function isRefreshAttemptClaimable(attempt: RefreshAttempt, nowMs = Date.now()) {
   if (attempt.strategy !== "owner_browser") return false;
   if (attempt.status === "queued") return true;
-  if (attempt.status !== "claimed" || !validDate(attempt.lease_expires_at)) return false;
+  if (!["claimed", "running"].includes(attempt.status) || !validDate(attempt.lease_expires_at)) return false;
   return new Date(attempt.lease_expires_at!).getTime() <= nowMs;
 }
 
