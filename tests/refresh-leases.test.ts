@@ -1,6 +1,5 @@
-import { assert, assertEquals, assertFalse } from "jsr:@std/assert";
+import { assert, assertFalse } from "jsr:@std/assert";
 import {
-  buildLeaseClaim,
   isRefreshAttemptClaimable,
   type RefreshAttempt,
 } from "../base44/shared/refresh-leases.ts";
@@ -44,23 +43,6 @@ Deno.test("expired running attempt becomes claimable", () => {
     lease_expires_at: "2026-08-19T12:00:10.000Z",
   }, Date.parse("2026-08-19T12:00:11.000Z")));
 });
-Deno.test("claim update records bounded worker and lease metadata", () => {
-  const claim = buildLeaseClaim(baseAttempt, {
-    workerId: "pairing-1",
-    leaseId: "lease-1",
-    nowMs: Date.parse("2026-08-19T12:00:00.000Z"),
-    leaseMs: 60_000,
-  });
-
-  assertEquals(claim, {
-    status: "claimed",
-    claimed_by: "pairing-1",
-    lease_id: "lease-1",
-    lease_expires_at: "2026-08-19T12:01:00.000Z",
-    started_at: "2026-08-19T12:00:00.000Z",
-  });
-});
-
 Deno.test("claim update rejects an unclaimable attempt", () => {
   const claimed = {
     ...baseAttempt,
@@ -70,16 +52,5 @@ Deno.test("claim update rejects an unclaimable attempt", () => {
     lease_expires_at: "2026-08-19T12:01:00.000Z",
   };
 
-  let thrown = false;
-  try {
-    buildLeaseClaim(claimed, {
-      workerId: "pairing-1",
-      leaseId: "lease-1",
-      nowMs: Date.parse("2026-08-19T12:00:30.000Z"),
-      leaseMs: 60_000,
-    });
-  } catch {
-    thrown = true;
-  }
-  assert(thrown);
+  assertFalse(isRefreshAttemptClaimable(claimed, Date.parse("2026-08-19T12:00:30.000Z")));
 });

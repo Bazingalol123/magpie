@@ -42,30 +42,3 @@ export function isRefreshAttemptClaimable(attempt: RefreshAttempt, nowMs = Date.
   if (!["claimed", "running"].includes(attempt.status) || !validDate(attempt.lease_expires_at)) return false;
   return new Date(attempt.lease_expires_at!).getTime() <= nowMs;
 }
-
-type LeaseClaimInput = {
-  workerId: string;
-  leaseId: string;
-  nowMs: number;
-  leaseMs: number;
-};
-
-export function buildLeaseClaim(attempt: RefreshAttempt, input: LeaseClaimInput) {
-  if (!isRefreshAttemptClaimable(attempt, input.nowMs)) {
-    throw new Error("Refresh attempt is not claimable");
-  }
-  if (!input.workerId.trim() || !input.leaseId.trim()) {
-    throw new Error("Lease worker and lease ID are required");
-  }
-  if (!Number.isFinite(input.leaseMs) || input.leaseMs < 1_000 || input.leaseMs > 15 * 60_000) {
-    throw new Error("Lease duration is outside the supported range");
-  }
-  const startedAt = new Date(input.nowMs).toISOString();
-  return {
-    status: "claimed" as const,
-    claimed_by: input.workerId.slice(0, 120),
-    lease_id: input.leaseId.slice(0, 160),
-    lease_expires_at: new Date(input.nowMs + input.leaseMs).toISOString(),
-    started_at: startedAt,
-  };
-}
