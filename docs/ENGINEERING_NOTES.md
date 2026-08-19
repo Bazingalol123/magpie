@@ -1237,3 +1237,32 @@ self-cleared via its own timer (8s for a "hint" toast), so Escape looked
 inert for up to 8 seconds. Added `hideToast()` and call it from both stop
 functions, which also fixes the visual handoff when switching modes (the old
 mode's hint disappears immediately instead of overlapping the new one).
+
+## 2026-08-19 — Proactive refresh Phase 1: alarms are hints, not a scheduler
+
+The first proactive-refresh slice deliberately stays extension-local. The
+existing pairing boundary already remembers URLs the owner explicitly captured,
+so proving background acquisition does not require sending the dashboard model
+or a server queue to the MV3 worker.
+
+The worker uses `chrome.alarms` with a 15-minute period, but the alarm is only a
+wake-up hint: selection is re-evaluated from persisted `chrome.storage.local`
+state each time. A URL is checked at most once per selection and the attempt is
+marked before opening the tab. This makes duplicate or delayed alarm delivery
+safe enough for the pilot, while acknowledging that a service-worker restart
+can still interrupt an in-flight browser operation.
+
+The local state migration is additive. Legacy `{ lastRefreshAt }` entries are
+normalized to include `nextRefreshAt`, `lastOutcome`, `failureCount`,
+`lastSuccessAt`, and `refreshPriority`; no existing pairing or saved URL is
+discarded. New URLs wait six hours before their first proactive check, and a
+one-hour domain cooldown prevents a collection of URLs from hammering one
+origin. Failures use bounded backoff and a closed tab is attempted from a
+`finally` block.
+
+Local verification on 2026-08-19: 150/150 Deno tests, all 17 backend entry
+points type-check, every extension script passes `node --check`, and
+`npm run build` passes. Not verified yet: real Chrome alarm delivery, inactive
+tab behavior, worker sleep/wake during capture, and a live hosted
+`refresh-capture` call. Those are explicit manual/browser gates, not inferred
+from the unit suite.

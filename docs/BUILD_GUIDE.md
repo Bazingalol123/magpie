@@ -1297,3 +1297,37 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **No backend/entity/site change; no deploy needed.** Ships as GitHub
   Release `extension-v0.3.1` after merge and explicit owner approval — this
   task opens the PR only and does not push that tag.
+
+### 41. Proactive owner-browser refresh — local Phase 1
+
+- **Build:** Add a conservative, opt-in proactive refresh worker to the MV3
+  extension without changing the backend schema or expanding the extension's
+  read authority. `chrome.alarms` wakes the service worker every 15 minutes,
+  but is treated only as a best-effort wake-up hint. The worker checks the
+  extension's existing local `savedUrls`, chooses at most one due HTTP(S) URL,
+  opens one inactive background tab, collects the existing bounded
+  `magpie:collect-refresh` evidence, submits it to the existing pairing-
+  authenticated `refresh-capture` function, and closes the tab in `finally`.
+- **Safeguards:** background monitoring is disabled by default and has its own
+  Side Panel opt-in (`proactiveRefreshEnabled`); new URLs wait six hours before
+  their first proactive attempt; there is one worker attempt at a time, a
+  15-minute alarm, a one-hour per-domain cooldown, a 30-second page-load
+  timeout, bounded evidence, and capped exponential backoff after failures.
+  CAPTCHA, login, and interaction challenges are not solved or bypassed.
+- **State:** local URL entries are normalized additively with
+  `lastRefreshAt`, `nextRefreshAt`, `lastOutcome`, `failureCount`,
+  `lastSuccessAt`, and `refreshPriority`. Existing `savedUrls` entries remain
+  readable; the backend remains the source of Record/Watch data and the
+  extension receives no dashboard model.
+- **Files:** `extension/manifest.json`, `extension/refresh-scheduler.js`,
+  `extension/service-worker.js`, `extension/sidepanel.html`,
+  `extension/sidepanel.js`, `tests/extension-refresh-scheduler.test.ts`, and
+  `tests/extension-manifest.test.ts`.
+- **Verify:** `deno test --allow-env --allow-read tests` — 150/150 passing;
+  `deno check base44/functions/*/entry.ts`; `node --check` on all extension
+  scripts; `npm run build`; and `git diff --check`. Real-Chrome background-tab,
+  alarm-delivery, service-worker restart, and live `refresh-capture` checks are
+  not performed in this local pass and remain the next manual gate.
+- **Rollback:** remove the `alarms` permission and proactive worker/UI changes,
+  or disable the feature by shipping the prior extension artifact. No entity
+  migration, backend deploy, or data deletion is required.

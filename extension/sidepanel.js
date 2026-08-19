@@ -8,6 +8,7 @@ const connectionPill = document.getElementById("connection-pill");
 const setupCallout = document.getElementById("setup-callout");
 const connectionSettings = document.getElementById("connection-settings");
 const autoRefresh = document.getElementById("auto-refresh");
+const proactiveRefresh = document.getElementById("proactive-refresh");
 const captureButtons = [
   document.getElementById("start-picker"),
   document.getElementById("start-visual"),
@@ -25,10 +26,12 @@ chrome.runtime.sendMessage({ type: "magpie:capture-status" }, (response) => {
   }
 });
 
-chrome.storage.local.get({ autoRefreshEnabled: true }).then((config) => {
+chrome.storage.local.get({ autoRefreshEnabled: true, proactiveRefreshEnabled: false }).then((config) => {
   autoRefresh.checked = config.autoRefreshEnabled;
+  proactiveRefresh.checked = config.proactiveRefreshEnabled;
 });
 autoRefresh.addEventListener("change", () => chrome.storage.local.set({ autoRefreshEnabled: autoRefresh.checked }));
+proactiveRefresh.addEventListener("change", () => chrome.storage.local.set({ proactiveRefreshEnabled: proactiveRefresh.checked }));
 
 function updateConnectionState() {
   const connected = Boolean(ingestUrl.value.trim() && extensionToken.value.trim());

@@ -1,8 +1,18 @@
+import {
+  nextRefreshAt,
+  normalizeRefreshEntry,
+  PROACTIVE_MAX_REMEMBERED_URLS,
+  PROACTIVE_REFRESH_ALARM,
+  PROACTIVE_REFRESH_PERIOD_MINUTES,
+  selectDueRefresh,
+} from "./refresh-scheduler.js";
+
 const DEFAULT_CONFIG = {
   ingestUrl: "",
   extensionToken: "",
   activeMissionId: "",
   captureIntent: "compare",
+  proactiveRefreshEnabled: false,
 };
 const REFRESH_MIN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const MAX_REMEMBERED_URLS = 500;
@@ -12,6 +22,14 @@ const MAX_REMEMBERED_URLS = 500;
 // at a time keeps a double-click or a stacked right-click from firing two
 // overlapping ingest requests and tripping the backend rate limit.
 let captureInFlight = false;
+let proactiveRefreshInFlight = false;
+
+ensureProactiveAlarm();
+chrome.runtime.onStartup.addListener(() => ensureProactiveAlarm());
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== PROACTIVE_REFRESH_ALARM) return;
+  runProactiveRefresh().catch((error) => console.warn("Magpie proactive refresh skipped", error));
+});
 
 async function withCaptureLock(run) {
   if (captureInFlight) {
@@ -55,7 +73,13 @@ chrome.runtime.onInstalled.addListener(() => {
     .catch((error) => console.warn("Magpie could not enable Side Panel on action click", error));
   installContextMenus();
   reinjectContentScripts();
+  ensureProactiveAlarm();
 });
+
+function ensureProactiveAlarm() {
+  chrome.alarms.create(PROACTIVE_REFRESH_ALARM, { periodInMinutes: PROACTIVE_REFRESH_PERIOD_MINUTES })
+    .catch((error) => console.warn("Magpie could not schedule proactive refresh", error));
+}
 
 // Tabs opened before an extension update keep their old content script; give
 // every open http(s) tab the current one. Re-running the file in a tab whose
@@ -168,9 +192,9 @@ async function rememberSavedUrl(sourceUrl) {
   const key = refreshUrlKey(sourceUrl);
   if (!key) return;
   const { savedUrls } = await chrome.storage.local.get({ savedUrls: {} });
-  savedUrls[key] = savedUrls[key] ?? { lastRefreshAt: 0 };
+  savedUrls[key] = normalizeRefreshEntry(savedUrls[key]);
   const keys = Object.keys(savedUrls);
-  if (keys.length > MAX_REMEMBERED_URLS) delete savedUrls[keys[0]];
+  if (keys.length > Math.min(MAX_REMEMBERED_URLS, PROACTIVE_MAX_REMEMBERED_URLS)) delete savedUrls[keys[0]];
   await chrome.storage.local.set({ savedUrls });
 }
 
@@ -193,7 +217,12 @@ async function maybeAutoRefresh(tabId, url) {
   if (!autoRefreshEnabled || !entry || !ingestUrl || !extensionToken) return;
   if (Date.now() - Number(entry.lastRefreshAt || 0) < REFRESH_MIN_INTERVAL_MS) return;
 
-  entry.lastRefreshAt = Date.now();
+  const now = Date.now();
+  const normalizedEntry = normalizeRefreshEntry(entry, now);
+  normalizedEntry.lastRefreshAt = now;
+  normalizedEntry.lastOutcome = "running";
+  normalizedEntry.nextRefreshAt = nextRefreshAt(now, 0);
+  savedUrls[key] = normalizedEntry;
   await chrome.storage.local.set({ savedUrls });
 
   const evidence = await sendToContentScript(tabId, { type: "magpie:collect-refresh" });
@@ -214,6 +243,106 @@ async function maybeAutoRefresh(tabId, url) {
       message: `Magpie caught ${body.change_count} change${body.change_count === 1 ? "" : "s"} on this saved page.`,
       state: "success",
     });
+  }
+}
+
+async function runProactiveRefresh() {
+  if (captureInFlight || proactiveRefreshInFlight) return;
+  proactiveRefreshInFlight = true;
+  let tabId = null;
+  let candidateUrl = "";
+  try {
+    const { savedUrls, proactiveRefreshEnabled, ingestUrl, extensionToken } = await chrome.storage.local.get({
+      savedUrls: {},
+      proactiveRefreshEnabled: false,
+      ingestUrl: "",
+      extensionToken: "",
+    });
+    if (!proactiveRefreshEnabled || !ingestUrl || !extensionToken) return;
+
+    const candidate = selectDueRefresh(savedUrls);
+    if (!candidate) return;
+    candidateUrl = candidate.url;
+
+    const now = Date.now();
+    const entry = normalizeRefreshEntry(candidate.entry, now);
+    entry.lastRefreshAt = now;
+    entry.lastOutcome = "running";
+    savedUrls[candidate.url] = entry;
+    await chrome.storage.local.set({ savedUrls });
+
+    const tab = await chrome.tabs.create({ url: candidate.url, active: false });
+    tabId = tab.id;
+    if (!tabId) throw new Error("Background refresh tab could not be created.");
+    await waitForTabComplete(tabId, 30_000);
+    const evidence = await sendToContentScript(tabId, { type: "magpie:collect-refresh" });
+    if (!evidence?.raw_text) throw new Error("The page returned no bounded refresh evidence.");
+
+    const response = await fetch(refreshCaptureUrl(ingestUrl), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${extensionToken}`,
+        ...appHeaders(ingestUrl),
+      },
+      body: JSON.stringify({ source_url: candidate.url, raw_text: evidence.raw_text }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Refresh failed with status ${response.status}`);
+
+    await finishProactiveRefresh(candidate.url, { outcome: body.outcome || "unknown", success: true });
+  } catch (error) {
+    console.warn("Magpie proactive refresh failed", error);
+    if (candidateUrl) await finishProactiveRefresh(candidateUrl, { outcome: "failed", success: false });
+  } finally {
+    if (tabId) await closeTabQuietly(tabId);
+    proactiveRefreshInFlight = false;
+  }
+}
+
+async function finishProactiveRefresh(url, { outcome, success }) {
+  const { savedUrls } = await chrome.storage.local.get({ savedUrls: {} });
+  if (!savedUrls[url]) return;
+  const now = Date.now();
+  const entry = normalizeRefreshEntry(savedUrls[url], now);
+  entry.lastOutcome = outcome;
+  entry.failureCount = success ? 0 : entry.failureCount + 1;
+  if (success) entry.lastSuccessAt = now;
+  entry.nextRefreshAt = nextRefreshAt(now, entry.failureCount);
+  savedUrls[url] = entry;
+  await chrome.storage.local.set({ savedUrls });
+}
+
+function refreshCaptureUrl(ingestUrl) {
+  return ingestUrl.replace(/\/functions\/ingest-clip\/?$/, "/functions/refresh-capture");
+}
+
+function waitForTabComplete(tabId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      error ? reject(error) : resolve();
+    };
+    const timeout = setTimeout(() => finish(new Error("Background refresh page load timed out.")), timeoutMs);
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") finish();
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId).then((tab) => {
+      if (tab.status === "complete") finish();
+    }).catch((error) => finish(error));
+  });
+}
+
+async function closeTabQuietly(tabId) {
+  try {
+    await chrome.tabs.remove(tabId);
+  } catch {
+    // Chrome may already have removed the tab after a navigation failure.
   }
 }
 

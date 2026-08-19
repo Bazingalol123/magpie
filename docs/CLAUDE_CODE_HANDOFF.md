@@ -421,6 +421,22 @@ Then run `/mcp` inside Claude Code and authenticate. The local checkout plus
 Base44 CLI is the simpler continuation path for this repository; do not edit the
 local checkout and the Base44 cloud sandbox concurrently.
 
+## Current continuation after proactive refresh Phase 1
+
+The local owner-browser proactive refresh slice is implemented on the current
+branch. It adds an opt-in `chrome.alarms` wake-up, one inactive background tab
+at a time, bounded refresh evidence through the existing `refresh-capture`
+function, additive local URL state, per-domain cooldown, timeout/cleanup, and
+unit coverage. It does not add a backend entity, queue, cloud browser, or
+server-to-extension read path.
+
+Verified locally: 150/150 Deno tests, all 17 backend entry points pass
+`deno check`, all extension scripts pass `node --check`, and `npm run build`
+passes. Not yet verified: real Chrome alarm delivery, background tab behavior,
+service-worker restart during refresh, offline recovery, and a live staging
+round trip. The next task is manual/browser verification before any release
+or deployment approval.
+
 ## Suggested first prompt
 
 ```text

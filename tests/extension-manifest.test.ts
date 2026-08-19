@@ -30,6 +30,10 @@ Deno.test("extension manifest is valid JSON with a well-formed Side Panel config
     Array.isArray(manifest.permissions) && manifest.permissions.includes("sidePanel"),
     "manifest.permissions must include \"sidePanel\"",
   );
+  assert(
+    Array.isArray(manifest.permissions) && manifest.permissions.includes("alarms"),
+    "manifest.permissions must include \"alarms\" for proactive refresh",
+  );
 });
 
 Deno.test("extension manifest references only files that exist under extension/", async () => {

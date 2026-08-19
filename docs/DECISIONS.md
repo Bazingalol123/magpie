@@ -537,3 +537,25 @@ session had no way to launch real Chrome. Real-Chrome verification (trigger
 Shift+Alt+M, confirm Escape clears the hint immediately, click Snip Area
 while Clip Element is active and confirm it switches cleanly) is the
 explicit next step before treating either fix as done.
+
+## Start proactive refresh with a local, opt-in owner-browser worker
+
+The first proactive-refresh implementation uses only URLs already remembered
+locally by the paired extension. This preserves the existing asymmetric trust
+boundary: the extension does not receive Collections, Records, WatchRules, or
+dashboard state, and no server-to-extension queue is introduced before the
+background acquisition path is proven.
+
+The feature is disabled by default and has a separate Side Panel opt-in from
+refresh-on-revisit. It checks one saved URL at a time in an inactive tab, waits
+six hours before the first attempt for a newly saved URL, applies a one-hour
+per-domain cooldown, caps retries, bounds evidence, and closes the temporary
+tab. `chrome.alarms` is intentionally not treated as an exact scheduler; a
+future server-hint or queue contract may become necessary for Watch-aware
+priority, cancellation, and freshness guarantees.
+
+No cloud browser, CAPTCHA bypass, arbitrary crawling, semantic LLM evaluation,
+new entity, or backend deployment is part of this slice. The next acceptance
+gate is real-Chrome verification of alarm delivery, inactive-tab rendering,
+cleanup, offline/restart behavior, and one staging `refresh-capture` round
+trip.
