@@ -1,0 +1,57 @@
+{
+  "name": "RefreshAttempt",
+  "description": "An auditable attempt to acquire bounded evidence for an owner WatchRule.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard owner of the WatchRule and Record" },
+    "watch_id": { "type": "string", "description": "WatchRule being processed" },
+    "record_id": { "type": "string", "description": "Record being refreshed" },
+    "strategy": {
+      "type": "string",
+      "enum": ["direct_http", "zyte", "owner_browser"],
+      "description": "Acquisition strategy assigned to this attempt"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "queued",
+        "claimed",
+        "running",
+        "evidence_ready",
+        "compared",
+        "completed",
+        "blocked",
+        "rate_limited",
+        "auth_required",
+        "unreachable",
+        "invalid_content",
+        "waiting_for_owner_browser",
+        "expired"
+      ],
+      "description": "Lifecycle state of this acquisition attempt"
+    },
+    "attempt_key": { "type": "string", "maxLength": 240, "description": "Deterministic idempotency key" },
+    "source_url": { "type": "string", "maxLength": 2048, "description": "Exact user-selected source URL for the assigned worker" },
+    "requested_at": { "type": "string", "format": "date-time", "description": "When the attempt became eligible" },
+    "claimed_by": { "type": "string", "maxLength": 120, "description": "Opaque paired installation ID holding the lease" },
+    "lease_id": { "type": "string", "maxLength": 160, "description": "Opaque lease identifier" },
+    "lease_expires_at": { "type": "string", "format": "date-time", "description": "When an uncompleted lease can be reclaimed" },
+    "started_at": { "type": "string", "format": "date-time", "description": "When a worker claimed the attempt" },
+    "finished_at": { "type": "string", "format": "date-time", "description": "When the attempt reached a terminal state" },
+    "outcome": { "type": "string", "description": "Typed provider outcome" },
+    "error_code": { "type": "string", "maxLength": 80, "description": "Stable provider or validation error" },
+    "provider_request_id": { "type": "string", "maxLength": 160, "description": "Provider correlation ID when available" },
+    "evidence_hash": { "type": "string", "maxLength": 160, "description": "Hash of bounded evidence, never the evidence itself" },
+    "extractor_version": { "type": "string", "maxLength": 80, "description": "Evidence extractor version" },
+    "policy_version": { "type": "string", "maxLength": 80, "description": "Acquisition policy version" },
+    "cost_units": { "type": "number", "minimum": 0, "description": "Internal provider usage units" }
+  },
+  "required": ["owner_id", "watch_id", "record_id", "strategy", "status", "attempt_key", "source_url", "requested_at"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "data.owner_id": "{{user.id}}" },
+    "update": { "data.owner_id": "{{user.id}}" },
+    "delete": { "data.owner_id": "{{user.id}}" }
+  }
+}
