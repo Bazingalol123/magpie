@@ -4,6 +4,7 @@ import {
   PROACTIVE_MAX_REMEMBERED_URLS,
   PROACTIVE_REFRESH_ALARM,
   PROACTIVE_REFRESH_PERIOD_MINUTES,
+  removeSavedUrl,
   selectDueRefresh,
 } from "./refresh-scheduler.js";
 
@@ -238,6 +239,10 @@ async function maybeAutoRefresh(tabId, url) {
     body: JSON.stringify({ source_url: key, raw_text: evidence.raw_text }),
   });
   const body = await response.json().catch(() => ({}));
+  if (response.ok && body.outcome === "no_match") {
+    await forgetSavedUrl(key);
+    return;
+  }
   if (response.ok && body.outcome === "updated") {
     await notifyTab(tabId, {
       message: `Magpie caught ${body.change_count} change${body.change_count === 1 ? "" : "s"} on this saved page.`,
@@ -289,6 +294,10 @@ async function runProactiveRefresh() {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `Refresh failed with status ${response.status}`);
+    if (body.outcome === "no_match") {
+      await forgetSavedUrl(candidate.url);
+      return;
+    }
 
     await finishProactiveRefresh(candidate.url, { outcome: body.outcome || "unknown", success: true });
   } catch (error) {
@@ -298,6 +307,12 @@ async function runProactiveRefresh() {
     if (tabId) await closeTabQuietly(tabId);
     proactiveRefreshInFlight = false;
   }
+}
+
+async function forgetSavedUrl(url) {
+  const { savedUrls } = await chrome.storage.local.get({ savedUrls: {} });
+  if (!Object.prototype.hasOwnProperty.call(savedUrls, url)) return;
+  await chrome.storage.local.set({ savedUrls: removeSavedUrl(savedUrls, url) });
 }
 
 async function finishProactiveRefresh(url, { outcome, success }) {

@@ -559,3 +559,16 @@ new entity, or backend deployment is part of this slice. The next acceptance
 gate is real-Chrome verification of alarm delivery, inactive-tab rendering,
 cleanup, offline/restart behavior, and one staging `refresh-capture` round
 trip.
+
+## Reconcile deleted Records through `refresh-capture: no_match`
+
+`chrome.storage.local.savedUrls` is a cache of URLs the paired extension has
+seen; it is not a durable list of current Records. Because the extension is
+intentionally write-only, Record/Collection deletion cannot push a deletion
+event or send the dashboard model to it.
+
+The next refresh is therefore the reconciliation point. A server-verified
+`no_match` removes only that exact URL from local storage. The extension does
+not delete backend rows, purge an entire domain, or remove entries based only on
+age. This keeps deletion cleanup local, owner-scoped, and compatible with
+re-saving the same URL later.

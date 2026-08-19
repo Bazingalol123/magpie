@@ -1266,3 +1266,20 @@ points type-check, every extension script passes `node --check`, and
 tab behavior, worker sleep/wake during capture, and a live hosted
 `refresh-capture` call. Those are explicit manual/browser gates, not inferred
 from the unit suite.
+
+## 2026-08-19 — `no_match` is the local-cache deletion signal
+
+Manual testing found that proactive refresh correctly opened and closed a page,
+but local `savedUrls` still retained URLs whose Record or Collection had been
+deleted from Magpie. This is expected from the current trust boundary: the
+extension does not read Records or receive dashboard deletion events.
+
+The existing owner-scoped `refresh-capture` contract already returns
+`outcome: "no_match"` without exposing Record data. The extension now treats
+that outcome as cache reconciliation: it removes only the exact URL from
+`savedUrls` in both proactive and revisit refresh paths. A later capture of the
+same URL adds it back. No backend/schema change is needed.
+
+The cleanup helper is pure and preserves the input object; the focused fixture
+verifies that an orphaned URL is removed while another saved URL remains.
+Full local verification after the fix is 151/151 tests.

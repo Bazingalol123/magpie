@@ -39,6 +39,12 @@ export function selectDueRefresh(savedUrls, now = Date.now()) {
   return null;
 }
 
+export function removeSavedUrl(savedUrls, url) {
+  const next = { ...(savedUrls ?? {}) };
+  delete next[url];
+  return next;
+}
+
 export function nextRefreshAt(now, failureCount = 0) {
   const backoff = failureCount > 0
     ? Math.min(PROACTIVE_REFRESH_INTERVAL_MS * (2 ** Math.min(failureCount - 1, 2)), PROACTIVE_MAX_FAILURE_BACKOFF_MS)

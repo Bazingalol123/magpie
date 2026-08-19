@@ -437,6 +437,11 @@ service-worker restart during refresh, offline recovery, and a live staging
 round trip. The next task is manual/browser verification before any release
 or deployment approval.
 
+The proactive refresh slice also now garbage-collects an exact local `savedUrls`
+entry when owner-scoped `refresh-capture` returns `no_match`, covering the
+case where its Record or parent Collection was deleted server-side. This is
+local cache cleanup only; the extension still has no Record read path.
+
 ## Suggested first prompt
 
 ```text

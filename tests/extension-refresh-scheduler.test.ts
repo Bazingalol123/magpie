@@ -4,6 +4,7 @@ import {
   normalizeRefreshEntry,
   PROACTIVE_DOMAIN_COOLDOWN_MS,
   PROACTIVE_REFRESH_INTERVAL_MS,
+  removeSavedUrl,
   selectDueRefresh,
 } from "../extension/refresh-scheduler.js";
 
@@ -35,4 +36,14 @@ Deno.test("failed attempts back off but remain bounded", () => {
   assertEquals(nextRefreshAt(now, 0), now + PROACTIVE_REFRESH_INTERVAL_MS);
   assert(nextRefreshAt(now, 3) > nextRefreshAt(now, 1));
   assert(nextRefreshAt(now, 20) - now <= 24 * 60 * 60 * 1_000);
+});
+
+Deno.test("no-match cleanup removes only the orphaned saved URL", () => {
+  const savedUrls = {
+    "https://example.test/deleted": { lastRefreshAt: 1 },
+    "https://example.test/kept": { lastRefreshAt: 2 },
+  };
+  const remaining = removeSavedUrl(savedUrls, "https://example.test/deleted");
+  assertEquals(Object.keys(remaining), ["https://example.test/kept"]);
+  assertEquals(Object.keys(savedUrls), ["https://example.test/deleted", "https://example.test/kept"]);
 });

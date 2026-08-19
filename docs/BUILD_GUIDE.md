@@ -1331,3 +1331,19 @@ Read `docs/V3_1_PRODUCT_AND_RISK_PLAN.md` before implementing any V3.1 change.
 - **Rollback:** remove the `alarms` permission and proactive worker/UI changes,
   or disable the feature by shipping the prior extension artifact. No entity
   migration, backend deploy, or data deletion is required.
+
+### 42. Remove orphaned local URLs after Record/Collection deletion
+
+- **Build:** Treat `chrome.storage.local.savedUrls` as a cache, not a source of
+  truth. When either proactive refresh or refresh-on-revisit receives the
+  existing owner-scoped `refresh-capture` outcome `no_match`, it removes only
+  that URL from local storage. It does not delete backend data, remove URLs from
+  the same domain, or expand the extension's read permissions.
+- **Why:** owner-triggered Record and Collection deletion cascades remove the
+  durable Record server-side, but the paired extension intentionally receives
+  no dashboard/Record deletion event. The next refresh is therefore the safe
+  reconciliation point.
+- **Verify:** `no_match` cleanup is covered by the scheduler unit test; the
+  full suite passes 151/151. Manual acceptance still requires deleting a real
+  Item, forcing its saved URL due, confirming one URL disappears while another
+  remains, and re-saving the URL to confirm it can be remembered again.
