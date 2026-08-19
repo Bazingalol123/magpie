@@ -26,6 +26,13 @@ export type StructuredLogEvent = {
   message?: string;
   retry_after_seconds?: number;
   outcome?: string;
+  attempt_id?: string;
+  watch_id?: string;
+  record_id?: string;
+  strategy?: string;
+  provider_request_id?: string;
+  evidence_hash?: string;
+  retryable?: boolean;
 };
 
 export function createRequestId() {
@@ -122,6 +129,13 @@ export function serializeLogEvent(input: Record<string, unknown>): StructuredLog
     "message",
     "retry_after_seconds",
     "outcome",
+    "attempt_id",
+    "watch_id",
+    "record_id",
+    "strategy",
+    "provider_request_id",
+    "evidence_hash",
+    "retryable",
   ] as const;
   const event = {} as StructuredLogEvent;
   for (const key of allowed) {
@@ -129,6 +143,8 @@ export function serializeLogEvent(input: Record<string, unknown>): StructuredLog
     if (value === undefined || value === null) continue;
     if (["status", "duration_ms", "retry_after_seconds"].includes(key)) {
       if (typeof value === "number" && Number.isFinite(value)) event[key] = Math.round(value) as never;
+    } else if (key === "retryable") {
+      if (typeof value === "boolean") event[key] = value;
     } else if (typeof value === "string") {
       event[key] = redactLogValue(value).slice(0, MAX_MESSAGE_LENGTH) as never;
     }
