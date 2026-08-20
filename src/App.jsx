@@ -38,7 +38,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
-import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
@@ -1171,9 +1170,11 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
-  const [authView, setAuthView] = useState(() => window.location.pathname === "/login" || window.location.pathname === "/share" ? "login" : "landing");
   const [, forceRouteRender] = useState(0);
   const [shareDraft, setShareDraft] = useState(() => readShareDraft());
+  const isShareRoute = window.location.pathname === "/share";
+  const shareId = isShareRoute ? new URLSearchParams(window.location.search).get("share_id") : null;
+  const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
   const [data, setData] = useState(emptyData);
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeCollectionId, setActiveCollectionId] = useState(null);
@@ -1313,7 +1314,6 @@ export default function App() {
         .then((currentUser) => setUser(currentUser))
         .catch(() => {
           setUser(null);
-          setAuthView("landing");
           if (window.location.pathname !== "/") window.history.replaceState({}, "", "/");
         });
     };
@@ -1347,6 +1347,11 @@ export default function App() {
       .finally(() => active && setIsLoading(false));
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (isLoading || user || !isShareRoute) return;
+    base44.auth.redirectToLogin(shareRedirectPath);
+  }, [isLoading, user, isShareRoute, shareRedirectPath]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -1397,26 +1402,10 @@ export default function App() {
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
 
-  const openLogin = () => {
-    window.history.pushState({}, "", "/login");
-    setAuthView("login");
-    setLoadError("");
+  const handleSignIn = () => {
+    setIsSigningIn(true);
+    base44.auth.redirectToLogin(window.location.href);
   };
-
-  const closeLogin = () => {
-    window.history.pushState({}, "", "/");
-    setAuthView("landing");
-    setLoadError("");
-  };
-
-  const handleAuthenticated = (authenticatedUser, redirectPath = "/") => {
-    window.history.pushState({}, "", redirectPath);
-    setUser(authenticatedUser);
-    setAuthView("landing");
-    setIsSigningIn(false);
-  };
-
-  const handleSignIn = () => openLogin();
 
   const handleSignOut = () => {
     const publicOrigin = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
@@ -1688,11 +1677,8 @@ export default function App() {
     return <Docs initialSlug={docsParams.get("docs")} isSignedIn={!!user} isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
   }
 
-  const isShareRoute = window.location.pathname === "/share";
-  const shareId = isShareRoute ? new URLSearchParams(window.location.search).get("share_id") : null;
-  const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
-  if (!user && (authView === "login" || isShareRoute)) return <LoginPage onBack={closeLogin} onAuthenticated={handleAuthenticated} redirectPath={isShareRoute ? shareRedirectPath : "/"} />;
+  if (!user && isShareRoute) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
   if (isShareRoute && user) return <ShareCapturePage draft={shareDraft} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
