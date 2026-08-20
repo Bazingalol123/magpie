@@ -1307,6 +1307,21 @@ export default function App() {
   }, [loadRecordPage]);
 
   useEffect(() => {
+    const onPageShow = (event) => {
+      if (!event.persisted) return;
+      base44.auth.me()
+        .then((currentUser) => setUser(currentUser))
+        .catch(() => {
+          setUser(null);
+          setAuthView("landing");
+          if (window.location.pathname !== "/") window.history.replaceState({}, "", "/");
+        });
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  useEffect(() => {
     const onPopState = () => forceRouteRender((version) => version + 1);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -1403,7 +1418,10 @@ export default function App() {
 
   const handleSignIn = () => openLogin();
 
-  const handleSignOut = () => base44.auth.logout(window.location.href);
+  const handleSignOut = () => {
+    const publicOrigin = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+    base44.auth.logout(`${publicOrigin.replace(/\/$/, "")}/`);
+  };
 
   const handleCreatePairing = async () => {
     setIsPairing(true);

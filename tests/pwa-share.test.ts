@@ -30,5 +30,7 @@ Deno.test("share route is wired to the authenticated mobile capture path", async
   assert(app.includes('const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";'));
   assert(app.includes("isSafeHttpUrl(draft.url)"));
   assert(app.includes("<ShareCapturePage"));
-  assert(app.includes('base44.functions.invoke("mobile-capture"'));
+  assert(app.includes('window.addEventListener("pageshow", onPageShow)'));
+  assert(app.includes("if (!event.persisted) return;"));
+  assert(app.includes("base44.functions.invoke(\"mobile-capture\""));
 });

@@ -2,12 +2,13 @@ import { createClient } from '@base44/sdk';
 
 const appId = import.meta.env.VITE_BASE44_APP_ID || '6a622e254ee5f8740523313e';
 const localBaseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL;
-const base44BaseUrl = localBaseUrl || 'https://app.base44.com';
+const base44ServerUrl = localBaseUrl || 'https://app.base44.com';
+const appBaseUrl = localBaseUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://magpiecapture.com');
 
 export const base44 = createClient({
   appId,
-  serverUrl: base44BaseUrl,
-  appBaseUrl: base44BaseUrl,
+  serverUrl: base44ServerUrl,
+  appBaseUrl,
 });
 
 // Dev-only: the Playwright E2E harness (tests-e2e/) needs to drive the
