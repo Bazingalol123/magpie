@@ -12,6 +12,12 @@
       "default": "daily",
       "description": "Requested sweep cadence"
     },
+    "acquisition_strategy": {
+      "type": "string",
+      "enum": ["direct_http", "zyte", "owner_browser"],
+      "default": "direct_http",
+      "description": "Explicit source-check strategy. Zyte remains gated until server quota is enabled."
+    },
     "active": { "type": "boolean", "default": true, "description": "Whether this watch is eligible for sweeps" },
     "last_checked_at": { "type": "string", "format": "date-time", "description": "Last completed sweep for this watch" },
     "last_status": { "type": "string", "description": "Typed result of the latest source check" },

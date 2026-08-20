@@ -38,6 +38,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
+import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
@@ -266,7 +267,7 @@ function BugReportDialog({ onClose, onSubmit, isSubmitting, error, result }) {
       <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
         <div className="pairing-dialog mission-dialog" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-head"><div><div className="eyebrow"><Check size={13} /> report sent</div><h2>Thanks — we've got it.</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
-          <p>Your report is filed as <a href={result.issue_url} target="_blank" rel="noreferrer">issue #{result.issue_number} <ExternalLink size={12} /></a>. No GitHub account needed on your end — we filed it for you.</p>
+          <p>Your report is filed as {isHttpUrl(result.issue_url) ? <a href={result.issue_url} target="_blank" rel="noreferrer">issue #{result.issue_number} <ExternalLink size={12} /></a> : <>issue #{result.issue_number}</>}. No GitHub account needed on your end — we filed it for you.</p>
           <div className="pairing-actions"><span /><button type="button" className="primary-button" onClick={onClose}>Done</button></div>
         </div>
       </div>
@@ -608,6 +609,7 @@ const CHECKING_STAGES = ["Checking…", "Still checking — some sources are slo
 
 function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, isRefreshing, onStatus, refreshNotice, onDelete, isDeleting, onToggleWatch, isTogglingWatch }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [refreshStrategy, setRefreshStrategy] = useState("direct_http");
   useEffect(() => {
     setIsConfirmingDelete(false);
   }, [record?.id]);
@@ -625,7 +627,7 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
           <div><div className="eyebrow">original context + live fields</div><h2>{fields.title || hostFromUrl(record.source_url)}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
-        <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>
+        {isHttpUrl(record.source_url) && <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>}
         <div className="structured-fields">
           {Object.entries(fields).map(([name, value]) => (
             <div className="field-row" key={name}><span>{name.replace(/_/g, " ")}</span><b><FieldValue value={value} /></b></div>
@@ -647,7 +649,11 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
         {watch && (
           <div className="watch-row">
             <span className={`watch-chip ${watch.active ? "on" : "off"}`}>
-              {watch.active ? "Monitoring daily" : isAutoPaused ? "Monitoring auto-paused" : "Monitoring paused"}
+              {watch.acquisition_strategy === "zyte"
+                ? "Cloud monitoring unavailable"
+                : watch.acquisition_strategy === "owner_browser"
+                ? "Browser-assisted monitoring"
+                : watch.active ? "Monitoring daily" : isAutoPaused ? "Monitoring auto-paused" : "Monitoring paused"}
             </span>
             <button className="text-button" onClick={() => onToggleWatch(watch)} disabled={isTogglingWatch}>
               {isTogglingWatch ? <LoaderCircle className="spin" size={13} /> : null}
@@ -656,7 +662,14 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
           </div>
         )}
         <div className="detail-actions">
-          <button className="secondary-button" onClick={onRefresh} disabled={isRefreshing}>
+          <label className="refresh-strategy-label">Check with
+            <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
+              <option value="direct_http">Direct HTTP</option>
+              <option value="zyte">Zyte cloud (manual)</option>
+              <option value="owner_browser">My browser</option>
+            </select>
+          </label>
+          <button className="secondary-button" onClick={() => onRefresh(refreshStrategy)} disabled={isRefreshing}>
             <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
           </button>
           <span>Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
@@ -774,7 +787,7 @@ function NeedsReviewPanel({ clips, decisionsByClip, collections, missions, selec
           </div>
         )}
 
-        <a className="source-link" href={selectedClip.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(selectedClip.source_url)}</a>
+        {isHttpUrl(selectedClip.source_url) && <a className="source-link" href={selectedClip.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(selectedClip.source_url)}</a>}
         <CapturedContext clip={selectedClip} />
 
         <div className="review-reasons">
@@ -1087,10 +1100,80 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
   );
 }
 
+function isSafeHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function readShareDraft() {
+  const params = new URLSearchParams(window.location.search);
+  const direct = { url: params.get("url") || "", text: params.get("text") || "", title: params.get("title") || "" };
+  if (direct.url || direct.text || direct.title) {
+    try { sessionStorage.setItem("magpie.share.draft", JSON.stringify(direct)); } catch { /* storage can be unavailable */ }
+    return direct;
+  }
+  try { return JSON.parse(sessionStorage.getItem("magpie.share.draft") || "null") || direct; } catch { return direct; }
+}
+
+function ShareCapturePage({ draft, onSubmit, isSubmitting, error, result }) {
+  const [note, setNote] = useState(draft.text || draft.title || "");
+  const [intent, setIntent] = useState("reference");
+  const submit = async (event) => {
+    event.preventDefault();
+    await onSubmit({ source_url: draft.url, raw_text: note, capture_intent: intent });
+  };
+  return (
+    <main className="share-capture-shell">
+      <section className="share-capture-card">
+        <div className="eyebrow"><ShieldCheck size={13} /> shared with Magpie</div>
+        <h1>Save this for later.</h1>
+        <p>Magpie received this page from your phone. Add a short note and we’ll organize it in your workspace.</p>
+        <div className="share-source"><span>Source</span>{isSafeHttpUrl(draft.url) ? <a href={draft.url} target="_blank" rel="noreferrer">{hostFromUrl(draft.url)}</a> : <span>{draft.url || "Shared content"}</span>}</div>
+        <form className="mobile-capture-form" onSubmit={submit}>
+          <label>Why does this matter?<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="What should Magpie remember?" rows="4" required /></label>
+          <label>Intent<select value={intent} onChange={(event) => setIntent(event.target.value)}><option value="reference">Keep for reference</option><option value="compare">Compare later</option><option value="watch">Watch for changes</option><option value="act">Act on this</option></select></label>
+          {error && <div className="review-error">{error}</div>}
+          {result && <div className="refresh-notice success">{result.duplicate ? "Already saved in your workspace." : result.routing_status === "needs_review" ? "Saved for review." : "Saved. Magpie is organizing it now."}</div>}
+          <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />} {isSubmitting ? "Saving…" : "Save to Magpie"}</button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function MobileCaptureDialog({ onClose, onSubmit, isSubmitting, error, result }) {
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [intent, setIntent] = useState("reference");
+  return (
+    <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
+      <aside className="detail-panel mobile-capture-panel" role="dialog" aria-modal="true" aria-label="Add a memory" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-head"><div><div className="eyebrow"><Plus size={13} /> mobile capture</div><h2>Add something to Magpie</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
+        <p className="mobile-capture-intro">Save a link and why it matters. Magpie will organize it into your workspace.</p>
+        <form className="mobile-capture-form" onSubmit={(event) => { event.preventDefault(); onSubmit({ source_url: url, raw_text: note, capture_intent: intent }); }}>
+          <label>URL<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" required /></label>
+          <label>Note<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="What should Magpie remember?" rows="5" required /></label>
+          <label>Intent<select value={intent} onChange={(event) => setIntent(event.target.value)}><option value="reference">Keep for reference</option><option value="compare">Compare later</option><option value="watch">Watch for changes</option><option value="act">Act on this</option></select></label>
+          {error && <div className="review-error">{error}</div>}
+          {result && <div className="refresh-notice success">{result.duplicate ? "This capture was already saved." : result.routing_status === "needs_review" ? "Saved for review. Magpie needs a little more information before filing it." : "Saved. Magpie is organizing this capture now."}</div>}
+          <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />} {isSubmitting ? "Saving…" : "Save to workspace"}</button>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authView, setAuthView] = useState(() => window.location.pathname === "/login" || window.location.pathname === "/share" ? "login" : "landing");
+  const [, forceRouteRender] = useState(0);
+  const [shareDraft, setShareDraft] = useState(() => readShareDraft());
   const [data, setData] = useState(emptyData);
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeCollectionId, setActiveCollectionId] = useState(null);
@@ -1118,6 +1201,10 @@ export default function App() {
   const [resolveError, setResolveError] = useState("");
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
   const [isTogglingWatch, setIsTogglingWatch] = useState(false);
+  const [isMobileCaptureOpen, setIsMobileCaptureOpen] = useState(false);
+  const [isMobileCapturing, setIsMobileCapturing] = useState(false);
+  const [mobileCaptureError, setMobileCaptureError] = useState("");
+  const [mobileCaptureResult, setMobileCaptureResult] = useState(null);
   const [deletingCollectionId, setDeletingCollectionId] = useState(null);
   const [deletingMissionId, setDeletingMissionId] = useState(null);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
@@ -1220,6 +1307,24 @@ export default function App() {
   }, [loadRecordPage]);
 
   useEffect(() => {
+    const onPopState = () => forceRouteRender((version) => version + 1);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (window.location.pathname !== "/share") return undefined;
+    const shareId = new URLSearchParams(window.location.search).get("share_id");
+    if (!shareId) return undefined;
+    let cancelled = false;
+    fetch(`/__magpie_share/${encodeURIComponent(shareId)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((draft) => { if (!cancelled && draft) setShareDraft(draft); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     let active = true;
     base44.auth.me()
       .then((currentUser) => active && setUser(currentUser))
@@ -1277,15 +1382,26 @@ export default function App() {
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
 
-  const handleSignIn = async () => {
-    setIsSigningIn(true);
-    try {
-      await base44.auth.loginWithProvider("google", window.location.href);
-    } catch (error) {
-      setLoadError(error.message || "Could not start sign-in.");
-      setIsSigningIn(false);
-    }
+  const openLogin = () => {
+    window.history.pushState({}, "", "/login");
+    setAuthView("login");
+    setLoadError("");
   };
+
+  const closeLogin = () => {
+    window.history.pushState({}, "", "/");
+    setAuthView("landing");
+    setLoadError("");
+  };
+
+  const handleAuthenticated = (authenticatedUser, redirectPath = "/") => {
+    window.history.pushState({}, "", redirectPath);
+    setUser(authenticatedUser);
+    setAuthView("landing");
+    setIsSigningIn(false);
+  };
+
+  const handleSignIn = () => openLogin();
 
   const handleSignOut = () => base44.auth.logout(window.location.href);
 
@@ -1308,12 +1424,36 @@ export default function App() {
     }
   };
 
-  const refreshSelectedRecord = async () => {
+  const submitMobileCapture = async (payload) => {
+    setIsMobileCapturing(true);
+    setMobileCaptureError("");
+    setMobileCaptureResult(null);
+    try {
+      const response = await base44.functions.invoke("mobile-capture", {
+        ...payload,
+        ...(activeMissionId ? { mission_id: activeMissionId } : {}),
+      });
+      setMobileCaptureResult(response.data);
+      if (window.location.pathname === "/share") {
+        const shareId = new URLSearchParams(window.location.search).get("share_id");
+        try { sessionStorage.removeItem("magpie.share.draft"); } catch { /* storage can be unavailable */ }
+        if (shareId && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ type: "consume_share", id: shareId });
+      }
+      await requestDashboardLoad();
+      return response.data;
+    } catch (error) {
+      setMobileCaptureError(error.response?.data?.error || error.message || "Could not save this capture.");
+    } finally {
+      setIsMobileCapturing(false);
+    }
+  };
+
+  const refreshSelectedRecord = async (acquisitionStrategy = "direct_http") => {
     if (!selectedRecord) return;
     setIsRefreshing(true);
     setRefreshNotice(null);
     try {
-      const response = await base44.functions.invoke("enrich-record", { record_id: selectedRecord.id });
+      const response = await base44.functions.invoke("enrich-record", { record_id: selectedRecord.id, acquisition_strategy: acquisitionStrategy });
       setRefreshNotice(response.data);
       setSelectedRecord((current) => current ? {
         ...current,
@@ -1322,7 +1462,14 @@ export default function App() {
       } : current);
       await requestDashboardLoad();
     } catch (error) {
-      setLoadError(error.response?.data?.error || error.message || "Could not check this source.");
+      const status = error.response?.status;
+      if (acquisitionStrategy === "zyte" && (status === 403 || status === 404)) {
+        setRefreshNotice({ outcome: "blocked", message: "Zyte cloud refresh is not enabled for this workspace yet." });
+      } else if (acquisitionStrategy === "owner_browser" && status === 409) {
+        setRefreshNotice({ outcome: "blocked", message: "Open this source in the paired browser extension to refresh it." });
+      } else {
+        setLoadError(error.response?.data?.error || error.message || "Could not check this source.");
+      }
     } finally {
       setIsRefreshing(false);
     }
@@ -1523,7 +1670,12 @@ export default function App() {
     return <Docs initialSlug={docsParams.get("docs")} isSignedIn={!!user} isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
   }
 
+  const isShareRoute = window.location.pathname === "/share";
+  const shareId = isShareRoute ? new URLSearchParams(window.location.search).get("share_id") : null;
+  const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
+  if (!user && (authView === "login" || isShareRoute)) return <LoginPage onBack={closeLogin} onAuthenticated={handleAuthenticated} redirectPath={isShareRoute ? shareRedirectPath : "/"} />;
+  if (isShareRoute && user) return <ShareCapturePage draft={shareDraft} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
   return (
@@ -1535,7 +1687,7 @@ export default function App() {
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); const first = data.collections.find((collection) => collection.mission_id === missionId); selectCollection(first?.id ?? null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
+        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={() => { setMobileCaptureError(""); setMobileCaptureResult(null); setIsMobileCaptureOpen(true); }}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <OnboardingPanel
@@ -1558,6 +1710,7 @@ export default function App() {
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
+      {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />}
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}
       {isBugReportOpen && (

@@ -165,6 +165,7 @@ export type WatchCommand = {
   watchRuleId?: string;
   condition?: string;
   frequency?: "hourly" | "daily" | "weekly";
+  acquisitionStrategy?: "direct_http" | "zyte" | "owner_browser";
 };
 
 export function parseWatchCommand(input: Record<string, unknown>): WatchCommand {
@@ -181,6 +182,9 @@ export function parseWatchCommand(input: Record<string, unknown>): WatchCommand 
   const condition = input.condition === undefined
     ? undefined
     : requiredText(input.condition, "condition", 3, 500);
+  const acquisitionStrategy = input.acquisition_strategy === undefined
+    ? undefined
+    : normalizeAcquisitionStrategy(input.acquisition_strategy);
 
   if (action === "create" && !condition) {
     throw new HttpError(400, "condition is required when creating a watch");
@@ -192,7 +196,7 @@ export function parseWatchCommand(input: Record<string, unknown>): WatchCommand 
     throw new HttpError(400, "Update at least one watch field");
   }
 
-  return { action, recordId, watchRuleId, condition, frequency };
+  return { action, recordId, watchRuleId, condition, frequency, acquisitionStrategy };
 }
 
 export function nextCheckAt(frequency: "hourly" | "daily" | "weekly", from = new Date()) {
@@ -230,6 +234,7 @@ export async function configureWatch(
 
   const frequency = command.frequency ?? existing?.frequency ?? "daily";
   const condition = command.condition ?? existing?.natural_language_condition;
+  const acquisitionStrategy = command.acquisitionStrategy ?? existing?.acquisition_strategy ?? "direct_http";
   if (!condition) throw new HttpError(400, "condition is required");
   const active = command.action === "pause"
     ? false
@@ -239,6 +244,7 @@ export async function configureWatch(
   const payload = {
     natural_language_condition: condition,
     frequency,
+    acquisition_strategy: acquisitionStrategy,
     active,
     ...(active ? { next_check_at: nextCheckAt(frequency) } : {}),
   };
@@ -320,6 +326,11 @@ function jsonArray(value: unknown): unknown[] {
 function normalizeFrequency(value: unknown): "hourly" | "daily" | "weekly" {
   if (value === "hourly" || value === "daily" || value === "weekly") return value;
   throw new HttpError(400, "frequency must be hourly, daily, or weekly");
+}
+
+function normalizeAcquisitionStrategy(value: unknown): "direct_http" | "zyte" | "owner_browser" {
+  if (value === "direct_http" || value === "zyte" || value === "owner_browser") return value;
+  throw new HttpError(400, "acquisition_strategy must be direct_http, zyte, or owner_browser");
 }
 
 function requiredText(
