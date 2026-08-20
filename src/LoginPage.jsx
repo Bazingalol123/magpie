@@ -55,7 +55,8 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
 
   const handleProvider = (provider) => {
     setError("");
-    base44.auth.loginWithProvider(provider, window.location.origin + redirectPath);
+    setIsSubmitting(true);
+    base44.auth.loginWithProvider(provider, redirectPath);
   };
 
   const title = mode === "signup" ? "Create your workspace" : mode === "verify" ? "Check your inbox" : "Welcome back";
