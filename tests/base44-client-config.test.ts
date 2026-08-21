@@ -1,13 +1,19 @@
 import { assert } from "jsr:@std/assert@1";
 
-Deno.test("production Base44 client uses the app API host for API calls and the public origin for auth redirects", async () => {
+Deno.test("production Base44 client uses the deployed app's own origin for API calls (not the shared platform host) and for auth redirects", async () => {
   const source = await Deno.readTextFile(new URL("../src/api/base44Client.js", import.meta.url));
-  assert(source.includes("const base44ServerUrl = localBaseUrl || 'https://app.base44.com';"));
+  // Base44 hard-rejects base44.functions.invoke() (POST
+  // /api/apps/{appId}/functions/*) made against the shared platform domain
+  // once an app has a connected custom/app domain (403 "Backend functions
+  // cannot be accessed from the platform domain."). serverUrl must be the
+  // deployed app's own browser origin in production, falling back to the
+  // platform host only for local dev on localhost with no sandbox configured.
+  assert(source.includes("const base44ServerUrl = localBaseUrl || (browserOrigin && !isLocalDevHost ? browserOrigin : platformServerUrl);"));
   assert(source.includes("serverUrl: base44ServerUrl"));
   // appBaseUrl (used for login/logout full-page redirects) must be the
   // public app origin, not the API host: logout's server endpoint only
   // honors from_url when the request itself hits that domain.
-  assert(source.includes("const appBaseUrl = localBaseUrl || (typeof window !== 'undefined' ? window.location.origin : base44ServerUrl);"));
+  assert(source.includes("const appBaseUrl = localBaseUrl || browserOrigin || base44ServerUrl;"));
   assert(source.includes("appBaseUrl,"));
   const app = await Deno.readTextFile(new URL("../src/App.jsx", import.meta.url));
   assert(app.includes('base44.auth.loginWithProvider("google", shareRedirectPath)'));
