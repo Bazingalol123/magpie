@@ -331,16 +331,23 @@ non-goal against implementing revoke/rotate in this pass.
    documentation is done: refreshed `README.md`, `docs/GETTING_STARTED.md`
    (including unpacked-extension install), `docs/PRODUCT_GUIDE.md`, and the
    public `docs/API.md`.
-6. **G9 onboarding, partially built:** Build Guide 36 adds `src/onboarding/`
-   (pairing checklist + first-capture status banner, dashboard-only, no
-   entity/function changes — reads the already-deployed `ExtensionInstall`
-   entity). **Deployed to the site** as of the `target=site` run at commit
-   `1a28831` (2026-08-14T21:39:38Z) — the "not yet deployed" note here was
-   stale as of the 2026-08-16 audit; browser verification of the deployed
-   UI is still outstanding. Still open regardless of deploy status:
-   signed-out landing changes, a distinct "paired and ready" state, the
-   wider recovery-state set, and fixture/Playwright tests — see
-   `docs/DECISIONS.md` and the G9 entry in `docs/BUGS_AND_BEHAVIORS.md`.
+6. **Onboarding flow (was "G9, partially built"), completed 2026-08-21:**
+   Build Guide checkpoint 42 (branch `feat/onboarding-flow`, not yet merged
+   or deployed) replaces the old pairing-checklist-only first run with the
+   full Welcome -> Project (optional) -> Method (Desktop/iPhone/Android/
+   Paste-URL) -> First Capture -> First Value -> Needs Review/Failed flow,
+   plus a new short `RECONNECT` state for returning users whose pairing was
+   revoked. Also fixes a real bug where mobile-only users (no Extension
+   pairing) could never leave `NOT_PAIRED` — see `docs/ENGINEERING_NOTES.md`
+   2026-08-21. The iPhone Shortcut setup artifact is
+   `docs/IOS_SHORTCUT_SETUP.md` (`?docs=ios-shortcut`), built on the
+   existing `/share` session flow rather than PR #67's still-open token
+   design — see `docs/DECISIONS.md`'s "Onboarding flow's iOS Shortcut"
+   entry. Dashboard-only; no entity/function changes. Still outstanding:
+   real-device verification (a physical iPhone running the Shortcut, a
+   physical Android phone using the installed-PWA Share Target) and a
+   signed-in browser click-through — this sandbox had no phone and no local
+   Base44 backend to test either against. Not deployed or merged.
 7. **Chrome Side Panel migration (issue #46):** open, unmerged as of
    2026-08-16 — `git log origin/main` and `gh pr list` show no matching
    branch/PR yet, and `extension/manifest.json` still uses

@@ -6,6 +6,7 @@ export const OnboardingStage = Object.freeze({
   AWAITING_FIRST_CAPTURE: "awaiting_first_capture",
   FIRST_CAPTURE_RECEIVED: "first_capture_received",
   READY: "ready",
+  RECONNECT: "reconnect",
 });
 
 export const PairingStepStatus = Object.freeze({
@@ -61,14 +62,26 @@ export function deriveCaptureOutcome(clip) {
   }
 }
 
-// `dismissed` is checked first and is absorbing: once a user has
-// acknowledged their first capture, they stay in READY even if their
-// pairing/capture data later looks different (e.g. a future revoke path),
-// per "returning users do not see the full first-run tour again."
+// `dismissed` is absorbing for the first-run tour itself: once a user has
+// acknowledged their first capture (or explicitly skipped to the workspace),
+// the Welcome/Project/Method wizard never reappears. It is not absorbing for
+// a real, evidence-backed pairing revocation afterward — a returning user
+// whose only active Extension pairing later goes inactive gets a short
+// RECONNECT state instead of silence, without re-running the full tour.
+//
+// Capture evidence (clips.length > 0) outranks desktop pairing status: a
+// mobile-only user (iPhone Shortcut / Android Share Target / paste-URL) who
+// never pairs the Chrome extension still has a real first capture and must
+// reach FIRST_CAPTURE_RECEIVED, not stay stuck in NOT_PAIRED forever.
+/**
+ * @param {{ extensionInstalls?: Array<{ active: boolean, last_used_at?: string|null }>, clips?: Array<object>, dismissed?: boolean }} [args]
+ */
 export function deriveOnboardingStage({ extensionInstalls = [], clips = [], dismissed = false } = {}) {
-  if (dismissed) return OnboardingStage.READY;
-  const hasActivePairing = extensionInstalls.some((install) => install.active);
-  if (!hasActivePairing) return OnboardingStage.NOT_PAIRED;
-  if (clips.length === 0) return OnboardingStage.AWAITING_FIRST_CAPTURE;
-  return OnboardingStage.FIRST_CAPTURE_RECEIVED;
+  const overallPairingStatus = deriveOverallPairingStatus(extensionInstalls);
+  if (dismissed) {
+    return overallPairingStatus === PairingStepStatus.REVOKED ? OnboardingStage.RECONNECT : OnboardingStage.READY;
+  }
+  if (clips.length > 0) return OnboardingStage.FIRST_CAPTURE_RECEIVED;
+  const hasActivePairing = overallPairingStatus === PairingStepStatus.USED || overallPairingStatus === PairingStepStatus.UNUSED;
+  return hasActivePairing ? OnboardingStage.AWAITING_FIRST_CAPTURE : OnboardingStage.NOT_PAIRED;
 }

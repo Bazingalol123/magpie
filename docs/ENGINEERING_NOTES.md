@@ -1357,3 +1357,46 @@ Google, per the SDK's own guidance to prefer custom login UI over
 
 Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
 above.
+
+## 2026-08-21 -- Onboarding flow: mobile-only users were permanently stuck in NOT_PAIRED
+
+Building the Welcome/Project/Method/First-Value onboarding flow (Build
+Guide checkpoint 42) surfaced a real bug in the existing (pre-checkpoint-36)
+`src/onboarding/state.js`: `deriveOnboardingStage` checked
+`hasActivePairing` (derived only from `extensionInstalls`) before ever
+looking at `clips.length`, and returned `NOT_PAIRED` unconditionally when
+`hasActivePairing` was false -- regardless of whether the user had already
+captured something. A mobile-only user (iPhone Shortcut, Android Share
+Target, or paste-URL, none of which touch `ExtensionInstall`) who
+successfully saved a real Item would never leave `NOT_PAIRED`: the First
+Value / `CaptureStatusBanner` screen the stage machine is supposed to
+promote them to was unreachable. This had been latent since G9 (checkpoint
+36) shipped, because nothing exercised the mobile-capture path against the
+onboarding stage machine until this pass built a first-class mobile capture
+method into the flow. Fixed by checking `clips.length > 0` first,
+independent of pairing status (`src/onboarding/state.js`); regression-guarded
+by `tests/onboarding-state.test.ts`'s "a mobile-only user ... still reaches
+FIRST_CAPTURE_RECEIVED" case.
+
+Separately, `deriveOnboardingStage`'s `dismissed` branch was fully
+absorbing -- a returning user whose Extension pairing was later revoked
+after they'd already dismissed onboarding got silence, not a reconnect
+prompt (`PairingChecklist`'s existing revoked-copy branch is only reachable
+through the `NOT_PAIRED` stage, which a dismissed user never reaches again).
+Added a new `RECONNECT` stage and `ReconnectNotice` component for exactly
+this case, without reintroducing the full first-run tour.
+
+**Local dev-server flakiness, unrelated to the above:** verifying any of
+this by loading `npm run dev` in a real browser (Playwright) initially hit
+a blank page with `net::ERR_CACHE_READ_FAILURE` on Vite's pre-bundled
+dependency chunks (`react-refresh`, `react_jsx-dev-runtime`, later
+`lucide-react`/`react-markdown`/`remark-gfm`). `npm run build` and the full
+Deno suite were unaffected -- this was purely the Chromium instance's own
+HTTP cache disagreeing with a freshly regenerated `node_modules/.vite`
+after clearing it. Resolved by disabling the browser's HTTP cache via CDP
+(`Network.setCacheDisabled`) before reloading; the signed-out landing page
+and the new `?docs=ios-shortcut` doc page then rendered cleanly with no
+app-level console errors. The authenticated Welcome/Project/Method screens
+were not click-tested this way, since there is no local Base44 backend in
+this environment to sign in against -- see Build Guide checkpoint 42's
+"Verify" note.

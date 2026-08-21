@@ -1217,6 +1217,8 @@ export default function App() {
   const [onboardingDismissed, setOnboardingDismissed] = useState(
     () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
   );
+  const [isCreatingOnboardingProject, setIsCreatingOnboardingProject] = useState(false);
+  const [onboardingProjectError, setOnboardingProjectError] = useState("");
 
   const fetchRecordsPage = useCallback(async (collectionId, page) => {
     if (!collectionId) return { items: [], hasMore: false, page, pageSize: RECORDS_PAGE_SIZE };
@@ -1651,6 +1653,29 @@ export default function App() {
     return response.data.mission;
   };
 
+  const createOnboardingProject = async (title) => {
+    setIsCreatingOnboardingProject(true);
+    setOnboardingProjectError("");
+    try {
+      const mission = await createProjectInline(title);
+      setActiveMissionId(mission.id);
+      return true;
+    } catch (error) {
+      setOnboardingProjectError(error.response?.data?.error || error.message || "Could not create this Project.");
+      return false;
+    } finally {
+      setIsCreatingOnboardingProject(false);
+    }
+  };
+
+  const openIosShortcutSetup = () => window.open("/?docs=ios-shortcut", "_blank", "noopener");
+
+  const openMobileCapture = () => {
+    setMobileCaptureError("");
+    setMobileCaptureResult(null);
+    setIsMobileCaptureOpen(true);
+  };
+
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
   const missionRecords = activeMission ? data.records.filter((record) => record.mission_id === activeMission.id) : data.records;
   const missionCollections = activeMission
@@ -1708,7 +1733,7 @@ export default function App() {
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); const first = data.collections.find((collection) => collection.mission_id === missionId); selectCollection(first?.id ?? null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={() => { setMobileCaptureError(""); setMobileCaptureResult(null); setIsMobileCaptureOpen(true); }}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
+        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={openMobileCapture}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <OnboardingPanel
@@ -1723,6 +1748,15 @@ export default function App() {
         onOpenReview={openOnboardingReview}
         onReportIssue={() => setIsBugReportOpen(true)}
         onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
+        onCreateProject={createOnboardingProject}
+        isCreatingProject={isCreatingOnboardingProject}
+        projectError={onboardingProjectError}
+        onOpenIosSetup={openIosShortcutSetup}
+        onPasteCapture={submitMobileCapture}
+        isMobileCapturing={isMobileCapturing}
+        mobileCaptureError={mobileCaptureError}
+        onSaveAnother={openMobileCapture}
+        onRetryCapture={openMobileCapture}
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />

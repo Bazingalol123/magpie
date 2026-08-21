@@ -1367,3 +1367,62 @@ pre-existing ambiguous-retry gap in plain `create-extension-pairing` is
 recorded as a candidate future hardening item (§11.5 of the design doc), not
 solved by this issue. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
 round 2" section for the full detail.
+
+### 42. Complete Welcome -> Project -> Method -> Capture -> Value onboarding flow
+
+- [x] **Build:** Replaced the bare "jump straight to pairing" first-run
+  panel with a full guided flow: Welcome (primary "Set up my first
+  capture", secondary "Explore workspace"), an optional short Project step
+  with a real Skip, and a Capture-method chooser covering Desktop (Chrome
+  extension pairing, unchanged), iPhone (new iOS Shortcut setup doc),
+  Android (PWA Share Target guidance, gated on real `serviceWorker`
+  feature detection, not a claimed-installed state), and a Paste-URL
+  fallback. First Capture / First Value reuse and extend the existing
+  evidence-driven `CaptureStatusBanner` (now also shows the real
+  `clip.source_url`/`clip.summary`, a "Save another capture" CTA, and a
+  "Try again" retry action on `failed`). Returning users: fixed a real
+  stage-derivation bug where `deriveOnboardingStage` gated exclusively on
+  desktop Extension pairing, so a mobile-only user (iPhone/Android/paste
+  capture, no Extension ever paired) stayed stuck in `NOT_PAIRED` forever
+  and never saw the First Value screen — clip evidence now outranks
+  pairing status. Also added a new `RECONNECT` stage: a dismissed
+  (completed) onboarding no longer regresses to the full tour, but a real
+  pairing revocation afterward now surfaces a short, non-blocking
+  `ReconnectNotice` instead of going silent.
+- **iOS Shortcut artifact:** `docs/IOS_SHORTCUT_SETUP.md` (also registered
+  in the in-app Docs viewer at `?docs=ios-shortcut`, linked from the
+  Method screen's iPhone card) gives exact, buildable Shortcut actions
+  (URL Encode -> Text -> Open URLs) that hand a shared link to the
+  existing `/share` page — no new mobile token, no background HTTPS POST,
+  no change to `ingest-clip`/`mobile-capture`/auth. This reuses
+  `src/App.jsx`'s pre-existing direct-query-param `/share` handling
+  (`readShareDraft`'s `url`/`text`/`title` fallback, already covered by
+  `tests/pwa-share.test.ts`) rather than the token-based Shortcut design
+  PR #67 (`docs/mobile-capture-design.md`, open/draft as of this pass)
+  proposes; see `docs/DECISIONS.md` for why.
+- **Files:** `src/onboarding/state.js` (stage-derivation fix, `RECONNECT`
+  stage), `src/onboarding/OnboardingWelcomeFlow.jsx` (new),
+  `src/onboarding/ReconnectNotice.jsx` (new),
+  `src/onboarding/CaptureStatusBanner.jsx`, `src/onboarding/OnboardingPanel.jsx`,
+  `src/App.jsx`, `src/Docs.jsx`, `src/index.css`,
+  `docs/IOS_SHORTCUT_SETUP.md` (new), `tests/onboarding-state.test.ts`
+  (new), `tests/onboarding-flow-wiring.test.ts` (new).
+- **Verify:** 208/208 Deno tests pass (13 new), all 17 `entry.ts` files
+  type-check clean (no backend files touched), every `extension/**/*.js`
+  parses, `rg "@base44/sdk" extension` returns no matches, `npm run build`
+  passes, `git diff --check` clean. Manually verified in a real browser
+  (Playwright, local `npm run dev`): the signed-out landing page and the
+  new `?docs=ios-shortcut` page both render correctly with no app errors.
+  The authenticated Welcome/Project/Method/First-Value/Reconnect screens
+  were **not** click-tested live — this sandbox has no local `npx base44
+  dev` backend to sign in against — verified instead by full test
+  coverage, a production build, and a manual prop-by-prop cross-check
+  between `App.jsx`'s `<OnboardingPanel>` call and every prop each child
+  component destructures.
+- **Not done:** real-device verification of the iOS Shortcut and the
+  Android PWA Share Target (same category of gap as the existing G3/G8
+  Chrome extension real-device items in "Known gaps"). Auth/OAuth,
+  `ingest-clip`, `mobile-capture`, and Zyte were not touched.
+- **Next:** owner real-device pass (iPhone Shortcut share -> saved Item;
+  Android installed-PWA share -> saved Item), then a signed-in browser
+  click-through of the full wizard once a backend session is available.

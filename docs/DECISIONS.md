@@ -537,3 +537,42 @@ session had no way to launch real Chrome. Real-Chrome verification (trigger
 Shift+Alt+M, confirm Escape clears the hint immediately, click Snip Area
 while Clip Element is active and confirm it switches cleanly) is the
 explicit next step before treating either fix as done.
+
+## Onboarding flow's iOS Shortcut: reused the existing `/share` session flow instead of PR #67's token design
+
+Build Guide checkpoint 42 builds the iPhone/iPad Shortcut on top of the
+already-merged `/share` page (`src/App.jsx`'s `readShareDraft`,
+`ShareCapturePage`, `public/manifest.webmanifest`'s `share_target`,
+`public/sw.js`), which opens Safari at
+`https://magpiecapture.com/share?url=<link>` using the user's normal signed-in
+session — the same authenticated session `base44.functions.invoke` already
+uses. This was a deliberate divergence from PR #67
+(`docs/mobile-capture-design.md`, open/DRAFT at the time of this pass),
+which proposes a slower, explicitly-sequenced path: a design gate, then
+separate popup/UI, backend-token, Android, and iOS implementation PRs, with
+iOS built around "a scoped, revocable, write-only Mobile Capture token" and
+"an HTTPS request." That token/slice sequencing was never actually built —
+only the design doc landed — while the `/share` page, manifest, service
+worker, and `mobile-capture` function it would have superseded were already
+merged to this branch and confirmed live in production
+(`docs/ENGINEERING_NOTES.md`, 2026-08-21 entry: "production was found to be
+serving this ... bundle ... confirmed via `mobile-capture` and the PWA
+share-target `postMessage` handler present in the live JS").
+
+Given a working, already-shipped, lower-risk path existed (open a URL,
+reuse the existing session, no new token surface, no new backend
+endpoint), building PR #67's token scheme in the same pass would have been
+redundant scope with a larger security surface for no functional gain.
+This decision does not resolve PR #67 — it is still open, and its capacity
+matrix / popup-with-Don't-show-again / verification-gate content remains
+valid guidance for anyone picking it up. What it does establish: the iOS
+Shortcut artifact this pass produced
+(`docs/IOS_SHORTCUT_SETUP.md`) is deliberately token-free by design, not by
+omission, and a future implementer of PR #67's slices should reconcile the
+two rather than build a second, parallel iOS capture path.
+
+Real-device verification (a physical iPhone running the Shortcut end to
+end, and a physical Android phone using the installed-PWA Share Target)
+was not performed in this pass — this sandbox has no phone to test with.
+This is the same category of gap as the extension's existing G3/G8
+real-Chrome items in `docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
