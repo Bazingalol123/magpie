@@ -42,7 +42,7 @@ import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
-import { fetchPageWindow } from "./dashboard-pagination.js";
+import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
 const markdownComponents = {
@@ -410,7 +410,7 @@ function EmptyCollection({ onSelect }) {
   );
 }
 
-function CollectionSidebar({ collections, activeCollectionId, records, isLoadingRecords, onSelect, onDelete, deletingId }) {
+function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRecords, onSelect, onDelete, deletingId }) {
   const [confirmingId, setConfirmingId] = useState(null);
   return (
     <aside className="collection-sidebar">
@@ -421,13 +421,14 @@ function CollectionSidebar({ collections, activeCollectionId, records, isLoading
       <div className="collection-list">
         {collections.map((collection) => {
           const isActive = collection.id === activeCollectionId;
-          // records is only ever the active Collection's currently loaded
-          // page; while a new page is loading, it still holds the
-          // previous Collection's rows, which would filter to 0 here and
-          // flash a false "0" instead of the real count. Keep showing "—"
-          // (same as an inactive row) until the fetch for this Collection
-          // actually resolves.
-          const count = isActive && !isLoadingRecords ? records.filter((record) => record.collection_id === collection.id).length : null;
+          // records is the whole (bounded) fetched set, not just the active
+          // Collection's page, so every row -- not only the active one --
+          // gets a real, live count. hasMoreRecords means the account-wide
+          // fetch hit its ceiling, so any count here could be an
+          // undercount; the "+" suffix says so honestly instead of
+          // claiming a precise number.
+          const count = records.filter((record) => record.collection_id === collection.id).length;
+          const countLabel = `${count}${hasMoreRecords ? "+" : ""}`;
           const isConfirming = confirmingId === collection.id;
           const isDeleting = deletingId === collection.id;
           return (
@@ -435,11 +436,11 @@ function CollectionSidebar({ collections, activeCollectionId, records, isLoading
               <button className="collection-select" onClick={() => onSelect(collection.id)}>
                 <span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />
                 <span className="collection-name">{collection.name}</span>
-                <span className="collection-count">{count === null ? "—" : count}</span>
+                <span className="collection-count">{countLabel}</span>
               </button>
               {isConfirming ? (
                 <span className="collection-confirm">
-                  <span>{count === null ? "Delete this Collection?" : `Delete ${count} Item${count === 1 ? "" : "s"}?`}</span>
+                  <span>{`Delete ${countLabel} Item${count === 1 && !hasMoreRecords ? "" : "s"}?`}</span>
                   <button
                     type="button"
                     className="danger-button danger-button-compact"
@@ -473,7 +474,7 @@ function CollectionSidebar({ collections, activeCollectionId, records, isLoading
   );
 }
 
-function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, isLoading, onPageChange, onSelect }) {
+function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
@@ -531,9 +532,9 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
       </div>
       {(page > 0 || hasMore) && (
         <div className="table-pagination">
-          <button className="secondary-button" disabled={page === 0 || isLoading} onClick={() => onPageChange(page - 1)}>Previous</button>
-          <span>{records.length ? `${pageStart + 1}–${pageStart + records.length}${hasMore ? "+" : ""}` : "No Items"}</span>
-          <button className="secondary-button" disabled={!hasMore || isLoading} onClick={() => onPageChange(page + 1)}>{isLoading ? "Loading…" : "Next"}</button>
+          <button className="secondary-button" disabled={page === 0} onClick={() => onPageChange(page - 1)}>Previous</button>
+          <span>{records.length ? `${pageStart + 1}–${pageStart + records.length}` : "No Items"}</span>
+          <button className="secondary-button" disabled={!hasMore} onClick={() => onPageChange(page + 1)}>Next</button>
         </div>
       )}
     </section>
@@ -1188,9 +1189,7 @@ export default function App() {
   const [activeCollectionId, setActiveCollectionId] = useState(null);
   const [recordPage, setRecordPage] = useState(0);
   const [collectionDisplayModes, setCollectionDisplayModes] = useState({});
-  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   const activeCollectionIdRef = useRef(null);
-  const recordPageRef = useRef(0);
   const dashboardLoadRef = useRef(null);
   const [activeMissionId, setActiveMissionId] = useState("");
   const [selectedRecord, setSelectedRecord] = useState(null);
@@ -1224,67 +1223,43 @@ export default function App() {
     () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
   );
 
-  const fetchRecordsPage = useCallback(async (collectionId, page) => {
-    if (!collectionId) return { items: [], hasMore: false, page, pageSize: RECORDS_PAGE_SIZE };
-    return fetchPageWindow(
-      (skip, limit) => base44.entities.Record.filter({ collection_id: collectionId }, "-created_date", limit, skip),
-      page,
-      { pageSize: RECORDS_PAGE_SIZE },
-    );
-  }, []);
-
-  const loadRecordPage = useCallback(async (collectionId, page) => {
-    setIsLoadingRecords(true);
-    try {
-      const result = await fetchRecordsPage(collectionId, page);
-      setCollectionDisplayModes((current) => current[collectionId]
-        ? current
-        : { ...current, [collectionId]: inferCollectionDisplayMode(result.items, data.clips) });
-      recordPageRef.current = page;
-      setRecordPage(page);
-      setData((current) => ({ ...current, records: result.items }));
-      setDataMeta((current) => ({ ...current, records: { hasMore: result.hasMore, total: null } }));
-      return result;
-    } finally {
-      setIsLoadingRecords(false);
-    }
-  }, [fetchRecordsPage, data.clips]);
-
+  // One bounded fetch gets every owned Record up front (not just the
+  // active Collection's page), so switching Collections/Projects is a pure
+  // client-side filter -- instant, and always in sync with the same data
+  // the realtime subscription below refreshes -- instead of firing a new
+  // network request (and a blank/stale-count flash while it resolves)
+  // every time. fetchAllPages pages to a bounded ceiling instead of
+  // silently dropping rows past a single page (G1); it already existed for
+  // this exact purpose but was never actually wired into loadDashboard.
   const loadDashboard = useCallback(async () => {
-    const [missions, collections, clips, enrichments, routingDecisions, watchRules, extensionInstalls] = await Promise.all([
+    const [missions, collections, recordsResult, clips, enrichments, routingDecisions, watchRules, extensionInstalls] = await Promise.all([
       listDashboardPage(base44.entities.Mission, "-created_date"),
       listDashboardPage(base44.entities.Collection, "name"),
+      fetchAllPages((skip, limit) => base44.entities.Record.list("-created_date", limit, skip)),
       listDashboardPage(base44.entities.Clip, "-captured_at"),
       listDashboardPage(base44.entities.Enrichment, "-checked_at"),
       listDashboardPage(base44.entities.RoutingDecision, "-decided_at"),
       listDashboardPage(base44.entities.WatchRule, "-created_date"),
       listDashboardPage(base44.entities.ExtensionInstall, "-created_at"),
     ]);
+    const records = recordsResult.items;
     const selectedCollectionId = activeCollectionIdRef.current && collections.some((item) => item.id === activeCollectionIdRef.current)
       ? activeCollectionIdRef.current
       : collections[0]?.id ?? null;
     activeCollectionIdRef.current = selectedCollectionId;
     setActiveCollectionId(selectedCollectionId);
     setActiveMissionId((current) => current && missions.some((item) => item.id === current) ? current : "");
-    const recordsPage = await fetchRecordsPage(selectedCollectionId, recordPageRef.current);
-    const next = {
-      missions,
-      collections,
-      records: recordsPage.items,
-      clips,
-      enrichments,
-      routingDecisions,
-      watchRules,
-      extensionInstalls,
-    };
-    setCollectionDisplayModes((current) => selectedCollectionId && !current[selectedCollectionId]
-      ? { ...current, [selectedCollectionId]: inferCollectionDisplayMode(recordsPage.items, clips) }
-      : current);
+    const next = { missions, collections, records, clips, enrichments, routingDecisions, watchRules, extensionInstalls };
+    setCollectionDisplayModes((current) => {
+      if (!selectedCollectionId || current[selectedCollectionId]) return current;
+      const collectionRecords = records.filter((record) => record.collection_id === selectedCollectionId);
+      return { ...current, [selectedCollectionId]: inferCollectionDisplayMode(collectionRecords, clips) };
+    });
     setData(next);
     setDataMeta({
       missions: { hasMore: missions.length >= DASHBOARD_LIST_LIMIT, total: null },
       collections: { hasMore: collections.length >= DASHBOARD_LIST_LIMIT, total: null },
-      records: { hasMore: recordsPage.hasMore, total: null },
+      records: { hasMore: recordsResult.hasMore, total: recordsResult.total },
       clips: { hasMore: clips.length >= DASHBOARD_LIST_LIMIT, total: null },
       enrichments: { hasMore: enrichments.length >= DASHBOARD_LIST_LIMIT, total: null },
       routingDecisions: { hasMore: routingDecisions.length >= DASHBOARD_LIST_LIMIT, total: null },
@@ -1292,7 +1267,7 @@ export default function App() {
       extensionInstalls: { hasMore: extensionInstalls.length >= DASHBOARD_LIST_LIMIT, total: null },
     });
     return next;
-  }, [fetchRecordsPage]);
+  }, []);
 
   const requestDashboardLoad = useCallback(() => {
     if (dashboardLoadRef.current) return dashboardLoadRef.current;
@@ -1305,15 +1280,18 @@ export default function App() {
 
   const selectCollection = useCallback((collectionId) => {
     activeCollectionIdRef.current = collectionId;
-    recordPageRef.current = 0;
     setActiveCollectionId(collectionId);
     setRecordPage(0);
-    loadRecordPage(collectionId, 0).catch((error) => setLoadError(error.message || "Could not load this Collection."));
-  }, [loadRecordPage]);
+    setCollectionDisplayModes((current) => {
+      if (!collectionId || current[collectionId]) return current;
+      const collectionRecords = data.records.filter((record) => record.collection_id === collectionId);
+      return { ...current, [collectionId]: inferCollectionDisplayMode(collectionRecords, data.clips) };
+    });
+  }, [data.records, data.clips]);
 
   const changeRecordPage = useCallback((page) => {
-    loadRecordPage(activeCollectionIdRef.current, page).catch((error) => setLoadError(error.message || "Could not load this page."));
-  }, [loadRecordPage]);
+    setRecordPage(page);
+  }, []);
 
   useEffect(() => {
     // A bfcache restore (event.persisted) resumes this exact JS heap and DOM
@@ -1662,16 +1640,16 @@ export default function App() {
   // Global (no mission_id) Collections belong to the top-level Library, not
   // to every Project's sidebar -- showing them everywhere (#72) meant any
   // Collection unattached to a Mission appeared under every Project with a
-  // 0 count, since data.records is scoped to the currently viewed
-  // Collection, not the whole Project (there's no per-Project aggregate
-  // count available client-side to know it "really" has none). Only an
-  // explicitly Project-scoped Collection belongs in a Project's list; the
-  // no-Project (Library) view still shows everything.
+  // 0 count. Only an explicitly Project-scoped Collection belongs in a
+  // Project's list; the no-Project (Library) view still shows everything.
   const missionCollections = activeMission
     ? data.collections.filter((collection) => collection.mission_id === activeMission.id)
     : data.collections;
   const activeCollection = missionCollections.find((collection) => collection.id === activeCollectionId) ?? missionCollections[0];
-  const activeRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
+  const activeCollectionRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
+  const recordPageStart = recordPage * RECORDS_PAGE_SIZE;
+  const activeRecords = activeCollectionRecords.slice(recordPageStart, recordPageStart + RECORDS_PAGE_SIZE);
+  const activeCollectionHasMorePages = activeCollectionRecords.length > recordPageStart + RECORDS_PAGE_SIZE;
   const selectedClip = data.clips.find((clip) => clip.id === selectedRecord?.clip_id);
   const selectedEnrichments = data.enrichments.filter((item) => item.record_id === selectedRecord?.id);
   const selectedWatch = data.watchRules.find((watch) => watch.record_id === selectedRecord?.id);
@@ -1721,8 +1699,19 @@ export default function App() {
         <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
-        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => { setActiveMissionId(missionId); const first = data.collections.find((collection) => collection.mission_id === missionId); selectCollection(first?.id ?? null); }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "More Items exist than are currently loaded. Narrow to a Project or Collection to see everything in that scope." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={() => { setMobileCaptureError(""); setMobileCaptureResult(null); setIsMobileCaptureOpen(true); }}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
+        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
+              setActiveMissionId(missionId);
+              // Must mirror missionCollections' own derivation: switching to
+              // "All Collections" (missionId "") has no mission_id to match,
+              // so the old `collection.mission_id === missionId` lookup
+              // always found nothing and fell back to selectCollection(null)
+              // -- a no-op fetch that left data.records empty while the
+              // render still fell back to missionCollections[0], showing
+              // that Collection with a false 0 count until manually clicked.
+              const scoped = missionId ? data.collections.filter((collection) => collection.mission_id === missionId) : data.collections;
+              selectCollection(scoped[0]?.id ?? null);
+            }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
+        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "You have more Items than currently fit in one load; counts across the board may be undercounts." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={() => { setMobileCaptureError(""); setMobileCaptureResult(null); setIsMobileCaptureOpen(true); }}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <OnboardingPanel
@@ -1739,8 +1728,8 @@ export default function App() {
         onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
       />
       <section className="workspace-grid">
-        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} isLoadingRecords={isLoadingRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={dataMeta.records.hasMore} isLoading={isLoadingRecords} onPageChange={changeRecordPage} onSelect={selectRecord} />
+        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>

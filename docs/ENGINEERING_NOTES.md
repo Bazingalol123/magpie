@@ -1404,6 +1404,51 @@ hidden by a separate, unaffected rule. Fixed by reflowing `.heading-actions`
 into a full-width wrapped flex row of 44px-min-height buttons instead of
 hiding it.
 
+**(4, found by owner testing (1)'s fix) Switching to "All Collections" showed
+a Collection stuck at 0 until manually clicked.** `WorkspaceSwitcher`'s
+`onSelect` picked the Collection to auto-select on Project switch via
+`data.collections.find(c => c.mission_id === missionId)` — for the
+"All Collections" case `missionId` is `""`, which no real Collection's
+`mission_id` ever equals, so this always found nothing and called
+`selectCollection(null)`. `fetchRecordsPage` short-circuits on a falsy
+`collectionId` and returns an empty page without ever fetching, so
+`data.records` stayed empty while the render's own fallback
+(`missionCollections.find(...) ?? missionCollections[0]`) still picked a
+real Collection to show as active — rendering it with a false `0` until the
+user clicked it themselves and triggered a real fetch. Fixed by mirroring
+`missionCollections`' own derivation (filter by `mission_id` when a Project
+is active, otherwise use the full list) instead of the narrower `.find`.
+
+**(5) Root-caused (1) and (4) by fetching Records like every other entity.**
+Owner's own diagnosis: the real reason these kept surfacing was that
+`data.records` was only ever the single active Collection's fetched page
+(`fetchRecordsPage`/`loadRecordPage`, one `base44.entities.Record.filter({
+collection_id }, ...)` network call per switch) instead of a bounded
+account-wide set like every other entity (`missions`, `collections`,
+`clips`, etc. all already load through `listDashboardPage`'s single-page
+`.list(sort, 100, 0)`). Every count/scoping bug above was a symptom of that
+one gap. Replaced it: `loadDashboard` now fetches Records the same way,
+except through `fetchAllPages` (`src/dashboard-pagination.js`) instead of a
+single 100-row page — that helper already existed, tested, and documented
+for exactly this purpose (G1: "loadDashboard used to fetch a single page
+per entity ... silently missing" rows past the cap) but was never actually
+wired into `loadDashboard`. It pages to a 5,000-row ceiling instead of
+silently truncating at one page.
+
+`selectCollection`/`changeRecordPage` are now pure client-side state
+changes (no fetch, no `isLoadingRecords`) — `activeRecords` filters the
+already-loaded set by `collection_id` and slices client-side by
+`recordPage`; `CollectionSidebar` now shows a real, always-live count for
+every Collection (not just the active one) instead of `—` for inactive
+rows. `dataMeta.records.hasMore`/`total` now come from `fetchAllPages`'s
+own honest ceiling-hit signal, reused as the "+" suffix everywhere a count
+is shown. `fetchRecordsPage`/`loadRecordPage`/`isLoadingRecords` and the
+now-unused `fetchPageWindow` import are deleted; `RecordTable`'s Prev/Next
+no longer needs an `isLoading`-gated disabled state since paging is
+synchronous now. `ActivityPanel` (record lookup for enrichment activity
+items) incidentally gets the same completeness improvement for free, since
+it was already being passed `data.records` directly.
+
 Branch `fix/dashboard-project-scoping-and-mobile-cta`. Gated locally:
 193/193 Deno tests, `npm run build` clean, `@base44/sdk` extension grep
 clean. Not yet merged, deployed, or owner-approved for deploy. No manual
