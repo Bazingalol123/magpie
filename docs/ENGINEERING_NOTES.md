@@ -1310,4 +1310,50 @@ worker's own origin scope, so it can never intercept it. Also hardened
 can't recur even if `appBaseUrl` regresses to relative again. Verified the
 redirect chain server-side with `curl` (`magpiecapture.com/api/apps/auth/login`
 → 307 → `app.base44.com` → 302 → Google) before and after; the backend was
-never the problem. Not yet redeployed — owner approval required first.
+never the problem. Deployed (owner-approved, `target=site`,
+`32432637638`) and confirmed live via the new bundle hash.
+
+## 2026-08-21 — Logout stranded on app.base44.com; bfcache showed a stale, unauthenticated dashboard
+
+Owner confirmed the redirect fix above worked, then reported two follow-on
+bugs on the freshly deployed site: (1) Sign out lands on `app.base44.com`
+instead of back on the dashboard, and (2) pressing the browser Back button
+afterward shows the dashboard shell with no data, and every action 403s.
+
+**Logout host.** `base44.auth.logout()` builds its redirect as
+`${appBaseUrl}/api/apps/auth/logout?from_url=...`. Unlike login (which
+honors an explicit `from_url` via the `app_id` query param regardless of
+which host receives the request — confirmed via `curl` against both
+`app.base44.com` and the `magpiecapture.com` proxy), the logout endpoint
+only honors `from_url` when the request itself hits the app's registered
+public domain: hit directly on `app.base44.com` it always responds
+`location: /` (relative to `app.base44.com` itself, ignoring `from_url`,
+`app_id` present or not). Confirmed by `curl`-ing both hosts directly.
+Fixed by pointing `appBaseUrl` at `window.location.origin` instead of
+`base44ServerUrl` — safe now that `public/sw.js` no longer intercepts
+`/api/*`, so this doesn't reopen the same-origin service-worker hijack the
+prior note describes. This also matches what `29da48d`, the very first of
+today's flip-flopping commits, already tried — it was directionally right
+but got abandoned before the service worker was fixed, so it never got a
+fair test.
+
+**bfcache stale dashboard.** A `pageshow` listener already existed to
+re-check auth (`event.persisted` → `base44.auth.me()` → `setUser(...)`),
+but on catch it only patched `user`, not the dependent `data`/collection
+state — those effects don't re-run on a bfcache resume the way they do on a
+fresh mount, so the restored page kept rendering the old (now
+unauthenticated) dashboard shell with stale/empty data and 403s on every
+action. Replaced the patch with an unconditional `window.location.reload()`
+on `event.persisted`, forcing the same fresh-mount path (and its existing
+`base44.auth.me()` check) that a normal page load takes.
+
+**Also restored `/login`** (`src/LoginPage.jsx` — email/password,
+signup+OTP, Google, Apple): it existed as complete, styled, unused dead
+code, stripped out of the render path in `c425c6b` while chasing the
+original redirect bug and never wired back in. Landing's "Sign in" /
+"Sign in to start" now push `/login` instead of redirecting straight to
+Google, per the SDK's own guidance to prefer custom login UI over
+`redirectToLogin`.
+
+Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
+above.
