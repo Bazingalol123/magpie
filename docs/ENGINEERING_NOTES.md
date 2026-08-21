@@ -1265,3 +1265,49 @@ DNS hookup no longer applies). Both endpoints are confirmed live and
 correctly reject unauthenticated requests. An authenticated pairing +
 capture round-trip through the new URL was not performed, and no deployment
 or merge was performed as part of this work.
+
+## 2026-08-21 — OAuth sign-in loop: relative appBaseUrl + service worker (PR #75)
+
+Owner reported Google/Apple sign-in on `magpiecapture.com` redirecting back
+to the landing page instead of completing; email/password sign-in kept
+working. `feat/zyte-refresh-option` had spent five rapid-fire commits
+(`7fe605e`→`9397a86`) chasing this by flipping `src/api/base44Client.js`'s
+`appBaseUrl` between the Base44 host, the page origin, and `''`, without
+anyone testing end-to-end in a browser with the service worker active.
+
+Root cause was two compounding regressions live on that branch:
+
+1. `appBaseUrl` had settled on `''` in production. The SDK builds
+   `loginWithProvider`/`redirectToLogin` URLs as
+   `${appBaseUrl}/api/apps/auth/login?...`; empty `appBaseUrl` makes that a
+   same-origin **relative** URL instead of pointing at
+   `https://app.base44.com`.
+2. `public/sw.js` (new in this same PR, for the PWA share target) intercepts
+   *every* GET navigation with a blanket `fetchWithNavigationFallback`. Once
+   the login URL became same-origin, this service worker owned it too:
+   whenever its own `fetch()` of the resulting
+   `magpiecapture.com → app.base44.com → accounts.google.com` cross-origin
+   redirect chain didn't cleanly resolve (fragile from inside a service
+   worker vs. a genuine top-level navigation), it silently served the
+   cached `"/"` shell instead of the real redirect. The address bar kept
+   showing the login URL because no real navigation occurred — only a body
+   swap — matching the reported symptom exactly. `loginViaEmailPassword` is
+   a plain async API call (not a navigation), so it was never touched by
+   the service worker, which is why password sign-in kept working.
+
+Separately, and unrelated to this fix: production was found to be serving
+this same not-yet-merged PR's bundle (confirmed via `mobile-capture` and the
+PWA share-target `postMessage` handler present in the live JS, both absent
+from `main`) despite no `Deploy to Base44` Action run since 2026-08-18 —
+owner confirmed this was an intentional out-of-band deploy via another
+agent channel, not an accident.
+
+Fix (`a62a56e`): `appBaseUrl` now falls back to `base44ServerUrl`
+(`https://app.base44.com`) instead of `''`, so provider login is a genuine
+absolute cross-origin redirect from the first hop — outside the service
+worker's own origin scope, so it can never intercept it. Also hardened
+`public/sw.js` itself to skip `/api/*` paths entirely, so this class of bug
+can't recur even if `appBaseUrl` regresses to relative again. Verified the
+redirect chain server-side with `curl` (`magpiecapture.com/api/apps/auth/login`
+→ 307 → `app.base44.com` → 302 → Google) before and after; the backend was
+never the problem. Not yet redeployed — owner approval required first.
