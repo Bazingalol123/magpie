@@ -3,9 +3,12 @@ import { createClient } from '@base44/sdk';
 const appId = import.meta.env.VITE_BASE44_APP_ID || '6a622e254ee5f8740523313e';
 const localBaseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL;
 const base44ServerUrl = localBaseUrl || 'https://app.base44.com';
-// Built-in provider login starts on the public app origin. API requests still
-// use the Base44 API host above.
-const appBaseUrl = localBaseUrl || '';
+// loginWithProvider/redirectToLogin build full-page redirect URLs from this
+// value. It must be an absolute, real host: an empty/relative value turns
+// the OAuth redirect into a same-origin navigation that the app's own
+// service worker (public/sw.js) intercepts and silently falls back to the
+// cached landing-page shell on, instead of letting the redirect through.
+const appBaseUrl = localBaseUrl || base44ServerUrl;
 
 export const base44 = createClient({
   appId,

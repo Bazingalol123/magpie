@@ -24,6 +24,16 @@ Deno.test("PWA shell registers a production service worker", async () => {
   assert(serviceWorker.includes("self.addEventListener(\"fetch\""));
 });
 
+Deno.test("service worker does not intercept /api/ requests (auth redirects must pass through untouched)", async () => {
+  const serviceWorker = await Deno.readTextFile(new URL("public/sw.js", root));
+  assert(serviceWorker.includes('requestUrl.pathname.startsWith("/api/")'));
+  const fetchHandlerStart = serviceWorker.indexOf('self.addEventListener("fetch"');
+  const apiGuardIndex = serviceWorker.indexOf('requestUrl.pathname.startsWith("/api/")');
+  const navigationFallbackCallIndex = serviceWorker.indexOf("event.respondWith(fetchWithNavigationFallback");
+  assert(fetchHandlerStart !== -1 && apiGuardIndex > fetchHandlerStart);
+  assert(apiGuardIndex < navigationFallbackCallIndex);
+});
+
 Deno.test("share route is wired to the authenticated mobile capture path", async () => {
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
   assert(app.includes('window.location.pathname === "/share"'));

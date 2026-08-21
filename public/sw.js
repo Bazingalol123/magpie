@@ -27,6 +27,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (event.request.method !== "GET") return;
+  // Auth (/api/apps/auth/*) and other backend routes are cross-origin
+  // redirect chains (OAuth) or API calls, not SPA pages. Never intercept
+  // them with the offline shell fallback below, or a fetch() hiccup partway
+  // through the redirect chain silently strands the user on the cached "/"
+  // shell instead of letting the real login redirect complete.
+  if (requestUrl.pathname.startsWith("/api/")) return;
   event.respondWith(fetchWithNavigationFallback(event.request));
 });
 
