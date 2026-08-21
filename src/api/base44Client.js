@@ -3,9 +3,9 @@ import { createClient } from '@base44/sdk';
 const appId = import.meta.env.VITE_BASE44_APP_ID || '6a622e254ee5f8740523313e';
 const localBaseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL;
 const base44ServerUrl = localBaseUrl || 'https://app.base44.com';
-// Built-in Base44 login pages live on the Base44 app host. The public custom
-// domain remains the explicit post-auth/logout destination.
-const appBaseUrl = localBaseUrl || base44ServerUrl;
+// Built-in provider login starts on the public app origin. API requests still
+// use the Base44 API host above.
+const appBaseUrl = localBaseUrl || '';
 
 export const base44 = createClient({
   appId,

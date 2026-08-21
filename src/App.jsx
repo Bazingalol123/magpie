@@ -1350,7 +1350,7 @@ export default function App() {
 
   useEffect(() => {
     if (isLoading || user || !isShareRoute) return;
-    base44.auth.redirectToLogin(shareRedirectPath);
+    base44.auth.loginWithProvider("google", shareRedirectPath);
   }, [isLoading, user, isShareRoute, shareRedirectPath]);
 
   useEffect(() => {
@@ -1402,9 +1402,14 @@ export default function App() {
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     setIsSigningIn(true);
-    base44.auth.redirectToLogin(window.location.href);
+    try {
+      base44.auth.loginWithProvider("google", window.location.href);
+    } catch (error) {
+      setLoadError(error.message || "Could not start sign-in.");
+      setIsSigningIn(false);
+    }
   };
 
   const handleSignOut = () => {
