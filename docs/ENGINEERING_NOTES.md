@@ -1358,6 +1358,48 @@ Google, per the SDK's own guidance to prefer custom login UI over
 Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
 above.
 
+## 2026-08-21 — P0: every base44.functions.invoke() call 403s in production (platform-domain block)
+
+Owner reported the iOS Shortcut `/share` save hit `403 Forbidden`, and on
+follow-up confirmed every function-backed write in the deployed dashboard
+was failing the same way (New Project, mobile capture, and by extension
+delete/resolve-routing/review accept-dismiss — anything routed through
+`base44.functions.invoke()`).
+
+Root cause confirmed live via `curl`, unauthenticated, same exact SDK path
+(`POST /api/apps/{appId}/functions/create-mission`) against both hosts:
+
+- `https://app.base44.com/...` → `403 {"message":"Backend functions cannot
+  be accessed from the platform domain. Use the app's subdomain instead."}`,
+  `request_id: null` — rejected before `entry.ts` ever ran.
+- `https://magpiecapture.com/...` → `401 {"error":"Authentication is
+  required", request_id: "req_..."}` — a real response from
+  `requireUser()` in `entry.ts`, i.e. the request reached our code.
+
+`entities` and `/auth/me` were verified to behave identically on both
+hosts (both `200`/`401` alike), so this block is specific to the
+`functions` route, not a blanket platform-vs-custom-domain split. Base44
+appears to have started enforcing "use the app's own domain for function
+calls" now that the custom domain is fully connected (see the 2026-08-17
+issue #59 note above, which made the same shift for the Extension's
+`ingest_url` but didn't touch the browser SDK's own `functions.invoke()`
+base URL).
+
+`src/api/base44Client.js`'s `base44ServerUrl` was hardcoded to
+`https://app.base44.com` in production (only local dev with
+`VITE_BASE44_APP_BASE_URL` set escaped it), and the SDK's `functions`
+module always posts through that same shared `serverUrl` — there is no
+separate per-module base URL in `@base44/sdk`'s `createClient()`. Fixed by
+making `base44ServerUrl` prefer the deployed page's own browser origin
+(mirroring the pattern `appBaseUrl` already used for the login/logout
+redirect bug above), falling back to the platform host only when there's
+no browser origin or it's `localhost`/`127.0.0.1` (so local frontend dev
+without a sandbox keeps hitting the real hosted backend as before).
+`tests/base44-client-config.test.ts` updated to match the new source
+lines. Gated locally: 193/193 Deno tests, all 17 `entry.ts` type-check
+clean, `npm run build` clean. Branch
+`fix/functions-invoke-platform-domain-403`, merged to `main` as #76.
+
 ## 2026-08-21 — Three dashboard bug reports: Project-scoped Collections, stale 0 count, hidden phone CTA
 
 Owner reported three issues while reviewing the dashboard: (1) switching
