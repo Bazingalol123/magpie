@@ -264,6 +264,7 @@ export async function captureSentryTransaction(
       operation: context.operation,
       request_id: context.request_id,
       error_code: event.error_code ?? "NONE",
+      strategy: event.strategy ?? "unknown",
       environment: String(input.environment ?? "production"),
     },
     extra: {

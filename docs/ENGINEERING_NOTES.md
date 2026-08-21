@@ -1265,3 +1265,95 @@ DNS hookup no longer applies). Both endpoints are confirmed live and
 correctly reject unauthenticated requests. An authenticated pairing +
 capture round-trip through the new URL was not performed, and no deployment
 or merge was performed as part of this work.
+
+## 2026-08-21 — OAuth sign-in loop: relative appBaseUrl + service worker (PR #75)
+
+Owner reported Google/Apple sign-in on `magpiecapture.com` redirecting back
+to the landing page instead of completing; email/password sign-in kept
+working. `feat/zyte-refresh-option` had spent five rapid-fire commits
+(`7fe605e`→`9397a86`) chasing this by flipping `src/api/base44Client.js`'s
+`appBaseUrl` between the Base44 host, the page origin, and `''`, without
+anyone testing end-to-end in a browser with the service worker active.
+
+Root cause was two compounding regressions live on that branch:
+
+1. `appBaseUrl` had settled on `''` in production. The SDK builds
+   `loginWithProvider`/`redirectToLogin` URLs as
+   `${appBaseUrl}/api/apps/auth/login?...`; empty `appBaseUrl` makes that a
+   same-origin **relative** URL instead of pointing at
+   `https://app.base44.com`.
+2. `public/sw.js` (new in this same PR, for the PWA share target) intercepts
+   *every* GET navigation with a blanket `fetchWithNavigationFallback`. Once
+   the login URL became same-origin, this service worker owned it too:
+   whenever its own `fetch()` of the resulting
+   `magpiecapture.com → app.base44.com → accounts.google.com` cross-origin
+   redirect chain didn't cleanly resolve (fragile from inside a service
+   worker vs. a genuine top-level navigation), it silently served the
+   cached `"/"` shell instead of the real redirect. The address bar kept
+   showing the login URL because no real navigation occurred — only a body
+   swap — matching the reported symptom exactly. `loginViaEmailPassword` is
+   a plain async API call (not a navigation), so it was never touched by
+   the service worker, which is why password sign-in kept working.
+
+Separately, and unrelated to this fix: production was found to be serving
+this same not-yet-merged PR's bundle (confirmed via `mobile-capture` and the
+PWA share-target `postMessage` handler present in the live JS, both absent
+from `main`) despite no `Deploy to Base44` Action run since 2026-08-18 —
+owner confirmed this was an intentional out-of-band deploy via another
+agent channel, not an accident.
+
+Fix (`a62a56e`): `appBaseUrl` now falls back to `base44ServerUrl`
+(`https://app.base44.com`) instead of `''`, so provider login is a genuine
+absolute cross-origin redirect from the first hop — outside the service
+worker's own origin scope, so it can never intercept it. Also hardened
+`public/sw.js` itself to skip `/api/*` paths entirely, so this class of bug
+can't recur even if `appBaseUrl` regresses to relative again. Verified the
+redirect chain server-side with `curl` (`magpiecapture.com/api/apps/auth/login`
+→ 307 → `app.base44.com` → 302 → Google) before and after; the backend was
+never the problem. Deployed (owner-approved, `target=site`,
+`32432637638`) and confirmed live via the new bundle hash.
+
+## 2026-08-21 — Logout stranded on app.base44.com; bfcache showed a stale, unauthenticated dashboard
+
+Owner confirmed the redirect fix above worked, then reported two follow-on
+bugs on the freshly deployed site: (1) Sign out lands on `app.base44.com`
+instead of back on the dashboard, and (2) pressing the browser Back button
+afterward shows the dashboard shell with no data, and every action 403s.
+
+**Logout host.** `base44.auth.logout()` builds its redirect as
+`${appBaseUrl}/api/apps/auth/logout?from_url=...`. Unlike login (which
+honors an explicit `from_url` via the `app_id` query param regardless of
+which host receives the request — confirmed via `curl` against both
+`app.base44.com` and the `magpiecapture.com` proxy), the logout endpoint
+only honors `from_url` when the request itself hits the app's registered
+public domain: hit directly on `app.base44.com` it always responds
+`location: /` (relative to `app.base44.com` itself, ignoring `from_url`,
+`app_id` present or not). Confirmed by `curl`-ing both hosts directly.
+Fixed by pointing `appBaseUrl` at `window.location.origin` instead of
+`base44ServerUrl` — safe now that `public/sw.js` no longer intercepts
+`/api/*`, so this doesn't reopen the same-origin service-worker hijack the
+prior note describes. This also matches what `29da48d`, the very first of
+today's flip-flopping commits, already tried — it was directionally right
+but got abandoned before the service worker was fixed, so it never got a
+fair test.
+
+**bfcache stale dashboard.** A `pageshow` listener already existed to
+re-check auth (`event.persisted` → `base44.auth.me()` → `setUser(...)`),
+but on catch it only patched `user`, not the dependent `data`/collection
+state — those effects don't re-run on a bfcache resume the way they do on a
+fresh mount, so the restored page kept rendering the old (now
+unauthenticated) dashboard shell with stale/empty data and 403s on every
+action. Replaced the patch with an unconditional `window.location.reload()`
+on `event.persisted`, forcing the same fresh-mount path (and its existing
+`base44.auth.me()` check) that a normal page load takes.
+
+**Also restored `/login`** (`src/LoginPage.jsx` — email/password,
+signup+OTP, Google, Apple): it existed as complete, styled, unused dead
+code, stripped out of the render path in `c425c6b` while chasing the
+original redirect bug and never wired back in. Landing's "Sign in" /
+"Sign in to start" now push `/login` instead of redirecting straight to
+Google, per the SDK's own guidance to prefer custom login UI over
+`redirectToLogin`.
+
+Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
+above.

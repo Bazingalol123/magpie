@@ -1,6 +1,8 @@
 import { HttpError } from "./http.ts";
 import { parseJsonObject, plainTextFromHtml } from "./clip.ts";
-import { getOrNull } from "./service-entities.ts";
+import { getOrNull, listAllOwned } from "./service-entities.ts";
+import { acquireWithZyte, normalizeProduct, productToEvidenceText } from "./zyte.ts";
+import { evaluateZyteQuality } from "./zyte-quality.ts";
 
 export type EnrichmentStatus =
   | "changed"
@@ -21,6 +23,10 @@ export type EnrichmentResult = {
   retryable: boolean;
   message: string;
   errorCode: string;
+  providerRequestId?: string;
+  evidenceHash?: string;
+  durationMs?: number;
+  confidence?: number;
 };
 
 type SourceFailureStatus = "blocked" | "not_found" | "rate_limited" | "unreachable" | "invalid_content";
@@ -85,6 +91,66 @@ export async function enrichRecord(base44: any, recordId: string, fetchImpl: typ
   };
 }
 
+export async function enrichRecordWithZyte(base44: any, record: any, apiKey: string): Promise<EnrichmentResult> {
+  const acquired = await acquireWithZyte(record.source_url, apiKey);
+  const checkedAt = new Date().toISOString();
+  if (acquired.result.status !== "success" || !acquired.product) {
+    const status = acquired.result.status === "success" || acquired.result.status === "auth_required"
+      ? "invalid_content"
+      : acquired.result.status;
+    const result = await persistNonSuccess(base44, record, checkedAt, {
+      status,
+      retryable: acquired.result.retryable,
+      errorCode: acquired.result.errorCode ?? "PROVIDER_FAILURE",
+      message: "Cloud refresh could not verify this source safely.",
+    });
+    return {
+      ...result,
+      providerRequestId: acquired.result.providerRequestId,
+      evidenceHash: acquired.result.evidenceHash,
+      durationMs: acquired.durationMs,
+      confidence: acquired.confidence,
+    };
+  }
+  const quality = evaluateZyteQuality(acquired, ["name", "price"]);
+  if (quality.decision !== "accepted") {
+    const result = await persistNonSuccess(base44, record, checkedAt, {
+      status: "invalid_content",
+      retryable: false,
+      errorCode: quality.reason,
+      message: quality.reason === "LOW_CONFIDENCE"
+        ? "Cloud refresh returned evidence below the confidence threshold."
+        : "Cloud refresh did not return the required product fields.",
+    });
+    return { ...result, providerRequestId: acquired.result.providerRequestId, evidenceHash: acquired.result.evidenceHash, durationMs: acquired.durationMs, confidence: acquired.confidence };
+  }
+  const normalized = normalizeProduct(acquired.product);
+  const evidenceText = productToEvidenceText(normalized);
+  if (!evidenceText) {
+    const result = await persistNonSuccess(base44, record, checkedAt, {
+      status: "invalid_content",
+      retryable: false,
+      errorCode: "NO_EXTRACTABLE_FIELDS",
+      message: "Cloud refresh returned no safely extractable fields.",
+    });
+    return { ...result, providerRequestId: acquired.result.providerRequestId, evidenceHash: acquired.result.evidenceHash, durationMs: acquired.durationMs, confidence: acquired.confidence };
+  }
+  const refreshed = await refreshRecordFromEvidence(base44, record, evidenceText, "zyte-product-v1");
+  return {
+    record,
+    status: refreshed.status === "updated" ? "changed" : refreshed.status === "suspicious" ? "suspicious_data" : "unchanged",
+    changeCount: refreshed.changeCount,
+    checkedAt: refreshed.checkedAt,
+    retryable: false,
+    message: refreshed.status === "updated" ? "Cloud refresh detected trusted field changes." : "Cloud source checked successfully; no watched fields changed.",
+    errorCode: refreshed.status === "suspicious" ? "SUSPICIOUS_DATA" : "",
+    providerRequestId: acquired.result.providerRequestId,
+    evidenceHash: acquired.result.evidenceHash,
+    durationMs: acquired.durationMs,
+    confidence: acquired.confidence,
+  };
+}
+
 export type RefreshOutcome = {
   status: "updated" | "unchanged" | "suspicious";
   changeCount: number;
@@ -94,7 +160,7 @@ export type RefreshOutcome = {
 // The revisit path: the owner's browser supplies fresh bounded text for a page
 // the server may not be able to reach. Same extraction and suspicious-value
 // guards as enrichRecord; a suspicious diff mutates nothing.
-export async function refreshRecordFromEvidence(base44: any, record: any, text: string): Promise<RefreshOutcome> {
+export async function refreshRecordFromEvidence(base44: any, record: any, text: string, agentId = "extension-refresh-v1"): Promise<RefreshOutcome> {
   const checkedAt = new Date().toISOString();
   const existingFields = parseJsonObject(record.fields_json);
   const extraction = extractWatchedFields(existingFields, text);
@@ -104,12 +170,22 @@ export async function refreshRecordFromEvidence(base44: any, record: any, text: 
   const changes = Object.entries(extraction.fields).filter(([field, value]) => {
     return !equivalentValue(field, existingFields[field], value);
   });
-  const status = await persistFieldDiff(base44, record, existingFields, changes, checkedAt, "extension-refresh-v1");
+  const status = await persistFieldDiff(base44, record, existingFields, changes, checkedAt, agentId);
   return { status: status === "changed" ? "updated" : "unchanged", changeCount: changes.length, checkedAt };
 }
 
 export async function reactivateWatchesAfterRefresh(service: any, ownerId: string, recordId: string) {
-  const watches = await service.WatchRule.filter({ owner_id: ownerId, record_id: recordId }, "-created_date", 5);
+  const watches = await listAllOwned<{
+    id: string;
+    owner_id: string;
+    active?: boolean;
+    last_error_code?: string;
+    failure_count?: number;
+  }>(
+    service.WatchRule,
+    { owner_id: ownerId, record_id: recordId },
+    ownerId,
+  );
   for (const watch of watches) {
     if (watch.owner_id !== ownerId) continue;
     const wasAutoPaused = !watch.active && watch.last_error_code === "AUTO_PAUSED_BLOCKED";
