@@ -38,6 +38,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
 import Landing from "./Landing.jsx";
+import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
@@ -1172,6 +1173,7 @@ export default function App() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [, forceRouteRender] = useState(0);
   const [shareDraft, setShareDraft] = useState(() => readShareDraft());
+  const isLoginRoute = window.location.pathname === "/login";
   const isShareRoute = window.location.pathname === "/share";
   const shareId = isShareRoute ? new URLSearchParams(window.location.search).get("share_id") : null;
   const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
@@ -1308,14 +1310,16 @@ export default function App() {
   }, [loadRecordPage]);
 
   useEffect(() => {
+    // A bfcache restore (event.persisted) resumes this exact JS heap and DOM
+    // as they were before navigating away -- including a signed-in
+    // dashboard's user/data state -- even if the session was signed out
+    // in between (e.g. browser Back after Sign out). Patching just `user`
+    // here left dependent data/collection state stale (an authenticated
+    // shell with no data, 403s on every action) because those effects don't
+    // re-run from a bfcache resume the way they do from a fresh mount. A
+    // full reload forces the normal fresh-mount auth check instead.
     const onPageShow = (event) => {
-      if (!event.persisted) return;
-      base44.auth.me()
-        .then((currentUser) => setUser(currentUser))
-        .catch(() => {
-          setUser(null);
-          if (window.location.pathname !== "/") window.history.replaceState({}, "", "/");
-        });
+      if (event.persisted) window.location.reload();
     };
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
@@ -1402,15 +1406,22 @@ export default function App() {
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
 
-  const handleSignIn = async () => {
-    setIsSigningIn(true);
-    try {
-      base44.auth.loginWithProvider("google", window.location.href);
-    } catch (error) {
-      setLoadError(error.message || "Could not start sign-in.");
-      setIsSigningIn(false);
-    }
+  const openLogin = () => {
+    window.history.pushState({}, "", "/login");
+    forceRouteRender((version) => version + 1);
   };
+
+  const closeLogin = () => {
+    window.history.pushState({}, "", "/");
+    forceRouteRender((version) => version + 1);
+  };
+
+  const handleAuthenticated = (authenticatedUser, redirectPath = "/") => {
+    window.history.pushState({}, "", redirectPath);
+    setUser(authenticatedUser);
+  };
+
+  const handleSignIn = () => openLogin();
 
   const handleSignOut = () => {
     const publicOrigin = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
@@ -1685,6 +1696,7 @@ export default function App() {
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
   if (!user && isShareRoute) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
   if (isShareRoute && user) return <ShareCapturePage draft={shareDraft} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />;
+  if (!user && isLoginRoute) return <LoginPage onBack={closeLogin} onAuthenticated={handleAuthenticated} redirectPath="/" />;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
   return (

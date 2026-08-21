@@ -41,6 +41,15 @@ Deno.test("share route is wired to the authenticated mobile capture path", async
   assert(app.includes("isSafeHttpUrl(draft.url)"));
   assert(app.includes("<ShareCapturePage"));
   assert(app.includes('window.addEventListener("pageshow", onPageShow)'));
-  assert(app.includes("if (!event.persisted) return;"));
   assert(app.includes("base44.functions.invoke(\"mobile-capture\""));
+});
+
+Deno.test("bfcache restore forces a fresh mount instead of patching stale auth state", async () => {
+  const app = await Deno.readTextFile(new URL("src/App.jsx", root));
+  // Patching just `user` on a bfcache-restored (event.persisted) page left
+  // dependent dashboard data stale after sign-out + browser Back (an
+  // authenticated-looking shell with no data, 403s on every action) because
+  // that patch doesn't re-run the effects a fresh mount would. Force a
+  // reload instead so auth and data are always re-derived from scratch.
+  assert(app.includes("if (event.persisted) window.location.reload();"));
 });
