@@ -410,7 +410,7 @@ function EmptyCollection({ onSelect }) {
   );
 }
 
-function CollectionSidebar({ collections, activeCollectionId, records, onSelect, onDelete, deletingId }) {
+function CollectionSidebar({ collections, activeCollectionId, records, isLoadingRecords, onSelect, onDelete, deletingId }) {
   const [confirmingId, setConfirmingId] = useState(null);
   return (
     <aside className="collection-sidebar">
@@ -421,7 +421,13 @@ function CollectionSidebar({ collections, activeCollectionId, records, onSelect,
       <div className="collection-list">
         {collections.map((collection) => {
           const isActive = collection.id === activeCollectionId;
-          const count = isActive ? records.filter((record) => record.collection_id === collection.id).length : null;
+          // records is only ever the active Collection's currently loaded
+          // page; while a new page is loading, it still holds the
+          // previous Collection's rows, which would filter to 0 here and
+          // flash a false "0" instead of the real count. Keep showing "—"
+          // (same as an inactive row) until the fetch for this Collection
+          // actually resolves.
+          const count = isActive && !isLoadingRecords ? records.filter((record) => record.collection_id === collection.id).length : null;
           const isConfirming = confirmingId === collection.id;
           const isDeleting = deletingId === collection.id;
           return (
@@ -1653,8 +1659,16 @@ export default function App() {
 
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
   const missionRecords = activeMission ? data.records.filter((record) => record.mission_id === activeMission.id) : data.records;
+  // Global (no mission_id) Collections belong to the top-level Library, not
+  // to every Project's sidebar -- showing them everywhere (#72) meant any
+  // Collection unattached to a Mission appeared under every Project with a
+  // 0 count, since data.records is scoped to the currently viewed
+  // Collection, not the whole Project (there's no per-Project aggregate
+  // count available client-side to know it "really" has none). Only an
+  // explicitly Project-scoped Collection belongs in a Project's list; the
+  // no-Project (Library) view still shows everything.
   const missionCollections = activeMission
-    ? data.collections.filter((collection) => collection.mission_id === activeMission.id || !collection.mission_id)
+    ? data.collections.filter((collection) => collection.mission_id === activeMission.id)
     : data.collections;
   const activeCollection = missionCollections.find((collection) => collection.id === activeCollectionId) ?? missionCollections[0];
   const activeRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
@@ -1725,7 +1739,7 @@ export default function App() {
         onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
       />
       <section className="workspace-grid">
-        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
+        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} isLoadingRecords={isLoadingRecords} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
         <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={dataMeta.records.hasMore} isLoading={isLoadingRecords} onPageChange={changeRecordPage} onSelect={selectRecord} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>

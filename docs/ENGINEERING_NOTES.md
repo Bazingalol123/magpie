@@ -1357,3 +1357,57 @@ Google, per the SDK's own guidance to prefer custom login UI over
 
 Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
 above.
+
+## 2026-08-21 — Three dashboard bug reports: Project-scoped Collections, stale 0 count, hidden phone CTA
+
+Owner reported three issues while reviewing the dashboard: (1) switching
+Projects still showed Collections belonging to other/no Project, with a `0`
+count; (2) Collection item counts flash `0` before settling; (3) on iOS
+(installed PWA or Safari tab) there's no "save with phone" button, though
+one exists on desktop.
+
+**(1) Global Collections leaking into every Project.** `src/App.jsx`'s
+`missionCollections` filter was `collection.mission_id === activeMission.id
+|| !collection.mission_id` (added in `0764e31`, #72, to stop global
+Collections "disappearing" from the sidebar). The `|| !collection.mission_id`
+clause means *every* Collection with no `mission_id` shows under *every*
+Project regardless of relevance, and since `data.records` is only ever the
+currently-viewed Collection's page (not a Project-wide list), there's no
+honest client-side way to tell whether a given global Collection "really"
+belongs under the active Project — it always renders `0`. Per
+`docs/PRODUCT_CHARTER.md`, unattached Collections belong to the top-level
+Library, not to every Project's own view — fixed by dropping the
+`!collection.mission_id` clause entirely so only explicitly Project-scoped
+Collections appear under a Project; the no-Project (Library) view is
+unaffected and still shows everything. (`0764e31`'s original flicker bug —
+why it widened this filter in the first place — was rooted in the *same*
+`data.records`-is-single-Collection-scoped limitation as this bug; a real
+fix for both would need a lightweight per-Project Collection-membership
+query that doesn't exist yet, tracked as a follow-up, not built here.)
+
+**(2) Transient `0` count on the active row.** `CollectionSidebar`
+computed the active row's count as `records.filter(r => r.collection_id ===
+collection.id).length` — while a new Collection's page is loading, `records`
+still holds the *previous* Collection's rows, which filters to `0` and
+flashes a false count before the real page lands. Fixed by also gating on
+the existing `isLoadingRecords` state (now passed down as a prop): the
+active row shows `—` (same as any inactive row) while loading, instead of a
+misleading `0`.
+
+**(3) No phone-capture CTA reachable on mobile.** `src/index.css`'s
+`@media (max-width: 680px)` block set `.heading-actions { display: none; }`
+— but `.heading-actions` is the only place the "Add from phone" button
+lives (alongside "New Project"). Every phone falls under this breakpoint,
+so the one button meant for phone users was the one thing this rule hid.
+`.capture-status` (the Items count) inside that same container is already
+hidden by a separate, unaffected rule. Fixed by reflowing `.heading-actions`
+into a full-width wrapped flex row of 44px-min-height buttons instead of
+hiding it.
+
+Branch `fix/dashboard-project-scoping-and-mobile-cta`. Gated locally:
+193/193 Deno tests, `npm run build` clean, `@base44/sdk` extension grep
+clean. Not yet merged, deployed, or owner-approved for deploy. No manual
+browser click-through performed this pass (no phone/local backend in this
+sandbox, same limitation noted throughout this file for other mobile/PWA
+work) — the CSS reflow in particular should get a real narrow-viewport
+check before shipping.
