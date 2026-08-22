@@ -117,12 +117,12 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
       <section className="auth-visual" aria-label="How Magpie works">
         <div className="auth-visual-inner">
           <div className="auth-visual-kicker">A calmer way to research</div>
-          <h2>Find it once.<br /><em>Keep it useful.</em></h2>
+          <h2>Find it once.<br />Keep it useful.</h2>
           <p>Magpie turns scattered pages into living, structured collections, so your next decision starts with what you already found.</p>
           <div className="auth-flow-card">
-            <div className="auth-flow-row"><span className="auth-flow-icon">01</span><div><b>Capture</b><small>Save the page, listing, or idea that matters.</small></div><Check size={16} /></div>
-            <div className="auth-flow-row"><span className="auth-flow-icon">02</span><div><b>Organize</b><small>Magpie understands what it is and files it.</small></div><Check size={16} /></div>
-            <div className="auth-flow-row"><span className="auth-flow-icon">03</span><div><b>Stay current</b><small>See trusted changes instead of stale bookmarks.</small></div><Check size={16} /></div>
+            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Capture</b><small>Save the page, listing, or idea that matters.</small></div><Check size={16} /></div>
+            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Organize</b><small>Magpie understands what it is and files it.</small></div><Check size={16} /></div>
+            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Stay current</b><small>See trusted changes instead of stale bookmarks.</small></div><Check size={16} /></div>
           </div>
           <div className="auth-visual-foot"><span className="auth-dot" /> Owner-scoped by design</div>
         </div>

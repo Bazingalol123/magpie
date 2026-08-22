@@ -818,3 +818,23 @@ sites it now covers (the pairing dialog, the topbar pair button, the
 onboarding pair step, all three `PairingChecklist` icons, and
 `ReconnectNotice`, which previously mixed `Key` and an unrelated `PlugZap`)
 all mean the same thing and now render the same icon.
+
+## De-templating pass, Phase 3: the login page stops duplicating Landing's devices
+
+Build Guide checkpoint 50. `docs/VOICE.md` (Phase 1) already named Landing
+as the one surface allowed to keep the "Turn X into Y" headline formula and
+the single-italic-accent-word device, on the theory that repetition across
+surfaces was the actual problem, not either device in isolation. That only
+holds if the other surfaces actually stop reaching for them. `LoginPage.jsx`
+was the one place besides Landing still using the italic-accent-word H2
+and a third independent "01/02/03" numbered-badge treatment (after
+Landing's own two and the onboarding welcome headline fixed in Phase 1) --
+so this checkpoint removes both from the login page specifically, leaving
+Landing as the sole owner of each device until its Phase 5 benchmark pass
+decides whether to keep them there either.
+
+The numbered badges weren't simply deleted; they're replaced with a small
+solid dot that reuses a pattern the product already has elsewhere
+(`.collection-dot`, `.status-dot`) rather than inventing a fourth "step
+indicator" visual language. Landing itself is still untouched -- both of
+its instances of each device stay in place pending Phase 5.

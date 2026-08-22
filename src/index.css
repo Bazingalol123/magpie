@@ -636,7 +636,6 @@ button:disabled { cursor: wait; opacity: .7; }
 .auth-visual-inner { position: relative; z-index: 1; width: min(100%, 620px); }
 .auth-visual-kicker { color: #a9d3a6; font: 11px "DM Mono", monospace; letter-spacing: .12em; text-transform: uppercase; }
 .auth-visual h2 { margin: 18px 0 16px; color: #f1f8ed; font-size: clamp(44px, 5vw, 76px); line-height: .92; letter-spacing: -.065em; }
-.auth-visual h2 em { color: #b9dfae; font-family: "Instrument Serif", Georgia, serif; font-weight: 400; }
 .auth-visual-inner > p { max-width: 500px; color: #b8cdb7; font-size: 16px; line-height: 1.6; }
 .auth-flow-card { max-width: 500px; margin-top: 44px; padding: 8px 20px; background: rgba(244,252,239,.08); border: 1px solid rgba(213,238,206,.2); border-radius: 16px; backdrop-filter: blur(8px); }
 .auth-flow-row { min-height: 72px; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 13px; border-bottom: 1px solid rgba(213,238,206,.13); }
@@ -644,7 +643,7 @@ button:disabled { cursor: wait; opacity: .7; }
 .auth-flow-row b { display: block; color: #f1f8ed; font-size: 14px; }
 .auth-flow-row small { display: block; margin-top: 3px; color: #a9c3a7; font-size: 11px; }
 .auth-flow-row > svg { color: #91cf88; }
-.auth-flow-icon { color: #a9d3a6; font: 11px "DM Mono", monospace; }
+.auth-flow-dot { width: 8px; height: 8px; justify-self: center; background: #91cf88; border-radius: 50%; box-shadow: 0 0 0 4px rgba(145,207,136,.18); }
 .auth-visual-foot { margin-top: 30px; display: flex; align-items: center; gap: 8px; color: #a9c3a7; font: 10px "DM Mono", monospace; text-transform: uppercase; letter-spacing: .08em; }
 .auth-dot { width: 7px; height: 7px; background: #91cf88; border-radius: 50%; box-shadow: 0 0 0 5px rgba(145,207,136,.14); }
 .share-capture-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 80% 10%, #dcedd1 0, transparent 30%), #f7f8f3; }

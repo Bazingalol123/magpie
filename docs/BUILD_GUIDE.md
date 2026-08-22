@@ -1749,3 +1749,24 @@ it to something real.
   this repo's test credentials weren't available in this session. The
   login page (which shares the same bundle and doesn't need a session) was
   driven live in a real browser and rendered cleanly.
+
+### 50. De-templating pass, Phase 3: cap the headline/badge repetition at one surface
+
+- [x] **Build:** `docs/VOICE.md` names Landing as the surface that owns the
+  "Turn X into Y" headline formula and the single-italic-accent-word
+  device; every other surface duplicating either one should stop. Phase 1
+  already fixed the onboarding welcome headline. This checkpoint fixes
+  `src/LoginPage.jsx`, the remaining offender: its hero `<h2>` dropped the
+  `<em>Keep it useful.</em>` italic treatment (now plain text), and its
+  three-row "how it works" card dropped the `01`/`02`/`03` numeral badges
+  (`.auth-flow-icon`, `font: 11px "DM Mono"`) in favor of a small solid dot
+  (`.auth-flow-dot`) matching the dot language already used elsewhere in
+  the product (`.collection-dot`, `.status-dot`) instead of introducing a
+  fourth distinct "step" motif.
+  `src/Landing.jsx` still owns both devices and is intentionally
+  unchanged -- it's the one surface each is allowed to keep, and it stays
+  deferred to Phase 5's benchmark pass regardless.
+- **Files:** `src/LoginPage.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Login page driven
+  live in a real browser; headline renders as plain text and the three
+  flow rows show a small dot in place of the numeral badge.
