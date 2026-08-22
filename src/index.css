@@ -120,6 +120,78 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-cta:disabled { opacity: .6; }
 .onboarding-cta-secondary { color: #315c3a; background: #eaf3e7; }
 .onboarding-actions { margin-top: 2px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.onboarding-actions-left { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.onboarding-wizard-step { display: grid; gap: 10px; }
+.onboarding-wizard-step h1 { margin: 4px 0 2px; color: #1c3524; font-size: 24px; line-height: 1.2; letter-spacing: -.02em; }
+.onboarding-wizard-lede { margin: 0 0 6px; color: #526356; font-size: 13px; line-height: 1.55; }
+.onboarding-wizard-form { display: grid; gap: 8px; }
+.onboarding-wizard-form label { color: #3d4c42; font-size: 12px; font-weight: 600; }
+.onboarding-wizard-form input { padding: 10px 12px; color: #24352a; background: #fff; border: 1px solid #d8e2d5; border-radius: 9px; font-size: 13px; }
+.onboarding-wizard-form input:focus-visible { outline: 2px solid #6e9d75; outline-offset: 1px; }
+.onboarding-wizard-actions { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.onboarding-wizard-actions-quiet { margin-top: 14px; }
+
+.onboarding-method-grid { margin: 6px 0 0; padding: 0; display: grid; gap: 12px; list-style: none; }
+.onboarding-method-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; }
+.onboarding-method-card > div { display: grid; gap: 8px; width: 100%; }
+.onboarding-method-fallback { background: #f7f9f5; }
+.onboarding-cta-link { width: max-content; color: #477552; background: transparent; padding: 0; font-size: 11px; font-weight: 600; }
+.onboarding-paste-form { display: grid; gap: 8px; }
+.onboarding-paste-form input { padding: 9px 11px; color: #24352a; background: #fff; border: 1px solid #d8e2d5; border-radius: 8px; font-size: 12.5px; }
+
+.onboarding-back-link { padding: 0; display: inline-flex; align-items: center; gap: 5px; color: #5b6c60; background: transparent; font-size: 12px; font-weight: 600; }
+.onboarding-back-link:hover { color: #315c3a; }
+.onboarding-wizard-close { position: absolute; top: 14px; right: 14px; }
+.onboarding-tour-dialog { width: min(100%, 720px); max-height: 88vh; display: flex; border-radius: 16px; box-shadow: 0 25px 70px rgba(24,43,28,.2); }
+.onboarding-tour-dialog .onboarding-panel { flex: 1; min-height: 0; margin: 0; border-radius: 16px; }
+
+/* The wizard is a flex column so the footer (Back/Skip/Continue) always
+   stays pinned at the bottom of the modal instead of scrolling away with
+   long step content -- only .onboarding-wizard-scroll scrolls. */
+.onboarding-wizard { position: relative; display: flex; flex-direction: column; }
+.onboarding-wizard-scroll { min-height: 0; overflow-y: auto; }
+.onboarding-wizard-footer { margin-top: 16px; padding-top: 14px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #dfe9dc; }
+.onboarding-wizard-footer-actions { display: flex; align-items: center; gap: 10px; }
+
+.onboarding-carousel { margin: 6px 0 4px; display: grid; justify-items: center; gap: 10px; }
+.onboarding-carousel-frame { position: relative; width: 100%; max-width: 380px; height: 300px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
+.onboarding-carousel-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.onboarding-carousel-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; display: grid; place-items: center; color: #315c3a; background: #fff; border: 1px solid #dfe9dc; border-radius: 999px; box-shadow: 0 4px 12px rgba(28,56,36,.1); }
+.onboarding-carousel-arrow.left { left: -14px; }
+.onboarding-carousel-arrow.right { right: -14px; }
+.onboarding-carousel-caption { display: flex; align-items: center; gap: 6px; color: #3d4c42; font-size: 12.5px; text-align: center; }
+.onboarding-carousel-dots { display: flex; gap: 6px; }
+.onboarding-carousel-dot { width: 7px; height: 7px; padding: 0; background: #d8e2d5; border: 0; border-radius: 999px; }
+.onboarding-carousel-dot.active { width: 18px; background: #315c3a; }
+
+.onboarding-wizard-subhead { margin-top: 8px; color: #3d4c42; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+
+.onboarding-preview-frame { margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
+.onboarding-preview-frame img { width: 100%; display: block; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
+.onboarding-preview-frame figcaption { color: #5b6c60; font-size: 12px; line-height: 1.4; }
+
+.onboarding-mock-badge { width: max-content; margin-top: 10px; padding: 4px 10px; color: #8a6a2d; background: #fbf1dd; border: 1px solid #f0e0b8; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.onboarding-mock-grid { margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; list-style: none; }
+.onboarding-mock-card { padding: 12px; display: grid; gap: 6px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; }
+.onboarding-mock-card-head { display: flex; align-items: center; gap: 6px; color: #5b6c60; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.onboarding-mock-card b { color: #1c3524; font-size: 13px; }
+.onboarding-mock-card-badge { width: max-content; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px; color: #477552; background: #eaf3e7; border-radius: 999px; font-size: 10.5px; font-weight: 600; }
+.onboarding-mock-card-badge.drop { color: #a15a2a; background: #fbe9dd; }
+
+.onboarding-mock-chat { margin-top: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; background: #f3f7f0; border: 1px solid #dfe9dc; border-radius: 12px; }
+.onboarding-mock-sync { margin-top: 6px; padding: 14px; display: grid; gap: 8px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; }
+.onboarding-mock-sync-row { color: #3d4c42; font-size: 14px; }
+.onboarding-mock-sync-row s { color: #94a196; }
+.onboarding-mock-sync-row b { color: #1c3524; }
+
+.onboarding-capture-source { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: #5b6c60; }
+.onboarding-capture-source span { font-weight: 600; color: #3d4c42; }
+.onboarding-capture-source a { color: #315c3a; }
+.onboarding-capture-summary { margin: 0; padding: 10px 12px; color: #3d4c42; background: #fff; border: 1px solid #dfe9dc; border-radius: 9px; font-size: 12.5px; line-height: 1.5; }
+
+.onboarding-reconnect .onboarding-step { align-items: center; }
+.onboarding-reconnect .onboarding-step > div { flex: 1; }
 
 .clip-screenshot { width: 100%; max-height: 220px; margin-top: 20px; display: block; object-fit: cover; object-position: top; border: 1px solid #dce6da; border-radius: 10px; }
 .card-grid { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
@@ -424,7 +496,19 @@ button:disabled { cursor: wait; opacity: .7; }
   .onboarding-panel h2 { font-size: 19px; line-height: 1.15; }
   .onboarding-explainer { padding: 11px 12px; font-size: 11.5px; }
   .onboarding-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .onboarding-actions-left { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .onboarding-cta { width: 100%; min-height: 44px; justify-content: center; }
+  .onboarding-wizard-step h1 { font-size: 20px; }
+  .onboarding-wizard-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .onboarding-method-card { padding: 12px; }
+  .onboarding-cta-link { min-height: 44px; align-items: center; }
+  .onboarding-mock-grid { grid-template-columns: 1fr; }
+  .onboarding-carousel-frame { height: 240px; }
+  .onboarding-carousel-arrow.left { left: 4px; }
+  .onboarding-carousel-arrow.right { right: 4px; }
+  .onboarding-wizard-footer { flex-wrap: wrap; }
+  .onboarding-wizard-footer-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .onboarding-wizard-footer-actions .onboarding-cta { min-height: 44px; justify-content: center; }
 
   .workspace-grid { display: block; min-height: 0; }
   .collection-sidebar { min-height: 0; margin-bottom: 12px; padding: 0; background: transparent; border: 0; box-shadow: none; }

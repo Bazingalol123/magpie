@@ -1358,6 +1358,49 @@ Google, per the SDK's own guidance to prefer custom login UI over
 Fix in `b9dbacd`. Deployed (owner-approved, `target=site`) alongside the
 above.
 
+## 2026-08-21 -- Onboarding flow: mobile-only users were permanently stuck in NOT_PAIRED
+
+Building the Welcome/Project/Method/First-Value onboarding flow (Build
+Guide checkpoint 42) surfaced a real bug in the existing (pre-checkpoint-36)
+`src/onboarding/state.js`: `deriveOnboardingStage` checked
+`hasActivePairing` (derived only from `extensionInstalls`) before ever
+looking at `clips.length`, and returned `NOT_PAIRED` unconditionally when
+`hasActivePairing` was false -- regardless of whether the user had already
+captured something. A mobile-only user (iPhone Shortcut, Android Share
+Target, or paste-URL, none of which touch `ExtensionInstall`) who
+successfully saved a real Item would never leave `NOT_PAIRED`: the First
+Value / `CaptureStatusBanner` screen the stage machine is supposed to
+promote them to was unreachable. This had been latent since G9 (checkpoint
+36) shipped, because nothing exercised the mobile-capture path against the
+onboarding stage machine until this pass built a first-class mobile capture
+method into the flow. Fixed by checking `clips.length > 0` first,
+independent of pairing status (`src/onboarding/state.js`); regression-guarded
+by `tests/onboarding-state.test.ts`'s "a mobile-only user ... still reaches
+FIRST_CAPTURE_RECEIVED" case.
+
+Separately, `deriveOnboardingStage`'s `dismissed` branch was fully
+absorbing -- a returning user whose Extension pairing was later revoked
+after they'd already dismissed onboarding got silence, not a reconnect
+prompt (`PairingChecklist`'s existing revoked-copy branch is only reachable
+through the `NOT_PAIRED` stage, which a dismissed user never reaches again).
+Added a new `RECONNECT` stage and `ReconnectNotice` component for exactly
+this case, without reintroducing the full first-run tour.
+
+**Local dev-server flakiness, unrelated to the above:** verifying any of
+this by loading `npm run dev` in a real browser (Playwright) initially hit
+a blank page with `net::ERR_CACHE_READ_FAILURE` on Vite's pre-bundled
+dependency chunks (`react-refresh`, `react_jsx-dev-runtime`, later
+`lucide-react`/`react-markdown`/`remark-gfm`). `npm run build` and the full
+Deno suite were unaffected -- this was purely the Chromium instance's own
+HTTP cache disagreeing with a freshly regenerated `node_modules/.vite`
+after clearing it. Resolved by disabling the browser's HTTP cache via CDP
+(`Network.setCacheDisabled`) before reloading; the signed-out landing page
+and the new `?docs=ios-shortcut` doc page then rendered cleanly with no
+app-level console errors. The authenticated Welcome/Project/Method screens
+were not click-tested this way, since there is no local Base44 backend in
+this environment to sign in against -- see Build Guide checkpoint 42's
+"Verify" note.
+
 ## 2026-08-21 — P0: every base44.functions.invoke() call 403s in production (platform-domain block)
 
 Owner reported the iOS Shortcut `/share` save hit `403 Forbidden`, and on
@@ -1498,3 +1541,78 @@ browser click-through performed this pass (no phone/local backend in this
 sandbox, same limitation noted throughout this file for other mobile/PWA
 work) — the CSS reflow in particular should get a real narrow-viewport
 check before shipping.
+
+## 2026-08-22 — Platform findings from recording real onboarding media + the logout investigation
+
+Three findings while building Build Guide checkpoint 43, worth recording
+since they're not obvious from reading the source alone:
+
+**`@base44/sdk`'s `logout(redirectUrl)` only sets `from_url`, never the
+navigation host.** Read `node_modules/@base44/sdk/dist/modules/auth.js`
+directly: both `loginWithProvider` and `logout` navigate to
+`${options.appBaseUrl}/api/apps/auth/...` — `appBaseUrl` is a single
+module-level constant in `src/api/base44Client.js`, computed once and
+shared by both calls. `logout`'s `redirectUrl` argument (this app passes
+`publicOrigin` from `handleSignOut`) only becomes the `from_url` *query
+param*, not the target host. So if login stays on `localhost` in a given
+page load, logout initiated from that same load is guaranteed to target
+the same host first — any redirect away to `app.base44.com` has to happen
+after that, server-side, inside whatever `npx base44 dev` does with the
+logout request locally. This repo's frontend code cannot explain or fix a
+divergence past that point; would need a fresh repro with network-level
+logging to go further.
+
+**Local `npx base44 dev`'s AI routing proxy is genuinely flaky/slow, not
+just slow.** `docs/ENGINEERING_NOTES.md` already noted AI Gateway calls
+proxy to production in local dev. Recording `tests-e2e/media-specs/`
+surfaced a concrete failure mode, not just latency: one run's routing
+agent hit `HttpError: The routing agent reached its step limit` and the
+Clip landed in `needs_review` instead of routing cleanly — a real,
+occasionally-reproducible outcome under this proxy setup, not a test bug.
+A second run of the identical spec routed cleanly
+(`routing_status=created_collection`). Anything that needs a *specific*
+clean-route outcome from local dev (this recording spec, and potentially
+future ones) should expect to retry, not treat a single `needs_review`
+result as a regression.
+
+**ffmpeg's concat demuxer will happily produce a multi-megabyte GIF from
+mismatched aspect ratios.** Animating a 380×760 Side Panel screenshot
+together with a 1280×800 dashboard screenshot in one `scale=640:-1` GIF
+produced an 8.8MB file (`[vf#0:0] Reconfiguring filter graph because video
+parameters changed` in the ffmpeg log is the tell). `palettegen`/
+`paletteuse` doesn't fix this — the size blowup is from the filter graph
+re-scaling per-frame, not palette bloat. Fix was product-level, not
+technical: don't animate two screenshots of genuinely different UI
+surfaces together; ship the dashboard frame as a static PNG instead (see
+`scripts/encode-onboarding-gifs.mjs`).
+
+## 2026-08-22 — Logout-to-base44.com root cause, fully traced (not fixable here)
+
+Owner captured the real network trace this time. Full chain:
+
+1. Browser navigates to `http://localhost:4400/api/apps/auth/logout?from_url=http%3A%2F%2Flocalhost%3A5173%2F`
+   (the local `npx base44 dev` backend, `appBaseUrl` resolved correctly).
+2. That backend responds `302 Location: https://base44.app/api/apps/auth/logout?from_url=http%3A%2F%2Flocalhost%3A5173%2F`
+   -- the local backend can't manage a real OAuth session itself, so it
+   forwards the logout to Base44's actual hosted auth domain, faithfully
+   preserving `from_url`.
+3. `base44.app` also returns `302`, but to its own default location
+   (landing on `app.base44.com`), not back to `from_url`.
+
+Confirmed this is not OAuth-specific: reproduced identically on a
+locally-registered email/password session (registered fresh via the local
+signup+OTP flow specifically to rule this out). Every logout, regardless
+of how the session started, gets proxied through `base44.app` by the local
+dev backend.
+
+Conclusion: step 3 is almost certainly Base44's own anti-open-redirect
+protection on their shared hosted auth domain -- it only honors `from_url`
+back to an origin it recognizes as belonging to the app (the real
+registered custom domain, `magpiecapture.com`, confirmed working correctly
+in production), never to an arbitrary unregistered `localhost` port. There
+is nothing in this repo's frontend (`src/api/base44Client.js`,
+`src/App.jsx`) or backend that participates in step 2 or 3 -- both happen
+entirely inside Base44's own hosted infrastructure. Not actionable from
+this codebase; closed as a known local-dev-only limitation, not a product
+bug. Workaround: after local logout lands on `app.base44.com`, manually
+navigate back to `localhost:<port>`.

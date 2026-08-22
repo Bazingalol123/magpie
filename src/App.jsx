@@ -41,6 +41,7 @@ import Landing from "./Landing.jsx";
 import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
+import OnboardingWelcomeFlow from "./onboarding/OnboardingWelcomeFlow.jsx";
 import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
@@ -474,11 +475,11 @@ function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRe
   );
 }
 
-function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect }) {
+function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect, onOpenOnboardingTour }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
-  if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
+  if (!collection) return <EmptyCollection onSelect={onOpenOnboardingTour} />;
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
   const showCards = displayMode === "cards";
@@ -1199,6 +1200,7 @@ export default function App() {
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [onboardingTourStep, setOnboardingTourStep] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -1219,9 +1221,8 @@ export default function App() {
   const [isReportingBug, setIsReportingBug] = useState(false);
   const [bugReportError, setBugReportError] = useState("");
   const [bugReportResult, setBugReportResult] = useState(null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(
-    () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
-  );
+  const [isCreatingOnboardingProject, setIsCreatingOnboardingProject] = useState(false);
+  const [onboardingProjectError, setOnboardingProjectError] = useState("");
 
   // One bounded fetch gets every owned Record up front (not just the
   // active Collection's page), so switching Collections/Projects is a pure
@@ -1389,6 +1390,23 @@ export default function App() {
     const remaining = params.toString();
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
+
+  useEffect(() => {
+    // The OAuth provider round trip ends with a server-side redirect back to
+    // `${appBaseUrl}/api/apps/auth/final-callback?state=...` (Base44's own
+    // auth plumbing, not one of this app's routes). In production the
+    // custom domain's real backend performs a further redirect to a clean
+    // `from_url` before the SPA ever loads there. A local `npx base44 dev`
+    // session has been observed leaving the browser sitting on that raw
+    // `/api/apps/auth/*` URL (with its `state` JSON still in the query
+    // string) instead -- the session itself is valid (`base44.auth.me()`
+    // resolves fine), only the address bar is wrong. Strip it back to `/`
+    // whenever any `/api/*` path leaks into the browser URL, regardless of
+    // which auth path produced it (login or logout).
+    if (!window.location.pathname.startsWith("/api/")) return;
+    window.history.replaceState(null, "", "/");
+    forceRouteRender((version) => version + 1);
+  }, []);
 
   const openLogin = () => {
     window.history.pushState({}, "", "/login");
@@ -1635,6 +1653,29 @@ export default function App() {
     return response.data.mission;
   };
 
+  const createOnboardingProject = async (title) => {
+    setIsCreatingOnboardingProject(true);
+    setOnboardingProjectError("");
+    try {
+      const mission = await createProjectInline(title);
+      setActiveMissionId(mission.id);
+      return true;
+    } catch (error) {
+      setOnboardingProjectError(error.response?.data?.error || error.message || "Could not create this Project.");
+      return false;
+    } finally {
+      setIsCreatingOnboardingProject(false);
+    }
+  };
+
+  const openIosShortcutSetup = () => window.open("/?docs=ios-shortcut", "_blank", "noopener");
+
+  const openMobileCapture = () => {
+    setMobileCaptureError("");
+    setMobileCaptureResult(null);
+    setIsMobileCaptureOpen(true);
+  };
+
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
   const missionRecords = activeMission ? data.records.filter((record) => record.mission_id === activeMission.id) : data.records;
   // Global (no mission_id) Collections belong to the top-level Library, not
@@ -1663,17 +1704,25 @@ export default function App() {
     () => deriveOnboardingStage({
       extensionInstalls: data.extensionInstalls,
       clips: data.clips,
-      dismissed: onboardingDismissed,
+      dismissed: !!user?.onboarding_dismissed,
     }),
-    [data.extensionInstalls, data.clips, onboardingDismissed],
+    [data.extensionInstalls, data.clips, user?.onboarding_dismissed],
   );
   const isFirstRun = onboardingStage === OnboardingStage.NOT_PAIRED
     && data.collections.length === 0
     && data.records.length === 0
     && data.clips.length === 0;
-  const dismissOnboarding = () => {
-    window.localStorage.setItem("magpie.onboarding.dismissed", "true");
-    setOnboardingDismissed(true);
+  const dismissOnboarding = async () => {
+    // Tracked on the User record (base44.auth.updateMe), not localStorage:
+    // a browser-local flag leaks across accounts sharing one browser (a
+    // brand-new signup silently inherited a previous account's dismissal
+    // in this same origin) and never follows a real user across devices.
+    setUser((current) => (current ? { ...current, onboarding_dismissed: true } : current));
+    try {
+      await base44.auth.updateMe({ onboarding_dismissed: true });
+    } catch (error) {
+      setLoadError(error.response?.data?.error || error.message || "Could not save your onboarding preference.");
+    }
   };
   const openOnboardingReview = (clipId) => {
     setSelectedReviewClipId(clipId);
@@ -1696,7 +1745,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
@@ -1711,7 +1760,7 @@ export default function App() {
               const scoped = missionId ? data.collections.filter((collection) => collection.mission_id === missionId) : data.collections;
               selectCollection(scoped[0]?.id ?? null);
             }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "You have more Items than currently fit in one load; counts across the board may be undercounts." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={() => { setMobileCaptureError(""); setMobileCaptureResult(null); setIsMobileCaptureOpen(true); }}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
+        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "You have more Items than currently fit in one load; counts across the board may be undercounts." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={openMobileCapture}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
       </section>
       {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
       <OnboardingPanel
@@ -1726,10 +1775,19 @@ export default function App() {
         onOpenReview={openOnboardingReview}
         onReportIssue={() => setIsBugReportOpen(true)}
         onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
+        onCreateProject={createOnboardingProject}
+        isCreatingProject={isCreatingOnboardingProject}
+        projectError={onboardingProjectError}
+        onOpenIosSetup={openIosShortcutSetup}
+        onPasteCapture={submitMobileCapture}
+        isMobileCapturing={isMobileCapturing}
+        mobileCaptureError={mobileCaptureError}
+        onSaveAnother={openMobileCapture}
+        onRetryCapture={openMobileCapture}
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
@@ -1747,6 +1805,27 @@ export default function App() {
         />
       )}
       {isAgentOpen && <MagpieAgentPanel project={activeMission} collection={activeCollection} record={selectedRecord} onClose={() => setIsAgentOpen(false)} />}
+      {onboardingTourStep && (
+        <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={() => setOnboardingTourStep(null)}>
+          <div className="onboarding-tour-dialog" onMouseDown={(event) => event.stopPropagation()}>
+            <OnboardingWelcomeFlow
+              extensionInstalls={data.extensionInstalls}
+              isPairing={isPairing}
+              onPair={handleCreatePairing}
+              onSkipToWorkspace={() => setOnboardingTourStep(null)}
+              onCreateProject={createOnboardingProject}
+              isCreatingProject={isCreatingOnboardingProject}
+              projectError={onboardingProjectError}
+              onOpenIosSetup={openIosShortcutSetup}
+              onPasteCapture={submitMobileCapture}
+              isMobileCapturing={isMobileCapturing}
+              mobileCaptureError={mobileCaptureError}
+              initialStep={onboardingTourStep}
+              onClose={() => setOnboardingTourStep(null)}
+            />
+          </div>
+        </div>
+      )}
       {isReviewOpen && (
         <NeedsReviewPanel
           clips={needsReviewClips}

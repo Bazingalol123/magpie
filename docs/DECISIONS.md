@@ -537,3 +537,197 @@ session had no way to launch real Chrome. Real-Chrome verification (trigger
 Shift+Alt+M, confirm Escape clears the hint immediately, click Snip Area
 while Clip Element is active and confirm it switches cleanly) is the
 explicit next step before treating either fix as done.
+
+## Onboarding flow's iOS Shortcut: reused the existing `/share` session flow instead of PR #67's token design
+
+Build Guide checkpoint 42 builds the iPhone/iPad Shortcut on top of the
+already-merged `/share` page (`src/App.jsx`'s `readShareDraft`,
+`ShareCapturePage`, `public/manifest.webmanifest`'s `share_target`,
+`public/sw.js`), which opens Safari at
+`https://magpiecapture.com/share?url=<link>` using the user's normal signed-in
+session — the same authenticated session `base44.functions.invoke` already
+uses. This was a deliberate divergence from PR #67
+(`docs/mobile-capture-design.md`, open/DRAFT at the time of this pass),
+which proposes a slower, explicitly-sequenced path: a design gate, then
+separate popup/UI, backend-token, Android, and iOS implementation PRs, with
+iOS built around "a scoped, revocable, write-only Mobile Capture token" and
+"an HTTPS request." That token/slice sequencing was never actually built —
+only the design doc landed — while the `/share` page, manifest, service
+worker, and `mobile-capture` function it would have superseded were already
+merged to this branch and confirmed live in production
+(`docs/ENGINEERING_NOTES.md`, 2026-08-21 entry: "production was found to be
+serving this ... bundle ... confirmed via `mobile-capture` and the PWA
+share-target `postMessage` handler present in the live JS").
+
+Given a working, already-shipped, lower-risk path existed (open a URL,
+reuse the existing session, no new token surface, no new backend
+endpoint), building PR #67's token scheme in the same pass would have been
+redundant scope with a larger security surface for no functional gain.
+This decision does not resolve PR #67 — it is still open, and its capacity
+matrix / popup-with-Don't-show-again / verification-gate content remains
+valid guidance for anyone picking it up. What it does establish: the iOS
+Shortcut artifact this pass produced
+(`docs/IOS_SHORTCUT_SETUP.md`) is deliberately token-free by design, not by
+omission, and a future implementer of PR #67's slices should reconcile the
+two rather than build a second, parallel iOS capture path.
+
+Real-device verification (a physical iPhone running the Shortcut end to
+end, and a physical Android phone using the installed-PWA Share Target)
+was not performed in this pass — this sandbox has no phone to test with.
+This is the same category of gap as the extension's existing G3/G8
+real-Chrome items in `docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
+
+## Onboarding: real recorded media, teach-before-setup ordering, and dismissal stays client-side
+
+Build Guide checkpoint 43. Three related decisions from the same owner
+click-through session:
+
+**Real recordings over a coded illustration.** Asked to choose between a
+stylized CSS/SVG mockup of the capture flow and actually recording the real
+product, chose the latter: the existing `tests-e2e/` Playwright harness
+already drives the real unpacked extension against a real local `npx base44
+dev` backend, so recording real screenshots was barely more work than
+faking convincing ones, and is strictly more honest — a future UI change to
+the Side Panel or dashboard will make the recording visibly stale instead
+of leaving a mockup that quietly drifts from the real product.
+
+**Teach before setup.** The Learn step (real Side Panel + dashboard
+screenshots) is wired between the optional Project step and the Method
+(capture setup) step, not after it. Rationale: asking someone to install an
+extension or configure a phone Shortcut before they've seen what it's for
+is a higher-friction ask than showing the payoff first. This only reorders
+the pre-capture wizard steps (all local UI state); it does not change what
+counts as a real capture or touch the evidence-driven stage machine in
+`src/onboarding/state.js`.
+
+**Onboarding dismissal stays client-side (`localStorage`), not server-side.**
+Confirmed `dismissOnboarding()` only ever writes
+`localStorage["magpie.onboarding.dismissed"]` — there is no `User` field or
+settings entity tracking it. Explicitly asked whether to add one; owner
+chose to keep it client-side. Reasoning: this is a decision, not a bug —
+server-side tracking would need a real entity/backend change (User field or
+a settings function) and would go through the High-risk change gate for no
+clear benefit over the standard "onboarding is per-browser" pattern most
+products use. A fresh browser, device, or local-dev session showing the
+Welcome tour again is therefore expected behavior, including the specific
+case the owner hit (a brand-new `npx base44 dev` local session has no
+`localStorage` history from production).
+
+## Onboarding restructured into Pair -> Modes -> Collections/Agent/Sync preview (supersedes "teach before setup")
+
+Build Guide checkpoint 44. Direct owner feedback after a real click-through
+reversed the ordering decided in the "teach-before-setup" entry above:
+Download-and-pair now comes first (its own dedicated step), followed by a
+capture-modes walkthrough, then three clearly-labeled preview screens
+(Collections, Ask Magpie, Sync) ending in "go to my dashboard." The
+rationale volunteered for the new order: asking for pairing while
+motivation is highest, right after the Welcome pitch, then rewarding that
+with the full picture, reads better than fronting the walkthrough. The
+"teach before setup" entry's underlying point — show real product, not a
+mockup — still holds; only the sequencing changed.
+
+Two new real recordings were added alongside the original page-save one:
+`public/onboarding/mode-element.gif` (content.js's real hover-highlight
+overlay during element-picker mode) and `mode-snip.gif` (the real drag
+rectangle during a visual snip). Both are genuine page DOM, so both are
+real screenshots — this is explicitly *not* true of two related requests
+that came up in the same feedback: recording the Side Panel actually being
+opened via a toolbar click, and a native right-click context menu
+appearing. Neither is drivable or screenshotable by Playwright/CDP or any
+other browser-automation tooling; `tests-e2e/helpers/capture.ts` already
+documents this same limitation for the regression suite (it opens
+`sidepanel.html` directly instead of a toolbar click, and fires a
+synthetic `contextmenu` DOM event instead of a real right-click). This
+isn't a scoping choice — no tool can do it — so the Modes step's gallery
+covers the three modes that are drivable and stops there.
+
+**Illustrative (mock) content, explicitly approved.** The Collections,
+Agent, and Sync preview steps show content that cannot be demonstrated for
+real in a one-shot recording (a populated multi-Collection workspace, an
+Ask Magpie answer, a price-change update — Zyte-driven refresh needs a
+real change over time, which a recording can't produce). Owner explicitly
+approved this as long as it's clearly labeled, not presented as the
+viewer's real data. Implementation: a visible "Example ..." pill
+(`.onboarding-mock-badge`) plus explicit "Example" wording in each such
+step's copy — checked by `tests/onboarding-media.test.ts`. The one real
+screenshot on the Collections step (`first-value.png`, a genuine capture
+through the flow above) is explicitly labeled "Real:" right next to the
+mock cards beside it, so the two are never conflated.
+
+## iOS Shortcut: real device needed to move past manual build-it-yourself instructions
+
+Owner correctly called "read the docs and build it yourself" a weak
+mobile experience and asked whether Magpie could distribute a real,
+one-tap-installable Shortcut instead of asking each user to assemble the
+three actions by hand. That format exists — Apple's Shortcuts app can
+produce a shareable `icloud.com/shortcuts/...` link that installs the
+exact same Shortcut in one tap — but generating one requires the
+Shortcuts app on a real Mac or iPhone; there is no CLI, API, or file
+format that can be authored from a non-Apple environment. This session had
+no Apple hardware available. Decision: owner will build the Shortcut once
+on a real device (using the exact spec already in
+`docs/IOS_SHORTCUT_SETUP.md`) and hand back the resulting iCloud link; that
+link will then become the primary CTA on the Modes step's iPhone card,
+with the manual build-it-yourself steps kept as a fallback for anyone who
+doesn't want to trust a shared link. Not done in this pass — blocked on
+that one real-device step from the owner, tracked in
+`docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
+
+## Onboarding order reverted to teach-first; unified footer replaces per-step buttons (supersedes checkpoint 44's pair-first order)
+
+Build Guide checkpoint 45. Same-day further owner feedback reversed
+checkpoint 44's pair-first ordering back to teach-first: `welcome -> modes
+-> project -> pair -> collections -> agent -> sync`. The owner's own words:
+"first we teach, then we setup." Two ordering changes in one session on
+the same question is a real signal, not noise — treat this ordering as
+settled only provisionally; if it moves a third time, that's worth a
+direct question before implementing rather than another silent swap.
+
+**Persistent footer, not per-step action buttons.** Every step previously
+rendered its own Continue/Skip/Create buttons inline, positioned
+differently depending on the step's content length. Replaced with one
+`onboarding-wizard-footer` (Back · Skip onboarding · Continue) that never
+moves: `.onboarding-wizard` is a flex column with only
+`.onboarding-wizard-scroll` scrolling, so the footer stays pinned at the
+bottom of the modal regardless of how tall a given step's content is. This
+required lifting Project's title input state up to the wizard component
+itself (`projectTitle`), since the shared Continue button needs to read it
+to decide "create then advance" vs. "just advance" — previously each step
+owned its own local form state and its own submit button.
+
+**Capture-mode gallery is a carousel, not a static 3-column grid.** All
+three real recordings (element hover, snip drag, page-save) now share one
+fixed-size, centered frame (`object-fit: contain`, so differently-shaped
+recordings — the tall portrait Side Panel vs. the wide page screenshots —
+still render at a uniform box size) with prev/next arrows and dot
+indicators, instead of three side-by-side cards of differing implied
+importance.
+
+## Onboarding dismissal moved to the User record (supersedes "dismissal stays client-side")
+
+Build Guide checkpoint 47. The earlier "onboarding dismissal stays
+client-side" entry above was a considered tradeoff at the time, but owner
+testing surfaced the failure mode that tradeoff hadn't accounted for: a
+brand-new signup, in the same browser as a previously-onboarded account,
+landed straight in the dashboard with onboarding already marked dismissed
+-- because `localStorage` is scoped to the browser/origin, not the
+account, a second account in the same browser silently inherits the
+first account's dismissal. That's not "onboarding reappears when it
+shouldn't" (the accepted cost of the original tradeoff); it's the reverse
+and more serious failure: a genuinely new user never sees it at all.
+
+Fixed by moving the flag onto the User record itself via
+`base44.auth.updateMe({ onboarding_dismissed: true })`, read back as
+`user.onboarding_dismissed`. This needed no new entity, schema file, or
+backend function -- the installed `@base44/sdk`'s own `auth.updateMe()`
+already supports arbitrary custom fields on the authenticated user's own
+record (confirmed in `.agents/skills/base44-sdk/references/auth.md`), and
+it's inherently owner-scoped (a user can only ever update their own
+record through it), so this carries none of the cross-owner-write risk a
+new entity or function would need fixtures for. `localStorage` is no
+longer read or written for this at all.
+
+One accepted one-time cost: any account that dismissed onboarding under
+the old `localStorage` scheme will see it once more after this ships,
+since their dismissal was never recorded server-side. Not worth a
+migration -- the flow is idempotent and harmless to see again once.

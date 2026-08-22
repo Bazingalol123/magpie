@@ -8,10 +8,12 @@ import gettingStartedMd from "../docs/GETTING_STARTED.md?raw";
 import productGuideMd from "../docs/PRODUCT_GUIDE.md?raw";
 import apiMd from "../docs/API.md?raw";
 import releaseNotesMd from "../docs/RELEASE_NOTES.md?raw";
+import iosShortcutSetupMd from "../docs/IOS_SHORTCUT_SETUP.md?raw";
 
 const SECTIONS = [
   { file: "GETTING_STARTED.md", slug: "getting-started", label: "Getting started", content: gettingStartedMd },
   { file: "PRODUCT_GUIDE.md", slug: "product-guide", label: "Product guide", content: productGuideMd },
+  { file: "IOS_SHORTCUT_SETUP.md", slug: "ios-shortcut", label: "iPhone / iPad Shortcut", content: iosShortcutSetupMd },
   { file: "API.md", slug: "api", label: "API reference", content: apiMd },
   { file: "RELEASE_NOTES.md", slug: "release-notes", label: "Release notes", content: releaseNotesMd },
 ];

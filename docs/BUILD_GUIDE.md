@@ -1367,3 +1367,304 @@ pre-existing ambiguous-retry gap in plain `create-extension-pairing` is
 recorded as a candidate future hardening item (§11.5 of the design doc), not
 solved by this issue. See `docs/PAIRING_LIFECYCLE_DESIGN.md`'s "Review
 round 2" section for the full detail.
+
+### 42. Complete Welcome -> Project -> Method -> Capture -> Value onboarding flow
+
+- [x] **Build:** Replaced the bare "jump straight to pairing" first-run
+  panel with a full guided flow: Welcome (primary "Set up my first
+  capture", secondary "Explore workspace"), an optional short Project step
+  with a real Skip, and a Capture-method chooser covering Desktop (Chrome
+  extension pairing, unchanged), iPhone (new iOS Shortcut setup doc),
+  Android (PWA Share Target guidance, gated on real `serviceWorker`
+  feature detection, not a claimed-installed state), and a Paste-URL
+  fallback. First Capture / First Value reuse and extend the existing
+  evidence-driven `CaptureStatusBanner` (now also shows the real
+  `clip.source_url`/`clip.summary`, a "Save another capture" CTA, and a
+  "Try again" retry action on `failed`). Returning users: fixed a real
+  stage-derivation bug where `deriveOnboardingStage` gated exclusively on
+  desktop Extension pairing, so a mobile-only user (iPhone/Android/paste
+  capture, no Extension ever paired) stayed stuck in `NOT_PAIRED` forever
+  and never saw the First Value screen — clip evidence now outranks
+  pairing status. Also added a new `RECONNECT` stage: a dismissed
+  (completed) onboarding no longer regresses to the full tour, but a real
+  pairing revocation afterward now surfaces a short, non-blocking
+  `ReconnectNotice` instead of going silent.
+- **iOS Shortcut artifact:** `docs/IOS_SHORTCUT_SETUP.md` (also registered
+  in the in-app Docs viewer at `?docs=ios-shortcut`, linked from the
+  Method screen's iPhone card) gives exact, buildable Shortcut actions
+  (URL Encode -> Text -> Open URLs) that hand a shared link to the
+  existing `/share` page — no new mobile token, no background HTTPS POST,
+  no change to `ingest-clip`/`mobile-capture`/auth. This reuses
+  `src/App.jsx`'s pre-existing direct-query-param `/share` handling
+  (`readShareDraft`'s `url`/`text`/`title` fallback, already covered by
+  `tests/pwa-share.test.ts`) rather than the token-based Shortcut design
+  PR #67 (`docs/mobile-capture-design.md`, open/draft as of this pass)
+  proposes; see `docs/DECISIONS.md` for why.
+- **Files:** `src/onboarding/state.js` (stage-derivation fix, `RECONNECT`
+  stage), `src/onboarding/OnboardingWelcomeFlow.jsx` (new),
+  `src/onboarding/ReconnectNotice.jsx` (new),
+  `src/onboarding/CaptureStatusBanner.jsx`, `src/onboarding/OnboardingPanel.jsx`,
+  `src/App.jsx`, `src/Docs.jsx`, `src/index.css`,
+  `docs/IOS_SHORTCUT_SETUP.md` (new), `tests/onboarding-state.test.ts`
+  (new), `tests/onboarding-flow-wiring.test.ts` (new).
+- **Verify:** 208/208 Deno tests pass (13 new), all 17 `entry.ts` files
+  type-check clean (no backend files touched), every `extension/**/*.js`
+  parses, `rg "@base44/sdk" extension` returns no matches, `npm run build`
+  passes, `git diff --check` clean. Manually verified in a real browser
+  (Playwright, local `npm run dev`): the signed-out landing page and the
+  new `?docs=ios-shortcut` page both render correctly with no app errors.
+  The authenticated Welcome/Project/Method/First-Value/Reconnect screens
+  were **not** click-tested live — this sandbox has no local `npx base44
+  dev` backend to sign in against — verified instead by full test
+  coverage, a production build, and a manual prop-by-prop cross-check
+  between `App.jsx`'s `<OnboardingPanel>` call and every prop each child
+  component destructures.
+- **Not done:** real-device verification of the iOS Shortcut and the
+  Android PWA Share Target (same category of gap as the existing G3/G8
+  Chrome extension real-device items in "Known gaps"). Auth/OAuth,
+  `ingest-clip`, `mobile-capture`, and Zyte were not touched.
+- **Next:** owner real-device pass (iPhone Shortcut share -> saved Item;
+  Android installed-PWA share -> saved Item), then a signed-in browser
+  click-through of the full wizard once a backend session is available.
+
+### 43. Owner click-through follow-ups: auth-callback URL cleanup, real onboarding walkthrough media, logout investigation
+
+Owner ran `feat/onboarding-flow` for real via `npx base44 dev` and reported
+four findings from an actual click-through:
+
+- [x] **Build:** stray `/api/apps/auth/*` URL left in the address bar after
+  OAuth login completed locally (session itself was valid). Added a mount
+  effect in `src/App.jsx` that detects any `/api/*` path leaking into
+  `window.location.pathname` and replaces it with `/` via
+  `history.replaceState`, regardless of which auth call produced it
+  (login or logout). Regression-guarded by
+  `tests/auth-callback-routing.test.ts`.
+- [x] **Build:** real onboarding walkthrough media, per "teach the user how
+  to use Magpie, then let them use it." Rejected a coded/stylized
+  illustration in favor of recording the actual product: extended the
+  existing real-extension-against-real-local-backend Playwright harness
+  (`tests-e2e/`, proven working — one existing spec re-run clean in this
+  sandbox first as a feasibility check) with a parallel, deliberately
+  separate `playwright.media.config.ts` +
+  `tests-e2e/media-specs/record-desktop-capture.spec.ts` that drives one
+  real page capture end to end and screenshots the real Side Panel
+  (ready/capturing/captured) and the real dashboard once the Item lands.
+  `scripts/encode-onboarding-gifs.mjs` (ffmpeg) turns the Side Panel
+  sequence into `public/onboarding/desktop-capture.gif` (79KB) and saves
+  the dashboard success frame as `public/onboarding/first-value.png`
+  (117KB) — a static image, not a mismatched-aspect-ratio GIF (an
+  intermediate version animating the 380x760 Side Panel frame together
+  with the 1280x800 dashboard frame produced an ugly 8.8MB file; a real
+  screenshot of the dashboard alone tells "it lands in your workspace"
+  cleanly). `npm run record:onboarding-media` re-runs both steps. Added a
+  new `LearnStep` to `src/onboarding/OnboardingWelcomeFlow.jsx`, wired
+  between Project and Method (`docs/DECISIONS.md`'s "teach before setup"
+  entry has the ordering rationale), showing both real images before
+  asking the user to set up a capture method.
+- **Investigated, not a code change:** owner reported logout redirecting to
+  `app.base44.com` instead of staying on `localhost` in the same
+  `npx base44 dev` session where login just worked. Traced as far as this
+  repo's code can explain it: `src/api/base44Client.js`'s `appBaseUrl` is a
+  single module-level value computed once per page load and used
+  identically by both `loginWithProvider` and `logout()` (confirmed by
+  reading the installed `@base44/sdk`'s `auth.js` — `logout(redirectUrl)`'s
+  `redirectUrl` argument only becomes the `from_url` query param, not the
+  navigation target host; the target host is always `options.appBaseUrl`).
+  Since login's initial request demonstrably reached the local backend, the
+  divergence — if reproducible — happens after that inside `npx base44
+  dev`'s own local auth-route handling (most plausibly session
+  cookies/logout needing to round-trip through the real platform host for
+  local dev, then failing to bounce back the way the already-fixed
+  production `from_url` case does), not in this repo's frontend or
+  `base44/functions/*`. Not fixable by editing our source without further
+  reproduction; flagged to the owner as a probable `base44 dev` CLI/local-
+  tooling limitation rather than a product bug.
+- **Decision, not a code change:** owner asked whether "Your first item
+  landed" reappearing was a server-tracking gap. Confirmed
+  `dismissOnboarding()` (`src/App.jsx`) only ever writes
+  `localStorage["magpie.onboarding.dismissed"]` — no server field exists.
+  Owner chose to keep this client-side (standard pattern, zero backend
+  risk) rather than add server-side tracking; a fresh browser/profile/local
+  session showing onboarding again is expected behavior, not a bug. See
+  `docs/DECISIONS.md`.
+- **Files:** `src/App.jsx`, `src/onboarding/OnboardingWelcomeFlow.jsx`,
+  `src/index.css`, `playwright.media.config.ts` (new),
+  `tests-e2e/media-specs/record-desktop-capture.spec.ts` (new),
+  `scripts/encode-onboarding-gifs.mjs` (new),
+  `public/onboarding/desktop-capture.gif`,
+  `public/onboarding/first-value.png` (new binary assets),
+  `tests/auth-callback-routing.test.ts`,
+  `tests/onboarding-media.test.ts` (new), `package.json`.
+- **Verify:** 211/211 Deno tests (3 new), all 17 `entry.ts` files
+  type-check clean (no backend files touched), every `extension/**/*.js`
+  parses, `rg "@base44/sdk" extension` clean, `npm run build` clean and
+  confirmed `dist/onboarding/*` is present, `git diff --check` clean. The
+  media-recording pipeline itself was run for real in this sandbox — a
+  real local `npx base44 dev` backend, a real registered test owner, the
+  real unpacked extension, and a real AI-routed capture (one run hit a
+  transient local AI-Gateway-proxy step-limit and landed in
+  `needs_review`; a re-run produced a clean `created_collection`, which is
+  the frame actually shipped) — not a mock.
+- **Not done:** the iOS/Android GIF-equivalent walkthrough content (this
+  pass covered Desktop only, matching where the working recording harness
+  already existed); a real-device click-through of the full onboarding
+  wizard in a browser (still blocked on this sandbox having no phone and,
+  for the base44.com logout question, no way to reproduce interactively).
+- **Next:** owner decides whether to pursue the `npx base44 dev` logout
+  divergence further (would need a fresh repro with network logs, since
+  this repo's code cannot explain it further); optionally record
+  matching walkthrough media for the iPhone Shortcut and Android Share
+  Target methods once real-device passes exist for them.
+
+### 44. Onboarding restructure: revisit entry point, pair-first ordering, capture-mode recordings, illustrative previews
+
+Owner gave detailed feedback on checkpoint 43's onboarding flow after a
+real click-through: no way to reopen the walkthrough once dismissed; the
+Method screen's static cards were a weak substitute for showing the real
+UI; the whole thing needed to be several distinct screens instead of one;
+and mobile deserved better than a link to docs.
+
+- [x] **Build (revisit + back nav):** `src/onboarding/OnboardingWelcomeFlow.jsx`
+  now accepts `initialStep`/`onClose`. `src/App.jsx` adds a "How it works"
+  topbar button (`isOnboardingTourOpen`) that reopens the wizard at the
+  `pair` step in a modal, without touching the `dismissed` flag or forcing
+  a returning user back through Welcome/Project. A `STEP_ORDER`-driven
+  `BackLink` lets a user mid-wizard step backward instead of only forward.
+- [x] **Build (reordered, expanded flow):** replaced the single Method
+  screen with `welcome -> project -> pair -> modes -> collections -> agent
+  -> sync`. `pair` is Download+Pair, moved earlier per owner direction
+  (see `docs/DECISIONS.md`). `modes` shows three real recorded capture
+  modes (`desktop-capture.gif`, plus two new recordings —
+  `mode-element.gif` for the real content.js hover-highlight,
+  `mode-snip.gif` for the real drag-selection rectangle — both recorded
+  via a new `tests-e2e/media-specs/record-capture-modes.spec.ts`, driven
+  the same way `capture-element.spec.ts`/`capture-visual.spec.ts` already
+  do) plus the iPhone/Android/Paste-URL cards (unchanged functionality,
+  moved out of the old Method screen). `collections`/`agent`/`sync` are
+  new preview steps: one real screenshot (`first-value.png`, labeled
+  "Real:") plus explicitly-labeled ("Example ...") illustrative content
+  for a fuller workspace, an Ask Magpie conversation, and a price-change
+  update — content that cannot be demonstrated for real in a one-shot
+  recording. See `docs/DECISIONS.md` for the full reasoning on both the
+  reordering and the mock-content approval.
+- **Investigated, explicitly out of scope (tooling limitation):**
+  animating the Side Panel actually being opened via a toolbar click, and
+  a native right-click context menu appearing. Neither is drivable or
+  screenshotable by Playwright/CDP — confirmed by the existing
+  `tests-e2e/helpers/capture.ts`, which already documents and works around
+  this same limitation for the regression suite. Not attempted.
+- **Not done, blocked on the owner:** a one-tap iCloud Shortcut link for
+  iOS (needs the Shortcuts app on a real Mac/iPhone, unavailable in this
+  environment) — owner will build it once and hand back the link. See
+  `docs/DECISIONS.md`.
+- **Files:** `src/onboarding/OnboardingWelcomeFlow.jsx`, `src/App.jsx`,
+  `src/index.css`, `tests-e2e/media-specs/record-capture-modes.spec.ts`
+  (new), `scripts/encode-onboarding-gifs.mjs`,
+  `public/onboarding/mode-element.gif`, `public/onboarding/mode-snip.gif`
+  (new binary assets), `tests/onboarding-media.test.ts`,
+  `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 213/213 Deno tests, all 17 `entry.ts` files type-check clean
+  (no backend touched), every `extension/**/*.js` parses, `rg
+  "@base44/sdk" extension` clean, `npm run build` clean. The two new
+  capture-mode recordings were produced by a real run of
+  `record-capture-modes.spec.ts` against a real local `npx base44 dev`
+  backend and the real unpacked extension — not mocked. Visual layout of
+  the new preview steps (Collections/Agent/Sync/Modes gallery) was sanity
+  -checked by rendering the actual `src/index.css` and the real generated
+  assets in a throwaway static-HTML harness via Playwright (screenshot
+  reviewed directly), since this sandbox still has no way to sign in and
+  drive the live authenticated wizard end to end.
+- **Next:** owner sends the iCloud Shortcut link once built; a real
+  signed-in browser click-through of the full 7-step wizard once a backend
+  session is available to this session or the owner does it directly.
+
+### 45. Onboarding polish: carousel for capture modes, persistent Back/Skip/Continue footer, teach-first order restored
+
+Same-day further owner feedback on checkpoint 44's flow.
+
+- [x] **Build:** Replaced the Modes step's static 3-column gallery with a
+  single-slide carousel (`ModeCarousel` in
+  `src/onboarding/OnboardingWelcomeFlow.jsx`) — one fixed-size, centered
+  frame (`object-fit: contain` so the tall Side Panel recording and the
+  wide page recordings render at the same box size), prev/next arrows, dot
+  indicators. Replaced every step's own inline Continue/Skip/Create
+  buttons with one persistent footer (`onboarding-wizard-footer`: Back ·
+  Skip onboarding · Continue) that stays pinned at the bottom of the modal
+  regardless of step content length — `.onboarding-wizard` is now a flex
+  column with only `.onboarding-wizard-scroll` scrolling. Continue is
+  step-aware (label/icon/handler keyed by the current step; the Project
+  step's title input state moved up to the wizard component so Continue
+  can read it and create-then-advance only when a title was actually
+  typed). Reverted `STEP_ORDER` back to
+  `welcome -> modes -> project -> pair -> collections -> agent -> sync`
+  per the owner's explicit "first we teach, then we setup" — see
+  `docs/DECISIONS.md` for why this is the second reversal on this same
+  question in one session, and the note to ask rather than guess a third
+  time.
+- **Files:** `src/onboarding/OnboardingWelcomeFlow.jsx`, `src/index.css`,
+  `tests/onboarding-media.test.ts` (rewritten to assert against the
+  `STEP_ORDER` array literal directly instead of scanning render-order
+  text, which produced a false positive against an unrelated `step ===
+  "project"` check inside `handleContinue`).
+- **Verify:** 215/215 Deno tests (3 new: carousel markup, persistent
+  footer, corrected step order), `npm run build` clean. Visual layout
+  (carousel centering/sizing, footer always visible under scrollable step
+  content) sanity-checked the same way as checkpoint 44 — a throwaway
+  static-HTML harness serving the real `src/index.css` and real generated
+  assets over a local HTTP server, screenshotted via Playwright and
+  reviewed directly, since this sandbox still can't sign in to drive the
+  live wizard.
+- **Not done:** still blocked on the owner for the iCloud Shortcut link
+  (unchanged from checkpoint 44); the `npx base44 dev` logout-to-
+  `app.base44.com` issue is now confirmed reproducible by the owner but
+  still needs a fresh repro with network logs before it's actionable from
+  this repo's code.
+
+### 46. Wire the dead "See how the capture flow works" button to the real onboarding tour
+
+Owner noticed an existing empty-Collection prompt's "See how the capture
+flow works" button in the dashboard and asked whether to remove it or wire
+it to something real.
+
+- [x] **Build:** confirmed it was dead: `RecordTable`'s empty-Collection
+  branch called `window.scrollTo({ top: document.body.scrollHeight })`
+  with nothing "how it works"-like below the fold to scroll to. Wired it
+  to the real onboarding tour modal instead of removing it -- the copy was
+  already accurate, it just didn't do anything. Generalized the tour's
+  open state from a boolean (`isOnboardingTourOpen`) to
+  `onboardingTourStep` (`null` when closed, else the step name to open
+  at), so different entry points can jump to the most relevant step: the
+  topbar "How it works" button still opens at `pair`, while this
+  empty-Collection prompt now opens at `modes` (it's specifically about
+  the capture flow, not setup).
+- **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 215/215 Deno tests, `npm run build` clean.
+
+### 47. Onboarding dismissal moved to the User record; logout-to-base44.com fully traced and closed
+
+- [x] **Build:** `src/App.jsx`'s `dismissOnboarding` now calls
+  `base44.auth.updateMe({ onboarding_dismissed: true })` (optimistically
+  updating local `user` state first) instead of writing
+  `localStorage["magpie.onboarding.dismissed"]`; `onboardingStage`'s
+  `dismissed` input now reads `user?.onboarding_dismissed`. Fixes a real
+  bug the owner found: a brand-new signup in the same browser as a
+  previously-onboarded account inherited that account's dismissal and
+  skipped onboarding entirely, since `localStorage` is scoped to the
+  browser, not the account. See `docs/DECISIONS.md` for why this
+  supersedes the earlier "keep it client-side" call.
+- **Investigated, closed (not a code fix):** the `npx base44 dev`
+  logout-to-`app.base44.com` issue is now fully traced via a real network
+  capture — the local backend correctly proxies logout to
+  `https://base44.app/...` preserving `from_url`, and `base44.app` itself
+  declines to honor `from_url` back to an unregistered `localhost` origin
+  (almost certainly anti-open-redirect protection on Base44's own hosted
+  auth domain). Confirmed not OAuth-specific (reproduced on a
+  locally-registered email/password session too). Nothing in this repo
+  participates in either hop. See `docs/ENGINEERING_NOTES.md` for the full
+  trace.
+- **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 216/216 Deno tests (1 new), `npm run build` clean.
+- **Known cost, accepted:** accounts that dismissed onboarding under the
+  old `localStorage` scheme will see it once more after this ships (never
+  recorded server-side); not worth a migration for a one-time, harmless
+  re-show.
