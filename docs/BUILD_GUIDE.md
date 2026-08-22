@@ -1901,3 +1901,51 @@ checkpoint series below.
   `docs/DESIGN_SYSTEM.md` (new).
 - **Verify:** 216/216 Deno tests, `npm run build` clean. No visual
   surface to check yet -- this checkpoint is tokens and docs only.
+
+### 54. R2: RecordDetail cut down to the audited shape, status color applied
+
+- [x] **Build:** The highest-value, highest-risk surface named in
+  `docs/DASHBOARD_AUDIT.md`. `RecordDetail` (`App.jsx:639`):
+  - `.field-row` now carries `--status-changed` (background tint + solid
+    text + a small dot, `.field-changed-dot`) when that field has real
+    recorded history, computed from `enrichments` (already scoped to the
+    selected record) via a `lastChangeByField` map keyed by field name --
+    not hash-assigned, not decorative; a row only colors when that field
+    specifically has a change on record. The row's `title` attribute
+    carries the old value and when it changed, for anyone who does want
+    to read further.
+  - The refresh-strategy `<select>` and the "Last checked" text -- a
+    control most users touch rarely, previously always rendered inline --
+    now live behind a `<details>`/`<summary>` trigger (`SlidersHorizontal`
+    icon), matching the codebase's existing `.clip-raw-toggle` disclosure
+    idiom rather than inventing a new one. The primary action ("Check
+    source now") stays a single always-visible button using whichever
+    strategy was last chosen.
+  - The global "Syncing live" `.status-dot` now uses `--status-live`
+    (blue) instead of a plain hardcoded green, so "something is
+    live/syncing" has one consistent color across the dashboard.
+  - **Real bug caught by visual testing, fixed before commit:** the first
+    version of the refresh-options disclosure used `position: absolute`
+    to float as a popover. Rendered against the actual compiled CSS in a
+    real browser, it was silently clipped by `.detail-panel`'s
+    `overflow-y: auto` whenever it opened near the bottom of the scroll
+    area -- exactly the kind of thing that's invisible reading JSX and
+    only shows up rendered. Switched to a normal inline expand (content
+    pushes following elements down, like `.clip-raw-toggle` already does)
+    instead of a floating popover -- no positioning math, no clipping
+    surface, one fewer novel interaction pattern in the codebase.
+  - Consolidated two separately-declared `.detail-actions` CSS rules
+    (pre-existing duplicate selectors with conflicting `margin`/`gap`
+    values from different edits over time) into one, while touching this
+    exact block anyway.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Rendered against
+  the real compiled CSS via a static preview page (temporary, built into
+  `dist/`, deleted before commit -- `RecordDetail` needs a signed-in
+  session with real record/enrichment data this environment doesn't have
+  credentials for) with representative changed-field data: confirmed the
+  amber highlight is immediately visible without reading labels, the
+  refresh-options trigger opens/closes cleanly with no clipping in both
+  states, and the live-status dot renders blue.
+- **Per the plan: pausing here for a visual check-in before continuing**
+  to R3 (table/card default switch, workspace-grid layout) and beyond.

@@ -944,3 +944,30 @@ the problem was.
 wrong once: the corrected color rule ("status only, never category") and
 the hierarchy rules from the audit are written down so the next redesign
 starts from a document instead of re-arriving at the same mistake.
+
+## Dashboard redesign, R2: a floating popover over a scroll container clips, use inline expand instead
+
+Build Guide checkpoint 54. The first version of `RecordDetail`'s
+collapsed refresh-options control used `position: absolute` to float a
+small popover below its trigger icon, styled after a conventional
+dropdown-menu pattern. Rendered against the actual compiled CSS in a real
+browser (a temporary static preview, not the live app -- see the
+checkpoint's Verify note for why), it was silently clipped whenever it
+opened near the bottom of `.detail-panel`'s `overflow-y: auto` scroll
+area: an absolutely-positioned descendant doesn't escape an ancestor's
+scroll clipping just because it's visually "floating." This is exactly
+the class of bug that reading JSX never surfaces and only shows up
+rendered -- worth naming as a reason this pass keeps testing everything
+in a real browser rather than trusting the markup alone.
+
+Fixed by dropping the floating-popover approach entirely in favor of a
+normal inline expand -- the panel content pushes whatever's below it
+down when opened, the same way `.clip-raw-toggle` (an existing
+`<details>`/`<summary>` disclosure elsewhere in this same panel) already
+behaves. No positioning math, no clipping surface, and one fewer distinct
+interaction pattern for the codebase to carry. The tradeoff (opening it
+shifts layout below it, rather than floating over it) was judged worth
+it for the robustness -- if a genuine floating popover is wanted
+somewhere later, it needs real anchor-positioning logic (a ref + measured
+offsets, or a portal), not `position: absolute` inside a scrollable
+ancestor.

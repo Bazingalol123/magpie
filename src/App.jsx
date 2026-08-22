@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Wand2,
@@ -649,6 +650,13 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
   const screenshotUrl = screenshotUrlFor(clip);
   const isBlocked = record.freshness === "blocked";
   const isAutoPaused = watch?.last_error_code === "AUTO_PAUSED_BLOCKED" && !watch?.active;
+  // Status color, not decoration: a field only carries --status-changed
+  // when it has real recorded history, and shows when that last happened.
+  const lastChangeByField = new Map();
+  for (const item of enrichments) {
+    const existing = lastChangeByField.get(item.field);
+    if (!existing || new Date(item.checked_at) > new Date(existing.checked_at)) lastChangeByField.set(item.field, item);
+  }
   return (
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
       <aside className="detail-panel" role="dialog" aria-modal="true" aria-label="Item detail" onMouseDown={(event) => event.stopPropagation()}>
@@ -658,11 +666,17 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
         </div>
         {isHttpUrl(record.source_url) && <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>}
         <div className="structured-fields">
-          {Object.entries(fields).map(([name, value]) => (
-            <div className="field-row" key={name}><span>{name.replace(/_/g, " ")}</span><b><FieldValue value={value} /></b></div>
-          ))}
+          {Object.entries(fields).map(([name, value]) => {
+            const change = lastChangeByField.get(name);
+            return (
+              <div className={`field-row${change ? " is-changed" : ""}`} key={name} title={change ? `Changed from ${change.old_value || "empty"} · ${formatDate(change.checked_at)}` : undefined}>
+                <span>{name.replace(/_/g, " ")}</span>
+                <b><FieldValue value={value} />{change && <i className="field-changed-dot" aria-hidden="true" />}</b>
+              </div>
+            );
+          })}
         </div>
-        {record.mission_id && <div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
+        {record.mission_id &&<div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
         {screenshotUrl && <img className="clip-screenshot" src={screenshotUrl} alt="Captured source page" />}
         <CapturedContext clip={clip} />
         {isBlocked && (
@@ -691,17 +705,22 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
           </div>
         )}
         <div className="detail-actions">
-          <label className="refresh-strategy-label">Check with
-            <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
-              <option value="direct_http">Direct HTTP</option>
-              <option value="zyte">Zyte cloud (manual)</option>
-              <option value="owner_browser">My browser</option>
-            </select>
-          </label>
           <button className="secondary-button" onClick={() => onRefresh(refreshStrategy)} disabled={isRefreshing}>
             <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
           </button>
-          <span>Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+          <details className="refresh-options">
+            <summary aria-label="Refresh options"><SlidersHorizontal size={14} /></summary>
+            <div className="refresh-options-panel">
+              <label className="refresh-strategy-label">Check with
+                <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
+                  <option value="direct_http">Direct HTTP</option>
+                  <option value="zyte">Zyte cloud (manual)</option>
+                  <option value="owner_browser">My browser</option>
+                </select>
+              </label>
+              <span className="refresh-last-checked">Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+            </div>
+          </details>
         </div>
         {refreshNotice && <div className={`refresh-notice ${refreshNotice.outcome}`}>{refreshNotice.message}</div>}
         <div className="danger-zone">
