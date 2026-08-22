@@ -1815,7 +1815,7 @@ export default function App() {
               onPasteCapture={submitMobileCapture}
               isMobileCapturing={isMobileCapturing}
               mobileCaptureError={mobileCaptureError}
-              initialStep="learn"
+              initialStep="pair"
               onClose={() => setIsOnboardingTourOpen(false)}
             />
           </div>

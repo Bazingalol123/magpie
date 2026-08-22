@@ -15,22 +15,22 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
-const FRAMES_DIR = path.join(REPO_ROOT, "tests-e2e/.media/desktop-capture");
+const MEDIA_ROOT = path.join(REPO_ROOT, "tests-e2e/.media");
 const OUT_DIR = path.join(REPO_ROOT, "public/onboarding");
 
-function requireFrame(name) {
-  const file = path.join(FRAMES_DIR, name);
+function requireFrame(framesDir, name) {
+  const file = path.join(framesDir, name);
   if (!fs.existsSync(file)) {
-    throw new Error(`Missing recorded frame: ${file} -- run the media-recording spec first:\n  npx playwright test --config=playwright.media.config.ts`);
+    throw new Error(`Missing recorded frame: ${file} -- run the media-recording specs first:\n  npx playwright test --config=playwright.media.config.ts`);
   }
   return file;
 }
 
 /** Builds an ffmpeg concat-demuxer list file for a sequence of (frame, durationSeconds) pairs. */
-function writeConcatList(sequence, listPath) {
+function writeConcatList(framesDir, sequence, listPath) {
   const lines = [];
   for (const [frame, duration] of sequence) {
-    const file = requireFrame(frame);
+    const file = requireFrame(framesDir, frame);
     lines.push(`file '${file.replace(/\\/g, "/")}'`);
     lines.push(`duration ${duration}`);
   }
@@ -38,14 +38,14 @@ function writeConcatList(sequence, listPath) {
   // is repeated once without a duration line -- a documented ffmpeg quirk,
   // not a bug here.
   const [lastFrame] = sequence[sequence.length - 1];
-  lines.push(`file '${requireFrame(lastFrame).replace(/\\/g, "/")}'`);
+  lines.push(`file '${requireFrame(framesDir, lastFrame).replace(/\\/g, "/")}'`);
   fs.writeFileSync(listPath, lines.join("\n"));
 }
 
-function encodeGif(sequence, outName, width) {
+function encodeGif(framesDir, sequence, outName, width) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const listPath = path.join(FRAMES_DIR, `${outName}.concat.txt`);
-  writeConcatList(sequence, listPath);
+  const listPath = path.join(framesDir, `${outName}.concat.txt`);
+  writeConcatList(framesDir, sequence, listPath);
   const outPath = path.join(OUT_DIR, outName);
   const filter = `scale=${width}:-1:flags=lanczos,fps=8,split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer`;
   execFileSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-vf", filter, "-loop", "0", outPath], {
@@ -62,16 +62,20 @@ function encodeGif(sequence, outName, width) {
  * dashboard screenshot alone already tells "it lands in your workspace"
  * clearly.
  */
-function encodeStillPng(frame, outName, width) {
+function encodeStillPng(framesDir, frame, outName, width) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, outName);
-  execFileSync("ffmpeg", ["-y", "-i", requireFrame(frame), "-vf", `scale=${width}:-1:flags=lanczos`, "-update", "1", "-frames:v", "1", outPath], {
+  execFileSync("ffmpeg", ["-y", "-i", requireFrame(framesDir, frame), "-vf", `scale=${width}:-1:flags=lanczos`, "-update", "1", "-frames:v", "1", outPath], {
     stdio: "inherit",
   });
   console.log(`Wrote ${outPath}`);
 }
 
+const DESKTOP_CAPTURE_FRAMES = path.join(MEDIA_ROOT, "desktop-capture");
+const CAPTURE_MODES_FRAMES = path.join(MEDIA_ROOT, "capture-modes");
+
 encodeGif(
+  DESKTOP_CAPTURE_FRAMES,
   [
     ["01-sidepanel-ready.png", 1.6],
     ["02-sidepanel-capturing.png", 0.9],
@@ -81,4 +85,24 @@ encodeGif(
   320,
 );
 
-encodeStillPng("04-dashboard-item-landed.png", "first-value.png", 900);
+encodeStillPng(DESKTOP_CAPTURE_FRAMES, "04-dashboard-item-landed.png", "first-value.png", 900);
+
+encodeGif(
+  CAPTURE_MODES_FRAMES,
+  [
+    ["00-element-hover.png", 1.8],
+    ["01-element-captured.png", 2.0],
+  ],
+  "mode-element.gif",
+  420,
+);
+
+encodeGif(
+  CAPTURE_MODES_FRAMES,
+  [
+    ["02-snip-dragging.png", 1.6],
+    ["03-snip-captured.png", 2.0],
+  ],
+  "mode-snip.gif",
+  420,
+);

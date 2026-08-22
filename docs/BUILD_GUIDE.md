@@ -1515,3 +1515,65 @@ four findings from an actual click-through:
   this repo's code cannot explain it further); optionally record
   matching walkthrough media for the iPhone Shortcut and Android Share
   Target methods once real-device passes exist for them.
+
+### 44. Onboarding restructure: revisit entry point, pair-first ordering, capture-mode recordings, illustrative previews
+
+Owner gave detailed feedback on checkpoint 43's onboarding flow after a
+real click-through: no way to reopen the walkthrough once dismissed; the
+Method screen's static cards were a weak substitute for showing the real
+UI; the whole thing needed to be several distinct screens instead of one;
+and mobile deserved better than a link to docs.
+
+- [x] **Build (revisit + back nav):** `src/onboarding/OnboardingWelcomeFlow.jsx`
+  now accepts `initialStep`/`onClose`. `src/App.jsx` adds a "How it works"
+  topbar button (`isOnboardingTourOpen`) that reopens the wizard at the
+  `pair` step in a modal, without touching the `dismissed` flag or forcing
+  a returning user back through Welcome/Project. A `STEP_ORDER`-driven
+  `BackLink` lets a user mid-wizard step backward instead of only forward.
+- [x] **Build (reordered, expanded flow):** replaced the single Method
+  screen with `welcome -> project -> pair -> modes -> collections -> agent
+  -> sync`. `pair` is Download+Pair, moved earlier per owner direction
+  (see `docs/DECISIONS.md`). `modes` shows three real recorded capture
+  modes (`desktop-capture.gif`, plus two new recordings —
+  `mode-element.gif` for the real content.js hover-highlight,
+  `mode-snip.gif` for the real drag-selection rectangle — both recorded
+  via a new `tests-e2e/media-specs/record-capture-modes.spec.ts`, driven
+  the same way `capture-element.spec.ts`/`capture-visual.spec.ts` already
+  do) plus the iPhone/Android/Paste-URL cards (unchanged functionality,
+  moved out of the old Method screen). `collections`/`agent`/`sync` are
+  new preview steps: one real screenshot (`first-value.png`, labeled
+  "Real:") plus explicitly-labeled ("Example ...") illustrative content
+  for a fuller workspace, an Ask Magpie conversation, and a price-change
+  update — content that cannot be demonstrated for real in a one-shot
+  recording. See `docs/DECISIONS.md` for the full reasoning on both the
+  reordering and the mock-content approval.
+- **Investigated, explicitly out of scope (tooling limitation):**
+  animating the Side Panel actually being opened via a toolbar click, and
+  a native right-click context menu appearing. Neither is drivable or
+  screenshotable by Playwright/CDP — confirmed by the existing
+  `tests-e2e/helpers/capture.ts`, which already documents and works around
+  this same limitation for the regression suite. Not attempted.
+- **Not done, blocked on the owner:** a one-tap iCloud Shortcut link for
+  iOS (needs the Shortcuts app on a real Mac/iPhone, unavailable in this
+  environment) — owner will build it once and hand back the link. See
+  `docs/DECISIONS.md`.
+- **Files:** `src/onboarding/OnboardingWelcomeFlow.jsx`, `src/App.jsx`,
+  `src/index.css`, `tests-e2e/media-specs/record-capture-modes.spec.ts`
+  (new), `scripts/encode-onboarding-gifs.mjs`,
+  `public/onboarding/mode-element.gif`, `public/onboarding/mode-snip.gif`
+  (new binary assets), `tests/onboarding-media.test.ts`,
+  `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 213/213 Deno tests, all 17 `entry.ts` files type-check clean
+  (no backend touched), every `extension/**/*.js` parses, `rg
+  "@base44/sdk" extension` clean, `npm run build` clean. The two new
+  capture-mode recordings were produced by a real run of
+  `record-capture-modes.spec.ts` against a real local `npx base44 dev`
+  backend and the real unpacked extension — not mocked. Visual layout of
+  the new preview steps (Collections/Agent/Sync/Modes gallery) was sanity
+  -checked by rendering the actual `src/index.css` and the real generated
+  assets in a throwaway static-HTML harness via Playwright (screenshot
+  reviewed directly), since this sandbox still has no way to sign in and
+  drive the live authenticated wizard end to end.
+- **Next:** owner sends the iCloud Shortcut link once built; a real
+  signed-in browser click-through of the full 7-step wizard once a backend
+  session is available to this session or the owner does it directly.

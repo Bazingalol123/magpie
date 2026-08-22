@@ -369,8 +369,22 @@ non-goal against implementing revoke/rotate in this pass.
    something inside Base44's own local dev tooling, not this repo's code
    (see `docs/ENGINEERING_NOTES.md`); and confirmation that onboarding
    dismissal is `localStorage`-only by design, not a server-tracking gap
-   (see `docs/DECISIONS.md`). Branch `feat/onboarding-flow`, still not
-   merged or deployed.
+   (see `docs/DECISIONS.md`). **Extended again same day (checkpoint 44):**
+   owner reviewed and reordered the flow to `welcome -> project -> pair ->
+   modes -> collections -> agent -> sync`, added a "How it works" topbar
+   entry point so the walkthrough can be reopened anytime, and requested
+   (and got) two more real recordings for the element-picker hover
+   highlight and visual-snip drag rectangle
+   (`public/onboarding/mode-element.gif`, `mode-snip.gif`), plus
+   explicitly-labeled illustrative previews for Collections/Ask Magpie/Sync
+   since those can't be demonstrated for real in a one-shot recording.
+   Owner also reported the `npx base44 dev` logout-to-`app.base44.com`
+   issue is reproducible (not just a stale memory) — still needs a fresh
+   repro with network logs to go further than the code-level trace already
+   in `docs/ENGINEERING_NOTES.md`. **Blocked on the owner:** a real-device
+   iCloud Shortcut link for iOS (see `docs/DECISIONS.md`) — the manual
+   build-it-yourself doc stays as the fallback until that link exists.
+   Branch `feat/onboarding-flow`, still not merged or deployed.
    Build Guide checkpoint 42 (branch `feat/onboarding-flow`, not yet merged
    or deployed) replaces the old pairing-checklist-only first run with the
    full Welcome -> Project (optional) -> Method (Desktop/iPhone/Android/

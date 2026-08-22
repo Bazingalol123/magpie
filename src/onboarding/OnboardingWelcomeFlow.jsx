@@ -1,8 +1,24 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Download, Key, Link2, LoaderCircle, Monitor, Smartphone, Sparkles, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  Check,
+  Crop,
+  Download,
+  FileText,
+  Key,
+  Link2,
+  LoaderCircle,
+  MousePointerClick,
+  Smartphone,
+  Sparkles,
+  TrendingDown,
+  X,
+} from "lucide-react";
 import { PairingStepStatus, deriveOverallPairingStatus } from "./state.js";
 
-const STEP_ORDER = ["welcome", "project", "learn", "method"];
+const STEP_ORDER = ["welcome", "project", "pair", "modes", "collections", "agent", "sync"];
 
 function BackLink({ step, onStepChange }) {
   const index = STEP_ORDER.indexOf(step);
@@ -61,34 +77,6 @@ function WelcomeStep({ onStart, onSkipToWorkspace }) {
   );
 }
 
-function LearnStep({ onNext }) {
-  return (
-    <div className="onboarding-wizard-step">
-      <div className="eyebrow">how it works</div>
-      <h1>Here's what happens when you save something.</h1>
-      <p className="onboarding-wizard-lede">
-        Real screenshots of Magpie's own Chrome extension and dashboard -- not a mockup. Set up
-        your capture method next; this is just so you know what to expect.
-      </p>
-      <div className="onboarding-learn-gallery">
-        <figure className="onboarding-learn-frame">
-          <img src="/onboarding/desktop-capture.gif" alt="The Magpie Side Panel capturing a page: ready, capturing, then captured" loading="lazy" />
-          <figcaption>Open the Side Panel and capture any page.</figcaption>
-        </figure>
-        <figure className="onboarding-learn-frame">
-          <img src="/onboarding/first-value.png" alt="A captured Item appearing organized in the Magpie dashboard" loading="lazy" />
-          <figcaption>It lands in your workspace, already organized.</figcaption>
-        </figure>
-      </div>
-      <div className="onboarding-wizard-actions">
-        <button type="button" className="onboarding-cta" onClick={onNext}>
-          <ArrowRight size={15} /> Set up my capture method
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ProjectStep({ onCreate, onSkip, isCreating, error }) {
   const [title, setTitle] = useState("");
   const submit = (event) => {
@@ -123,6 +111,36 @@ function ProjectStep({ onCreate, onSkip, isCreating, error }) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function PairStep({ extensionInstalls, isPairing, onPair, onNext }) {
+  const overallStatus = deriveOverallPairingStatus(extensionInstalls);
+  const isReconnect = overallStatus === PairingStepStatus.REVOKED;
+  const isPaired = overallStatus === PairingStepStatus.USED || overallStatus === PairingStepStatus.UNUSED;
+  return (
+    <div className="onboarding-wizard-step">
+      <div className="eyebrow">step 1 · desktop</div>
+      <h1>Download and pair the Chrome extension.</h1>
+      <p className="onboarding-wizard-lede">
+        It opens as a Side Panel that stays with you while you browse any page -- the fastest way to
+        capture from your computer.
+      </p>
+      <div className="onboarding-wizard-actions">
+        <button type="button" className="onboarding-cta" onClick={onPair} disabled={isPairing}>
+          {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
+          {isPaired ? "Paired" : isReconnect ? "Reconnect extension" : "Pair extension"}
+        </button>
+        <a className="onboarding-cta onboarding-cta-secondary" href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">
+          <Download size={14} /> Get the extension
+        </a>
+      </div>
+      <div className="onboarding-wizard-actions onboarding-wizard-actions-quiet">
+        <button type="button" className="onboarding-cta onboarding-cta-secondary" onClick={onNext}>
+          <ArrowRight size={15} /> {isPaired ? "Continue" : "I'll pair it later -- continue"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -172,38 +190,31 @@ function PasteUrlCard({ onSubmit, isSubmitting, error }) {
   );
 }
 
-function MethodStep({
-  extensionInstalls,
-  isPairing,
-  onPair,
-  onOpenIosSetup,
-  onPasteCapture,
-  isMobileCapturing,
-  mobileCaptureError,
-  onSkipToWorkspace,
-}) {
-  const overallStatus = deriveOverallPairingStatus(extensionInstalls);
-  const isReconnect = overallStatus === PairingStepStatus.REVOKED;
+function ModesStep({ onOpenIosSetup, onPasteCapture, isMobileCapturing, mobileCaptureError, onNext }) {
   return (
     <div className="onboarding-wizard-step">
-      <div className="eyebrow">capture method</div>
-      <h1>How do you want to save things?</h1>
-      <p className="onboarding-wizard-lede">Pick whatever fits how you're browsing right now. You can use more than one.</p>
+      <div className="eyebrow">step 2 · how to capture</div>
+      <h1>Three ways to clip from your computer.</h1>
+      <p className="onboarding-wizard-lede">
+        Real screenshots of the actual extension -- not a mockup. All three work from the Side
+        Panel or its keyboard shortcut (Alt+Shift+M / ⌘+Shift+M).
+      </p>
+      <div className="onboarding-learn-gallery onboarding-learn-gallery-three">
+        <figure className="onboarding-learn-frame">
+          <img src="/onboarding/mode-element.gif" alt="Hovering an element on a page highlights it, then it's captured" loading="lazy" />
+          <figcaption><MousePointerClick size={12} /> Clip Element -- hover, press C</figcaption>
+        </figure>
+        <figure className="onboarding-learn-frame">
+          <img src="/onboarding/mode-snip.gif" alt="Dragging a rectangle over part of a page crops and captures it" loading="lazy" />
+          <figcaption><Crop size={12} /> Snip Area -- drag a rectangle</figcaption>
+        </figure>
+        <figure className="onboarding-learn-frame">
+          <img src="/onboarding/desktop-capture.gif" alt="Clicking Save Page in the Side Panel captures the whole page" loading="lazy" />
+          <figcaption><FileText size={12} /> Save Page -- one click</figcaption>
+        </figure>
+      </div>
+      <div className="onboarding-wizard-subhead">On your phone</div>
       <ol className="onboarding-method-grid">
-        <li className="onboarding-method-card">
-          <span className="onboarding-step-icon"><Monitor size={15} /></span>
-          <div>
-            <p>Desktop -- Chrome extension</p>
-            <span className="onboarding-step-body">Opens as a Side Panel that stays with you while you browse any page.</span>
-            <button type="button" className="onboarding-cta" onClick={onPair} disabled={isPairing}>
-              {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
-              {isReconnect ? "Reconnect extension" : "Pair extension"}
-            </button>
-            <a className="onboarding-cta onboarding-cta-secondary onboarding-cta-link" href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">
-              <Download size={13} /> Don't have it yet? Get the extension
-            </a>
-          </div>
-        </li>
         <li className="onboarding-method-card">
           <span className="onboarding-step-icon"><Smartphone size={15} /></span>
           <div>
@@ -228,8 +239,91 @@ function MethodStep({
         <PasteUrlCard onSubmit={onPasteCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} />
       </ol>
       <div className="onboarding-wizard-actions onboarding-wizard-actions-quiet">
-        <button type="button" className="onboarding-cta onboarding-cta-secondary" onClick={onSkipToWorkspace}>
-          Skip for now
+        <button type="button" className="onboarding-cta" onClick={onNext}>
+          <ArrowRight size={15} /> Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CollectionsPreviewStep({ onNext }) {
+  return (
+    <div className="onboarding-wizard-step">
+      <div className="eyebrow">step 3 · organized automatically</div>
+      <h1>Everything you save lands in a Collection.</h1>
+      <p className="onboarding-wizard-lede">
+        The screenshot below is a real capture through the flow above. The extra cards are an
+        example of what a fuller workspace looks like -- your own Collections will reflect what you
+        actually save.
+      </p>
+      <figure className="onboarding-preview-frame">
+        <img src="/onboarding/first-value.png" alt="A captured Item, routed into a new Collection, shown in the Magpie dashboard" loading="lazy" />
+        <figcaption>Real: a page capture, routed and shown in its Collection.</figcaption>
+      </figure>
+      <div className="onboarding-mock-badge">Example workspace</div>
+      <ol className="onboarding-mock-grid">
+        <li className="onboarding-mock-card">
+          <div className="onboarding-mock-card-head"><Camera size={13} /> Cameras</div>
+          <b>Sony Alpha 6600</b>
+          <span className="onboarding-mock-card-badge drop"><TrendingDown size={11} /> price dropped</span>
+        </li>
+        <li className="onboarding-mock-card">
+          <div className="onboarding-mock-card-head"><FileText size={13} /> Recipes</div>
+          <b>Shakshuka, proper heat</b>
+          <span className="onboarding-mock-card-badge">4 saved</span>
+        </li>
+      </ol>
+      <div className="onboarding-wizard-actions onboarding-wizard-actions-quiet">
+        <button type="button" className="onboarding-cta" onClick={onNext}>
+          <ArrowRight size={15} /> Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AgentPreviewStep({ onNext }) {
+  return (
+    <div className="onboarding-wizard-step">
+      <div className="eyebrow">step 4 · ask magpie</div>
+      <h1>Ask questions about what you've saved.</h1>
+      <p className="onboarding-wizard-lede">
+        Ask Magpie compares your Items, explains routing, and can configure watches -- across your
+        real saved data. The conversation below is an example, not a live answer.
+      </p>
+      <div className="onboarding-mock-badge">Example conversation</div>
+      <div className="onboarding-mock-chat">
+        <div className="agent-message user"><span>You</span><p>Which of the two apartments has better transit access?</p></div>
+        <div className="agent-message assistant"><span>Magpie</span><div className="agent-md"><p>The Kreuzberg listing is a 4-minute walk to the U-Bahn; the other is 12 minutes. Both are within budget -- Kreuzberg is also €80/month cheaper.</p></div></div>
+      </div>
+      <div className="onboarding-wizard-actions onboarding-wizard-actions-quiet">
+        <button type="button" className="onboarding-cta" onClick={onNext}>
+          <ArrowRight size={15} /> Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SyncPreviewStep({ onFinish }) {
+  return (
+    <div className="onboarding-wizard-step">
+      <div className="eyebrow">step 5 · always current</div>
+      <h1>Magpie keeps watching after you save.</h1>
+      <p className="onboarding-wizard-lede">
+        Sources you save get checked automatically, and real changes show up as field updates --
+        without you having to revisit the page. Shown below is an example; nothing has changed yet
+        for a source you just saved.
+      </p>
+      <div className="onboarding-mock-badge">Example update</div>
+      <div className="onboarding-mock-sync">
+        <span className="onboarding-mock-card-badge drop"><TrendingDown size={11} /> price dropped</span>
+        <span className="onboarding-mock-sync-row"><s>€650</s> → <b>€570</b> / month</span>
+      </div>
+      <div className="onboarding-wizard-actions">
+        <button type="button" className="onboarding-cta" onClick={onFinish}>
+          <Check size={15} /> Go to my dashboard
         </button>
       </div>
     </div>
@@ -265,24 +359,26 @@ export default function OnboardingWelcomeFlow({
           error={projectError}
           onCreate={async (title) => {
             const created = await onCreateProject(title);
-            if (created) setStep("learn");
+            if (created) setStep("pair");
           }}
-          onSkip={() => setStep("learn")}
+          onSkip={() => setStep("pair")}
         />
       )}
-      {step === "learn" && <LearnStep onNext={() => setStep("method")} />}
-      {step === "method" && (
-        <MethodStep
-          extensionInstalls={extensionInstalls}
-          isPairing={isPairing}
-          onPair={onPair}
+      {step === "pair" && (
+        <PairStep extensionInstalls={extensionInstalls} isPairing={isPairing} onPair={onPair} onNext={() => setStep("modes")} />
+      )}
+      {step === "modes" && (
+        <ModesStep
           onOpenIosSetup={onOpenIosSetup}
           onPasteCapture={onPasteCapture}
           isMobileCapturing={isMobileCapturing}
           mobileCaptureError={mobileCaptureError}
-          onSkipToWorkspace={onSkipToWorkspace}
+          onNext={() => setStep("collections")}
         />
       )}
+      {step === "collections" && <CollectionsPreviewStep onNext={() => setStep("agent")} />}
+      {step === "agent" && <AgentPreviewStep onNext={() => setStep("sync")} />}
+      {step === "sync" && <SyncPreviewStep onFinish={onSkipToWorkspace} />}
       <div className="pairing-note"><Check size={14} /> Project creation is optional and never blocks your first capture.</div>
     </section>
   );

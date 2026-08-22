@@ -612,3 +612,63 @@ products use. A fresh browser, device, or local-dev session showing the
 Welcome tour again is therefore expected behavior, including the specific
 case the owner hit (a brand-new `npx base44 dev` local session has no
 `localStorage` history from production).
+
+## Onboarding restructured into Pair -> Modes -> Collections/Agent/Sync preview (supersedes "teach before setup")
+
+Build Guide checkpoint 44. Direct owner feedback after a real click-through
+reversed the ordering decided in the "teach-before-setup" entry above:
+Download-and-pair now comes first (its own dedicated step), followed by a
+capture-modes walkthrough, then three clearly-labeled preview screens
+(Collections, Ask Magpie, Sync) ending in "go to my dashboard." The
+rationale volunteered for the new order: asking for pairing while
+motivation is highest, right after the Welcome pitch, then rewarding that
+with the full picture, reads better than fronting the walkthrough. The
+"teach before setup" entry's underlying point — show real product, not a
+mockup — still holds; only the sequencing changed.
+
+Two new real recordings were added alongside the original page-save one:
+`public/onboarding/mode-element.gif` (content.js's real hover-highlight
+overlay during element-picker mode) and `mode-snip.gif` (the real drag
+rectangle during a visual snip). Both are genuine page DOM, so both are
+real screenshots — this is explicitly *not* true of two related requests
+that came up in the same feedback: recording the Side Panel actually being
+opened via a toolbar click, and a native right-click context menu
+appearing. Neither is drivable or screenshotable by Playwright/CDP or any
+other browser-automation tooling; `tests-e2e/helpers/capture.ts` already
+documents this same limitation for the regression suite (it opens
+`sidepanel.html` directly instead of a toolbar click, and fires a
+synthetic `contextmenu` DOM event instead of a real right-click). This
+isn't a scoping choice — no tool can do it — so the Modes step's gallery
+covers the three modes that are drivable and stops there.
+
+**Illustrative (mock) content, explicitly approved.** The Collections,
+Agent, and Sync preview steps show content that cannot be demonstrated for
+real in a one-shot recording (a populated multi-Collection workspace, an
+Ask Magpie answer, a price-change update — Zyte-driven refresh needs a
+real change over time, which a recording can't produce). Owner explicitly
+approved this as long as it's clearly labeled, not presented as the
+viewer's real data. Implementation: a visible "Example ..." pill
+(`.onboarding-mock-badge`) plus explicit "Example" wording in each such
+step's copy — checked by `tests/onboarding-media.test.ts`. The one real
+screenshot on the Collections step (`first-value.png`, a genuine capture
+through the flow above) is explicitly labeled "Real:" right next to the
+mock cards beside it, so the two are never conflated.
+
+## iOS Shortcut: real device needed to move past manual build-it-yourself instructions
+
+Owner correctly called "read the docs and build it yourself" a weak
+mobile experience and asked whether Magpie could distribute a real,
+one-tap-installable Shortcut instead of asking each user to assemble the
+three actions by hand. That format exists — Apple's Shortcuts app can
+produce a shareable `icloud.com/shortcuts/...` link that installs the
+exact same Shortcut in one tap — but generating one requires the
+Shortcuts app on a real Mac or iPhone; there is no CLI, API, or file
+format that can be authored from a non-Apple environment. This session had
+no Apple hardware available. Decision: owner will build the Shortcut once
+on a real device (using the exact spec already in
+`docs/IOS_SHORTCUT_SETUP.md`) and hand back the resulting iCloud link; that
+link will then become the primary CTA on the Modes step's iPhone card,
+with the manual build-it-yourself steps kept as a fallback for anyone who
+doesn't want to trust a shared link. Not done in this pass — blocked on
+that one real-device step from the owner, tracked in
+`docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
