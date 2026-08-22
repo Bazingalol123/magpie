@@ -1400,3 +1400,144 @@ app-level console errors. The authenticated Welcome/Project/Method screens
 were not click-tested this way, since there is no local Base44 backend in
 this environment to sign in against -- see Build Guide checkpoint 42's
 "Verify" note.
+
+## 2026-08-21 — P0: every base44.functions.invoke() call 403s in production (platform-domain block)
+
+Owner reported the iOS Shortcut `/share` save hit `403 Forbidden`, and on
+follow-up confirmed every function-backed write in the deployed dashboard
+was failing the same way (New Project, mobile capture, and by extension
+delete/resolve-routing/review accept-dismiss — anything routed through
+`base44.functions.invoke()`).
+
+Root cause confirmed live via `curl`, unauthenticated, same exact SDK path
+(`POST /api/apps/{appId}/functions/create-mission`) against both hosts:
+
+- `https://app.base44.com/...` → `403 {"message":"Backend functions cannot
+  be accessed from the platform domain. Use the app's subdomain instead."}`,
+  `request_id: null` — rejected before `entry.ts` ever ran.
+- `https://magpiecapture.com/...` → `401 {"error":"Authentication is
+  required", request_id: "req_..."}` — a real response from
+  `requireUser()` in `entry.ts`, i.e. the request reached our code.
+
+`entities` and `/auth/me` were verified to behave identically on both
+hosts (both `200`/`401` alike), so this block is specific to the
+`functions` route, not a blanket platform-vs-custom-domain split. Base44
+appears to have started enforcing "use the app's own domain for function
+calls" now that the custom domain is fully connected (see the 2026-08-17
+issue #59 note above, which made the same shift for the Extension's
+`ingest_url` but didn't touch the browser SDK's own `functions.invoke()`
+base URL).
+
+`src/api/base44Client.js`'s `base44ServerUrl` was hardcoded to
+`https://app.base44.com` in production (only local dev with
+`VITE_BASE44_APP_BASE_URL` set escaped it), and the SDK's `functions`
+module always posts through that same shared `serverUrl` — there is no
+separate per-module base URL in `@base44/sdk`'s `createClient()`. Fixed by
+making `base44ServerUrl` prefer the deployed page's own browser origin
+(mirroring the pattern `appBaseUrl` already used for the login/logout
+redirect bug above), falling back to the platform host only when there's
+no browser origin or it's `localhost`/`127.0.0.1` (so local frontend dev
+without a sandbox keeps hitting the real hosted backend as before).
+`tests/base44-client-config.test.ts` updated to match the new source
+lines. Gated locally: 193/193 Deno tests, all 17 `entry.ts` type-check
+clean, `npm run build` clean. Branch
+`fix/functions-invoke-platform-domain-403`, merged to `main` as #76.
+
+## 2026-08-21 — Three dashboard bug reports: Project-scoped Collections, stale 0 count, hidden phone CTA
+
+Owner reported three issues while reviewing the dashboard: (1) switching
+Projects still showed Collections belonging to other/no Project, with a `0`
+count; (2) Collection item counts flash `0` before settling; (3) on iOS
+(installed PWA or Safari tab) there's no "save with phone" button, though
+one exists on desktop.
+
+**(1) Global Collections leaking into every Project.** `src/App.jsx`'s
+`missionCollections` filter was `collection.mission_id === activeMission.id
+|| !collection.mission_id` (added in `0764e31`, #72, to stop global
+Collections "disappearing" from the sidebar). The `|| !collection.mission_id`
+clause means *every* Collection with no `mission_id` shows under *every*
+Project regardless of relevance, and since `data.records` is only ever the
+currently-viewed Collection's page (not a Project-wide list), there's no
+honest client-side way to tell whether a given global Collection "really"
+belongs under the active Project — it always renders `0`. Per
+`docs/PRODUCT_CHARTER.md`, unattached Collections belong to the top-level
+Library, not to every Project's own view — fixed by dropping the
+`!collection.mission_id` clause entirely so only explicitly Project-scoped
+Collections appear under a Project; the no-Project (Library) view is
+unaffected and still shows everything. (`0764e31`'s original flicker bug —
+why it widened this filter in the first place — was rooted in the *same*
+`data.records`-is-single-Collection-scoped limitation as this bug; a real
+fix for both would need a lightweight per-Project Collection-membership
+query that doesn't exist yet, tracked as a follow-up, not built here.)
+
+**(2) Transient `0` count on the active row.** `CollectionSidebar`
+computed the active row's count as `records.filter(r => r.collection_id ===
+collection.id).length` — while a new Collection's page is loading, `records`
+still holds the *previous* Collection's rows, which filters to `0` and
+flashes a false count before the real page lands. Fixed by also gating on
+the existing `isLoadingRecords` state (now passed down as a prop): the
+active row shows `—` (same as any inactive row) while loading, instead of a
+misleading `0`.
+
+**(3) No phone-capture CTA reachable on mobile.** `src/index.css`'s
+`@media (max-width: 680px)` block set `.heading-actions { display: none; }`
+— but `.heading-actions` is the only place the "Add from phone" button
+lives (alongside "New Project"). Every phone falls under this breakpoint,
+so the one button meant for phone users was the one thing this rule hid.
+`.capture-status` (the Items count) inside that same container is already
+hidden by a separate, unaffected rule. Fixed by reflowing `.heading-actions`
+into a full-width wrapped flex row of 44px-min-height buttons instead of
+hiding it.
+
+**(4, found by owner testing (1)'s fix) Switching to "All Collections" showed
+a Collection stuck at 0 until manually clicked.** `WorkspaceSwitcher`'s
+`onSelect` picked the Collection to auto-select on Project switch via
+`data.collections.find(c => c.mission_id === missionId)` — for the
+"All Collections" case `missionId` is `""`, which no real Collection's
+`mission_id` ever equals, so this always found nothing and called
+`selectCollection(null)`. `fetchRecordsPage` short-circuits on a falsy
+`collectionId` and returns an empty page without ever fetching, so
+`data.records` stayed empty while the render's own fallback
+(`missionCollections.find(...) ?? missionCollections[0]`) still picked a
+real Collection to show as active — rendering it with a false `0` until the
+user clicked it themselves and triggered a real fetch. Fixed by mirroring
+`missionCollections`' own derivation (filter by `mission_id` when a Project
+is active, otherwise use the full list) instead of the narrower `.find`.
+
+**(5) Root-caused (1) and (4) by fetching Records like every other entity.**
+Owner's own diagnosis: the real reason these kept surfacing was that
+`data.records` was only ever the single active Collection's fetched page
+(`fetchRecordsPage`/`loadRecordPage`, one `base44.entities.Record.filter({
+collection_id }, ...)` network call per switch) instead of a bounded
+account-wide set like every other entity (`missions`, `collections`,
+`clips`, etc. all already load through `listDashboardPage`'s single-page
+`.list(sort, 100, 0)`). Every count/scoping bug above was a symptom of that
+one gap. Replaced it: `loadDashboard` now fetches Records the same way,
+except through `fetchAllPages` (`src/dashboard-pagination.js`) instead of a
+single 100-row page — that helper already existed, tested, and documented
+for exactly this purpose (G1: "loadDashboard used to fetch a single page
+per entity ... silently missing" rows past the cap) but was never actually
+wired into `loadDashboard`. It pages to a 5,000-row ceiling instead of
+silently truncating at one page.
+
+`selectCollection`/`changeRecordPage` are now pure client-side state
+changes (no fetch, no `isLoadingRecords`) — `activeRecords` filters the
+already-loaded set by `collection_id` and slices client-side by
+`recordPage`; `CollectionSidebar` now shows a real, always-live count for
+every Collection (not just the active one) instead of `—` for inactive
+rows. `dataMeta.records.hasMore`/`total` now come from `fetchAllPages`'s
+own honest ceiling-hit signal, reused as the "+" suffix everywhere a count
+is shown. `fetchRecordsPage`/`loadRecordPage`/`isLoadingRecords` and the
+now-unused `fetchPageWindow` import are deleted; `RecordTable`'s Prev/Next
+no longer needs an `isLoading`-gated disabled state since paging is
+synchronous now. `ActivityPanel` (record lookup for enrichment activity
+items) incidentally gets the same completeness improvement for free, since
+it was already being passed `data.records` directly.
+
+Branch `fix/dashboard-project-scoping-and-mobile-cta`. Gated locally:
+193/193 Deno tests, `npm run build` clean, `@base44/sdk` extension grep
+clean. Not yet merged, deployed, or owner-approved for deploy. No manual
+browser click-through performed this pass (no phone/local backend in this
+sandbox, same limitation noted throughout this file for other mobile/PWA
+work) — the CSS reflow in particular should get a real narrow-viewport
+check before shipping.

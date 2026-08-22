@@ -285,6 +285,29 @@ deployed, not as a pending branch.
 
 ## Immediate continuation
 
+**2026-08-21 (latest):** PR #76 and PR #77 merged to `main` and deployed
+(`target=site`, owner-approved and confirmed working live). #76 fixed a P0:
+Base44 started hard-rejecting every `base44.functions.invoke()` call made
+against the platform domain (`app.base44.com`) once the custom domain was
+fully connected — `403 "Backend functions cannot be accessed from the
+platform domain"`, breaking every write action in production (New Project,
+mobile capture, delete, resolve-routing, review actions). `src/api/base44Client.js`
+now points `serverUrl` at the deployed page's own origin instead. #77 fixed
+three dashboard bugs found by the owner (sidebar Collections leaking across
+Projects, a stale `0` item count, a hidden phone-capture CTA on mobile) and
+its own root cause (`data.records` was only ever the active Collection's
+fetched page — `loadDashboard` now fetches all Records up front via the
+existing, previously-unwired `fetchAllPages` helper, same pattern every
+other entity already used). See `docs/ENGINEERING_NOTES.md`'s two
+2026-08-21 entries for the full writeup. Live smoke-checked post-deploy:
+site `200`, `create-mission` now returns a real `401` from `entry.ts`
+instead of the platform-domain `403`. Still outstanding from the same
+owner bug report: the iOS Shortcut (`docs/IOS_SHORTCUT_SETUP.md`) opening
+Safari instead of the installed home-screen PWA — a genuine iOS platform
+limitation (no Universal Links registered, no API for a Safari-opened URL
+to hand off to an installed PWA), not something fixable in this codebase
+without a larger Universal Links/App Clips-style investment.
+
 Build Guide 29.2–29.4 are complete and deployed. The remaining manual check is
 one real browser pass: sign out to see the landing page, sign in, exercise the
 review panel (accept, redirect, create-with-Project, dismiss), delete an Item,

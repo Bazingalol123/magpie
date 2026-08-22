@@ -440,7 +440,12 @@ button:disabled { cursor: wait; opacity: .7; }
   .workspace-switcher > button { width: 100%; margin-top: 8px; padding: 0; justify-content: space-between; }
   .workspace-switcher h1 { font-size: 28px; letter-spacing: -.045em; }
   .mission-summary { max-width: 30rem; margin-top: 8px; font-size: 12px; line-height: 1.45; }
-  .heading-actions { display: none; }
+  /* .capture-status (the Items count) is already hidden by the shared rule
+     above; keep the "Add from phone" / "New Project" buttons reachable
+     instead of hiding the whole row -- phones are exactly who needs the
+     phone-capture CTA. */
+  .heading-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; margin-top: 10px; }
+  .heading-actions .secondary-button { flex: 1 1 auto; justify-content: center; min-height: 44px; }
 
   .onboarding-panel { margin-bottom: 14px; padding: 14px; border-radius: 12px; }
   .onboarding-panel h2 { font-size: 19px; line-height: 1.15; }
