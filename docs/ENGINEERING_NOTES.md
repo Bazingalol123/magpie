@@ -1585,3 +1585,34 @@ re-scaling per-frame, not palette bloat. Fix was product-level, not
 technical: don't animate two screenshots of genuinely different UI
 surfaces together; ship the dashboard frame as a static PNG instead (see
 `scripts/encode-onboarding-gifs.mjs`).
+
+## 2026-08-22 — Logout-to-base44.com root cause, fully traced (not fixable here)
+
+Owner captured the real network trace this time. Full chain:
+
+1. Browser navigates to `http://localhost:4400/api/apps/auth/logout?from_url=http%3A%2F%2Flocalhost%3A5173%2F`
+   (the local `npx base44 dev` backend, `appBaseUrl` resolved correctly).
+2. That backend responds `302 Location: https://base44.app/api/apps/auth/logout?from_url=http%3A%2F%2Flocalhost%3A5173%2F`
+   -- the local backend can't manage a real OAuth session itself, so it
+   forwards the logout to Base44's actual hosted auth domain, faithfully
+   preserving `from_url`.
+3. `base44.app` also returns `302`, but to its own default location
+   (landing on `app.base44.com`), not back to `from_url`.
+
+Confirmed this is not OAuth-specific: reproduced identically on a
+locally-registered email/password session (registered fresh via the local
+signup+OTP flow specifically to rule this out). Every logout, regardless
+of how the session started, gets proxied through `base44.app` by the local
+dev backend.
+
+Conclusion: step 3 is almost certainly Base44's own anti-open-redirect
+protection on their shared hosted auth domain -- it only honors `from_url`
+back to an origin it recognizes as belonging to the app (the real
+registered custom domain, `magpiecapture.com`, confirmed working correctly
+in production), never to an arbitrary unregistered `localhost` port. There
+is nothing in this repo's frontend (`src/api/base44Client.js`,
+`src/App.jsx`) or backend that participates in step 2 or 3 -- both happen
+entirely inside Base44's own hosted infrastructure. Not actionable from
+this codebase; closed as a known local-dev-only limitation, not a product
+bug. Workaround: after local logout lands on `app.base44.com`, manually
+navigate back to `localhost:<port>`.

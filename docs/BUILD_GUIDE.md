@@ -1639,3 +1639,32 @@ it to something real.
   the capture flow, not setup).
 - **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
 - **Verify:** 215/215 Deno tests, `npm run build` clean.
+
+### 47. Onboarding dismissal moved to the User record; logout-to-base44.com fully traced and closed
+
+- [x] **Build:** `src/App.jsx`'s `dismissOnboarding` now calls
+  `base44.auth.updateMe({ onboarding_dismissed: true })` (optimistically
+  updating local `user` state first) instead of writing
+  `localStorage["magpie.onboarding.dismissed"]`; `onboardingStage`'s
+  `dismissed` input now reads `user?.onboarding_dismissed`. Fixes a real
+  bug the owner found: a brand-new signup in the same browser as a
+  previously-onboarded account inherited that account's dismissal and
+  skipped onboarding entirely, since `localStorage` is scoped to the
+  browser, not the account. See `docs/DECISIONS.md` for why this
+  supersedes the earlier "keep it client-side" call.
+- **Investigated, closed (not a code fix):** the `npx base44 dev`
+  logout-to-`app.base44.com` issue is now fully traced via a real network
+  capture — the local backend correctly proxies logout to
+  `https://base44.app/...` preserving `from_url`, and `base44.app` itself
+  declines to honor `from_url` back to an unregistered `localhost` origin
+  (almost certainly anti-open-redirect protection on Base44's own hosted
+  auth domain). Confirmed not OAuth-specific (reproduced on a
+  locally-registered email/password session too). Nothing in this repo
+  participates in either hop. See `docs/ENGINEERING_NOTES.md` for the full
+  trace.
+- **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 216/216 Deno tests (1 new), `npm run build` clean.
+- **Known cost, accepted:** accounts that dismissed onboarding under the
+  old `localStorage` scheme will see it once more after this ships (never
+  recorded server-side); not worth a migration for a one-time, harmless
+  re-show.

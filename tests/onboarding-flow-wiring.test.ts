@@ -39,3 +39,10 @@ Deno.test("a returning user can reopen the onboarding walkthrough on demand, wit
   const flow = await Deno.readTextFile(new URL("src/onboarding/OnboardingWelcomeFlow.jsx", root));
   assert(flow.includes("STEP_ORDER"), "the wizard must support stepping backward, not just forward");
 });
+
+Deno.test("onboarding dismissal is tracked on the User record, not a browser-local flag that leaks across accounts sharing a browser", async () => {
+  const app = await Deno.readTextFile(new URL("src/App.jsx", root));
+  assert(!app.includes("magpie.onboarding.dismissed"), "must not read/write the old localStorage flag -- it leaked a previous account's dismissal onto a brand-new signup in the same browser");
+  assert(app.includes("base44.auth.updateMe({ onboarding_dismissed: true })"), "dismissal must persist to the authenticated user's own record via the SDK's owner-scoped updateMe");
+  assert(app.includes("user?.onboarding_dismissed"), "the stage machine must read dismissal from the real user object, not local state seeded from localStorage");
+});

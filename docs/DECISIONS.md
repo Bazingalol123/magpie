@@ -702,3 +702,32 @@ recordings — the tall portrait Side Panel vs. the wide page screenshots —
 still render at a uniform box size) with prev/next arrows and dot
 indicators, instead of three side-by-side cards of differing implied
 importance.
+
+## Onboarding dismissal moved to the User record (supersedes "dismissal stays client-side")
+
+Build Guide checkpoint 47. The earlier "onboarding dismissal stays
+client-side" entry above was a considered tradeoff at the time, but owner
+testing surfaced the failure mode that tradeoff hadn't accounted for: a
+brand-new signup, in the same browser as a previously-onboarded account,
+landed straight in the dashboard with onboarding already marked dismissed
+-- because `localStorage` is scoped to the browser/origin, not the
+account, a second account in the same browser silently inherits the
+first account's dismissal. That's not "onboarding reappears when it
+shouldn't" (the accepted cost of the original tradeoff); it's the reverse
+and more serious failure: a genuinely new user never sees it at all.
+
+Fixed by moving the flag onto the User record itself via
+`base44.auth.updateMe({ onboarding_dismissed: true })`, read back as
+`user.onboarding_dismissed`. This needed no new entity, schema file, or
+backend function -- the installed `@base44/sdk`'s own `auth.updateMe()`
+already supports arbitrary custom fields on the authenticated user's own
+record (confirmed in `.agents/skills/base44-sdk/references/auth.md`), and
+it's inherently owner-scoped (a user can only ever update their own
+record through it), so this carries none of the cross-owner-write risk a
+new entity or function would need fixtures for. `localStorage` is no
+longer read or written for this at all.
+
+One accepted one-time cost: any account that dismissed onboarding under
+the old `localStorage` scheme will see it once more after this ships,
+since their dismissal was never recorded server-side. Not worth a
+migration -- the flow is idempotent and harmless to see again once.

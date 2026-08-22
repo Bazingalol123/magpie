@@ -1221,9 +1221,6 @@ export default function App() {
   const [isReportingBug, setIsReportingBug] = useState(false);
   const [bugReportError, setBugReportError] = useState("");
   const [bugReportResult, setBugReportResult] = useState(null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(
-    () => window.localStorage.getItem("magpie.onboarding.dismissed") === "true",
-  );
   const [isCreatingOnboardingProject, setIsCreatingOnboardingProject] = useState(false);
   const [onboardingProjectError, setOnboardingProjectError] = useState("");
 
@@ -1707,17 +1704,25 @@ export default function App() {
     () => deriveOnboardingStage({
       extensionInstalls: data.extensionInstalls,
       clips: data.clips,
-      dismissed: onboardingDismissed,
+      dismissed: !!user?.onboarding_dismissed,
     }),
-    [data.extensionInstalls, data.clips, onboardingDismissed],
+    [data.extensionInstalls, data.clips, user?.onboarding_dismissed],
   );
   const isFirstRun = onboardingStage === OnboardingStage.NOT_PAIRED
     && data.collections.length === 0
     && data.records.length === 0
     && data.clips.length === 0;
-  const dismissOnboarding = () => {
-    window.localStorage.setItem("magpie.onboarding.dismissed", "true");
-    setOnboardingDismissed(true);
+  const dismissOnboarding = async () => {
+    // Tracked on the User record (base44.auth.updateMe), not localStorage:
+    // a browser-local flag leaks across accounts sharing one browser (a
+    // brand-new signup silently inherited a previous account's dismissal
+    // in this same origin) and never follows a real user across devices.
+    setUser((current) => (current ? { ...current, onboarding_dismissed: true } : current));
+    try {
+      await base44.auth.updateMe({ onboarding_dismissed: true });
+    } catch (error) {
+      setLoadError(error.response?.data?.error || error.message || "Could not save your onboarding preference.");
+    }
   };
   const openOnboardingReview = (clipId) => {
     setSelectedReviewClipId(clipId);
