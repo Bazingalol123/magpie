@@ -1811,3 +1811,49 @@ it to something real.
   checked the CSS/font/color rendering, not `chrome.*` interactions) --
   both `DM Sans` weights loaded, and the hero button/header render in the
   dashboard's exact green and typeface.
+
+### 52. De-templating pass, Phase 5: landing benchmark research and the low-risk punch-list items
+
+- [x] **Build:** New `docs/LANDING_BENCHMARK.md` records a live-browser
+  comparison against Linear, Raycast, and Notion's landing pages (opened
+  and screenshotted 2026-08-22, not recalled from memory), the concrete
+  patterns all three share, and a four-item punch list ranked by how
+  mechanical each change actually is. Implemented the three that turned
+  out to be genuinely mechanical:
+  - `src/Landing.jsx`'s two jargon eyebrows ("web intelligence, kept
+    alive", "bounded AI, deterministic writes") reworded to plain,
+    concrete language ("clip, organize, stay current"; "what the AI
+    actually does") -- same pattern as Phase 1's `docs/VOICE.md` pass on
+    onboarding/login, just not done on Landing until the benchmark
+    confirmed real product sites don't use this device at all.
+  - The italic-accent-word device, which `docs/VOICE.md` already named
+    Landing as owning, is now used once on that page instead of three
+    times (kept on the hero H1, removed from the story H2 and the AI
+    section H2) -- same reduction Phase 3 already proved out on the login
+    page.
+  - The "01/02/03" `ld-scene-index` numeral labels in the story section
+    are removed; the `ld-steps` section's icon-based steps are unaffected
+    (an icon isn't the numbered-badge motif this pass targets). Confirmed
+    removing the labels doesn't affect `.ld-scene-row`'s grid layout --
+    they were a plain block element with no layout dependents.
+  - Three now-dead CSS rules removed alongside their JSX
+    (`.ld-story-intro h2 em`, `.ld-final h2 em`, `.ld-ai-intro h2 em`,
+    `.ld-scene-index`).
+  - **Not implemented:** the punch list's highest-value, best-evidenced
+    item -- replacing the story section's hand-built `.ld-mock-*` fake-UI
+    illustrations with real screenshots, which is what all three
+    benchmarked sites actually do. Looked mechanical in the plan; wasn't
+    once the actual JSX was read. The three mock scenes illustrate a
+    specific fictional "moving to Berlin" narrative that doesn't match any
+    of Magpie's existing real capture assets (those are generic
+    capture-flow demos from onboarding). Swapping them in would either
+    break the narrative or require rewriting the copy around whatever the
+    real assets show -- a content decision, not a mechanical substitution,
+    so it's recorded in the benchmark doc for the owner to decide rather
+    than guessed at.
+- **Files:** `docs/LANDING_BENCHMARK.md` (new), `src/Landing.jsx`,
+  `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Landing page
+  driven live in a real browser at both the hero and the story section;
+  eyebrow copy, single italic instance, and the removed numeral labels all
+  confirmed with no layout regression.

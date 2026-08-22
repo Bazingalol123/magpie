@@ -863,3 +863,36 @@ side panel's own `#2b5738`/`#1e4229` to the dashboard's exact
 secondary green already in that file would be a full rewrite of a
 stylesheet that otherwise works fine, not the "partial, lightweight"
 alignment the Phase 1 plan called for.
+
+## De-templating pass, Phase 5: research confirmed the plan, but not the "low-risk" label on its best item
+
+Build Guide checkpoint 52. The Phase 1 plan guessed that swapping Landing's
+hand-built fake-UI mock scenes for real screenshots would be a low-risk
+punch-list item once the benchmark research was done. It wasn't, and this
+is worth recording because the guess was reasonable and still wrong: the
+research (`docs/LANDING_BENCHMARK.md`) fully confirmed the direction --
+Linear, Raycast, and Notion all use real, high-fidelity product screenshots
+as their hero visual, none use abstract mockups -- but *implementing* it
+for Magpie specifically ran into something the research couldn't surface:
+the three story-section mock scenes are written around a specific fictional
+"moving to Berlin" narrative, and Magpie's existing real capture assets are
+generic onboarding demos that don't depict that narrative. There's no
+mechanical swap available; it's a choice between recording new footage
+that actually matches the copy, or rewriting the copy to match footage
+that already exists. Both are legitimate content decisions, so this
+checkpoint stops at naming the choice in the benchmark doc rather than
+picking one unasked.
+
+The three items that were genuinely mechanical -- wording the two jargon
+eyebrows plainly, reducing the italic-accent device from three Landing
+instances to the one `docs/VOICE.md` already allows it, and dropping the
+"01/02/03" story-section labels -- shipped this checkpoint. All three are
+the same reductions Phases 1 and 3 already proved out elsewhere in the
+product; Phase 5's contribution was confirming, with live evidence from
+real competitor sites rather than the owner's or the author's judgment
+alone, that Landing should stop being the exception.
+
+This closes the five-phase de-templating plan from Phase 1. What's left
+un-done and named for a follow-up, if wanted: the real-screenshot swap
+above, and matching lucide's remaining generic icon usage was explicitly
+ruled out of scope in Phase 2 rather than deferred.
