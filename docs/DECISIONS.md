@@ -838,3 +838,28 @@ solid dot that reuses a pattern the product already has elsewhere
 (`.collection-dot`, `.status-dot`) rather than inventing a fourth "step
 indicator" visual language. Landing itself is still untouched -- both of
 its instances of each device stay in place pending Phase 5.
+
+## De-templating pass, Phase 4: self-host the extension's font instead of importing it remotely
+
+Build Guide checkpoint 51. Bringing `extension/sidepanel.css` closer to
+`src/index.css`'s tokens could have meant literally copying the
+dashboard's `@import url('https://fonts.googleapis.com/...')` line. That
+was rejected: the side panel is opened far more often and far more
+briefly than the dashboard is loaded, and giving it a new per-open network
+call to a third-party font CDN -- with the attendant offline-breakage risk
+and a category of remote-resource loading the Chrome Web Store review
+process pays closer attention to for extensions than it does for websites
+-- would be a worse trade than the font mismatch it fixes. Downloading the
+two WOFF2 files the side panel actually needs (400 and 600 weight, Latin
+subset, ~14KB each) and bundling them as static extension assets gets the
+identical visual result -- confirmed both report `loaded` via
+`document.fonts` in a real render -- with zero runtime network dependency
+added, which is strictly better than what the dashboard itself does, not
+just a smaller version of it.
+
+The color-token change (three primary-brand-color spots moved from the
+side panel's own `#2b5738`/`#1e4229` to the dashboard's exact
+`#254d32`/`#193d27`) stayed intentionally partial. Matching every
+secondary green already in that file would be a full rewrite of a
+stylesheet that otherwise works fine, not the "partial, lightweight"
+alignment the Phase 1 plan called for.

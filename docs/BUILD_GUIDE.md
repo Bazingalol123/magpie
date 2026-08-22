@@ -1770,3 +1770,44 @@ it to something real.
 - **Verify:** 216/216 Deno tests, `npm run build` clean. Login page driven
   live in a real browser; headline renders as plain text and the three
   flow rows show a small dot in place of the numeral badge.
+
+### 51. De-templating pass, Phase 4: pull the extension side panel toward the dashboard's tokens
+
+- [x] **Build:** `extension/sidepanel.css` was a fully separate design
+  system (system-ui/Segoe UI, a slightly different green family, no
+  monospace) with no shared source with `src/index.css` -- closing that gap
+  was the point, not a full rewrite. Two changes:
+  - Self-hosted DM Sans, weights 400 and 600 (the only two the side panel
+    actually needs), as local WOFF2 files (`extension/fonts/dm-sans-
+    400.woff2`, `dm-sans-600.woff2`, ~14KB each, Latin subset) declared via
+    `@font-face` at the top of `sidepanel.css` and set as the body font,
+    falling back to the previous `"Segoe UI", system-ui` stack. Deliberately
+    **not** the dashboard's `@import url(fonts.googleapis.com/...)` --
+    the side panel is a small, frequently-opened surface and shouldn't gain
+    a new network dependency (or any Chrome Web Store remote-resource
+    scrutiny) just to match a typeface. Self-hosting gets the same visual
+    result with zero runtime network calls; confirmed both weights report
+    `loaded` via `document.fonts` in a real browser render.
+  - The three spots carrying the side panel's primary brand color (the
+    "Clip element" hero button gradient, the `.save` button, the
+    auto-refresh toggle's `accent-color`) now use the dashboard's exact
+    `#254d32` / `#193d27` instead of the side panel's own slightly
+    different `#2b5738` / `#1e4229`. Body text and background were also
+    changed to the dashboard's exact `#15261d` / `#f7f8f3` (both were
+    already visually near-identical, so this is a token-exactness fix, not
+    a visible color shift). The several other secondary greens already in
+    `sidepanel.css` (button/icon accents, hover states) are deliberately
+    left alone -- matching every shade would be a full rewrite, not the
+    "partial, lightweight" alignment this phase called for.
+- **Files:** `extension/sidepanel.css`, `extension/fonts/dm-sans-400.woff2`
+  (new), `extension/fonts/dm-sans-600.woff2` (new). No `manifest.json`
+  change needed -- the fonts are static assets the side panel's own page
+  loads by relative path, the same as its existing `icons/*.png`.
+- **Verify:** `node --check` clean on every `extension/**/*.js` (unchanged
+  by this pass but re-run), `@base44/sdk` grep clean, 216/216 Deno tests,
+  `npm run build` clean. `sidepanel.html` was served from a local static
+  server and driven live in a real browser (the extension APIs it calls
+  aren't available outside a real Chrome extension context, so this
+  checked the CSS/font/color rendering, not `chrome.*` interactions) --
+  both `DM Sans` weights loaded, and the hero button/header render in the
+  dashboard's exact green and typeface.
