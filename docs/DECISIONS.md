@@ -971,3 +971,46 @@ it for the robustness -- if a genuine floating popover is wanted
 somewhere later, it needs real anchor-positioning logic (a ref + measured
 offsets, or a portal), not `position: absolute` inside a scrollable
 ancestor.
+
+## Dashboard redesign, R3: don't "fix" a design decision that already works
+
+Build Guide checkpoint 55. The plan's R3 line item -- "table/card default
+switch" -- was written from `docs/DASHBOARD_AUDIT.md`'s claim that table
+is still the dashboard's default `displayMode`. That claim was checked
+before acting on it and turned out to be incomplete: `App.jsx:192`'s
+`inferCollectionDisplayMode` already picks cards vs. table per Collection
+based on real data -- cards when most of that Collection's records have a
+captured screenshot, table when they don't. That's a genuinely good,
+already-shipped heuristic: a Collection of mostly numeric/text fields
+(price comparisons, say) is easier to compare row-by-row in a table than
+scattered across cards, while a Collection with real photos benefits from
+seeing them. Forcing an always-cards default, as R3 was originally
+scoped, would have made the dashboard worse for exactly the Collections
+where a table earns its density.
+
+This is worth recording for the same reason the R1 correction was: the
+audit's job is to find real problems, not to justify a pre-decided fix.
+Checking the actual behavior before changing it, and being willing to
+leave R3's plan half undone when the "problem" turns out not to be one,
+matters more than shipping everything a plan named.
+
+What R3 did ship is the audit's other, verified-real finding: three
+panels competing for attention at once. `ActivityPanel` is no longer a
+permanent grid column; it's a topbar-launched overlay reusing the app's
+existing `.detail-overlay` pattern. This incidentally fixes a real
+regression the old version had -- `.activity-panel { display: none }`
+below 990px made it fully unreachable on tablet-width screens, not just
+hidden on desktop, which is a worse failure than "always visible and
+competing for space." The new version is reachable at every width via
+the topbar button or (below 680px, where `.pair-button` itself is
+hidden) the mobile hamburger menu.
+
+Also caught and fixed here: `--status-blocked` (defined in R1) was wrong.
+It was set to the terracotta danger-red by pattern-matching against
+`.danger-button` rather than checking what "blocked" actually renders as
+today -- every real instance (`.blocked-notice`, `.blocked-badge`,
+`.record-card-badge`) already uses the amber family, the same as "needs
+review." Terracotta stays reserved for destructive delete actions, a
+genuinely different concept from "this source needs attention."
+Corrected the token to match reality before it propagated into more
+places using the wrong color.

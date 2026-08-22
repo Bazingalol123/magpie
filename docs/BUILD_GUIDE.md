@@ -1957,3 +1957,52 @@ per-Collection "live" badge in the table panel header, `index.css:89`)
 was still hardcoded green (`#eff6ec`/`#47814f`/`#58a75e`) and is the same
 "live" concept; it now uses `--status-live` too. Blue now means "live" in
 both places it appears in the dashboard, not one isolated spot.
+
+### 55. R3: de-permanentize the activity panel; a card-default assumption turned out to already be handled
+
+- [x] **Build:** The plan's R3 line item was "table/card default switch +
+  ActivityPanel/workspace-grid layout change." Investigating the first
+  half before touching it found the audit's "table is still the default
+  `displayMode`" claim was wrong: `App.jsx:192`'s `inferCollectionDisplayMode`
+  already picks cards vs. table per Collection based on real data (cards
+  when over half that Collection's records have a captured screenshot,
+  table otherwise) -- a genuinely reasonable, already-shipped heuristic,
+  not an oversight to override. Forcing an always-cards default would
+  have *regressed* it for text/numeric-heavy Collections where a table
+  is the better comparison view. Left it alone rather than "fixing" a
+  design decision that was already correct -- see `docs/DECISIONS.md`.
+  - The real, audited problem -- three panels competing for attention at
+    once (`.workspace-grid`: sidebar / table / activity, always visible)
+    -- is fixed: `ActivityPanel` is no longer a permanent third grid
+    column. It's now a topbar-launched overlay (`isActivityOpen` state,
+    a new "Activity" button next to "How it works," reusing the app's
+    existing `.detail-overlay` slide-in pattern rather than inventing a
+    new one), added to the mobile hamburger menu too so it's reachable at
+    every width -- fixing a real regression the old column-based version
+    had: `.activity-panel { display: none }` below 990px made it
+    unreachable on tablet, not just hidden on desktop.
+  - `.workspace-grid` drops to two grid tracks (`215px minmax(0, 1fr)`);
+    its existing 990px breakpoint already used that same two-column
+    shape as a fallback, so this unifies the layout across breakpoints
+    rather than introducing a new one.
+  - `.activity-pulse` (the field-change icon in the activity list) now
+    uses `--status-changed` instead of a hardcoded green -- the same
+    "field changed" concept R2 colored in `RecordDetail`, now consistent
+    across both places it appears.
+  - **A real error in R1's tokens, caught before it spread further:**
+    `--status-blocked` was defined as the terracotta danger-red
+    (`#a44a2f`), assumed by pattern-matching against `.danger-button`
+    without checking what "blocked" actually looks like today. It
+    doesn't match -- every real blocked-source indicator in the app
+    (`.blocked-notice`, `.blocked-badge`, `.record-card-badge`) already
+    uses the amber family (`#ad8434`/`#fdf3e3`), the same as "needs
+    review." Terracotta-red is specifically reserved for destructive
+    delete actions, a different concept. Fixed the token definition to
+    match reality and wired it into all three existing hardcoded spots,
+    rather than shipping a new, inconsistent "blocked" color alongside
+    the real one.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Activity overlay
+  rendered against the real compiled CSS via a temporary static preview
+  (built into `dist/`, deleted before commit): slides in cleanly, close
+  button works, amber pulse dots render correctly, no clipping.

@@ -608,30 +608,32 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
   );
 }
 
-function ActivityPanel({ enrichments, records, onSelect }) {
+function ActivityPanel({ enrichments, records, onSelect, onClose }) {
   const recordById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records]);
   return (
-    <aside className="activity-panel">
-      <div className="activity-heading"><Activity size={16} /><span>Field updates</span></div>
-      {enrichments.length ? (
-        <div className="activity-list">
-          {enrichments.slice(0, 6).map((enrichment) => {
-            const record = recordById.get(enrichment.record_id);
-            return (
-              <button key={enrichment.id} className="activity-item" onClick={() => record && onSelect(record)}>
-                <span className="activity-pulse"><Check size={11} /></span>
-                <span>
-                  <b>{enrichment.field}</b> changed to <strong>{enrichment.new_value}</strong>
-                  <small>{formatDate(enrichment.checked_at)}</small>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="activity-empty"><Clock3 size={20} /><p>Changes detected by your watches will appear here.</p></div>
-      )}
-    </aside>
+    <div className="detail-overlay activity-overlay" role="presentation" onMouseDown={onClose}>
+      <aside className="activity-panel" role="dialog" aria-modal="true" aria-label="Recent field updates" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="activity-heading"><Activity size={16} /><span>Field updates</span><button className="icon-button" onClick={onClose} aria-label="Close"><X size={17} /></button></div>
+        {enrichments.length ? (
+          <div className="activity-list">
+            {enrichments.slice(0, 6).map((enrichment) => {
+              const record = recordById.get(enrichment.record_id);
+              return (
+                <button key={enrichment.id} className="activity-item" onClick={() => record && onSelect(record)}>
+                  <span className="activity-pulse"><Check size={11} /></span>
+                  <span>
+                    <b>{enrichment.field}</b> changed to <strong>{enrichment.new_value}</strong>
+                    <small>{formatDate(enrichment.checked_at)}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="activity-empty"><Clock3 size={20} /><p>Changes detected by your watches will appear here.</p></div>
+        )}
+      </aside>
+    </div>
   );
 }
 
@@ -1240,6 +1242,7 @@ export default function App() {
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [onboardingTourStep, setOnboardingTourStep] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
@@ -1785,7 +1788,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => setIsActivityOpen(true)}><Activity size={15} /> Activity</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setIsActivityOpen(true)}><Activity size={14} /> Activity</button><button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><AgentIcon size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
@@ -1827,9 +1830,9 @@ export default function App() {
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
-        <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "cards"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
       </section>
+      {isActivityOpen && <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} onClose={() => setIsActivityOpen(false)} />}
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
       {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />}
