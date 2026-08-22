@@ -393,6 +393,17 @@ non-goal against implementing revoke/rotate in this pass.
    44's pair-first order per explicit owner correction — see
    `docs/DECISIONS.md` for why this ordering should be treated as settled
    only provisionally after flipping twice in one session.
+   **Checkpoints 46-47, same day:** the dead "See how the capture flow
+   works" empty-Collection prompt (previously just `window.scrollTo` to
+   nothing) now reopens the real tour at the Modes step. Onboarding
+   dismissal moved off `localStorage` onto the User record
+   (`base44.auth.updateMe({ onboarding_dismissed: true })`) after owner
+   testing found a real bug: a brand-new signup in the same browser as a
+   previously-onboarded account inherited that dismissal and skipped
+   onboarding entirely. The `npx base44 dev` logout-to-`app.base44.com`
+   issue is now fully traced (real network capture) and closed as a
+   Base44-hosted-infrastructure limitation, not a product bug — see
+   `docs/ENGINEERING_NOTES.md`.
    Branch `feat/onboarding-flow`, still not merged or deployed.
    Build Guide checkpoint 42 (branch `feat/onboarding-flow`, not yet merged
    or deployed) replaces the old pairing-checklist-only first run with the
