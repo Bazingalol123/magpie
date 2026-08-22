@@ -145,6 +145,13 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-paste-form { display: grid; gap: 8px; }
 .onboarding-paste-form input { padding: 9px 11px; color: #24352a; background: #fff; border: 1px solid #d8e2d5; border-radius: 8px; font-size: 12.5px; }
 
+.onboarding-wizard-nav { min-height: 20px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; }
+.onboarding-back-link { padding: 0; display: inline-flex; align-items: center; gap: 5px; color: #5b6c60; background: transparent; font-size: 12px; font-weight: 600; }
+.onboarding-back-link:hover { color: #315c3a; }
+.onboarding-wizard-close { margin-left: auto; }
+.onboarding-tour-dialog { width: min(100%, 720px); max-height: 88vh; overflow-y: auto; border-radius: 16px; box-shadow: 0 25px 70px rgba(24,43,28,.2); }
+.onboarding-tour-dialog .onboarding-panel { margin: 0; border-radius: 16px; }
+
 .onboarding-capture-source { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: #5b6c60; }
 .onboarding-capture-source span { font-weight: 600; color: #3d4c42; }
 .onboarding-capture-source a { color: #315c3a; }

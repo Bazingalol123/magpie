@@ -1,6 +1,18 @@
 import { useState } from "react";
-import { ArrowRight, Check, Download, Key, Link2, LoaderCircle, Monitor, Smartphone, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, Key, Link2, LoaderCircle, Monitor, Smartphone, Sparkles, X } from "lucide-react";
 import { PairingStepStatus, deriveOverallPairingStatus } from "./state.js";
+
+const STEP_ORDER = ["welcome", "project", "learn", "method"];
+
+function BackLink({ step, onStepChange }) {
+  const index = STEP_ORDER.indexOf(step);
+  if (index <= 0) return null;
+  return (
+    <button type="button" className="onboarding-back-link" onClick={() => onStepChange(STEP_ORDER[index - 1])}>
+      <ArrowLeft size={13} /> Back
+    </button>
+  );
+}
 
 const EXTENSION_RELEASES_URL = "https://github.com/Bazingalol123/magpie/releases/latest";
 
@@ -236,10 +248,16 @@ export default function OnboardingWelcomeFlow({
   onPasteCapture,
   isMobileCapturing,
   mobileCaptureError,
+  initialStep = "welcome",
+  onClose,
 }) {
-  const [step, setStep] = useState("welcome");
+  const [step, setStep] = useState(initialStep);
   return (
     <section className="onboarding-panel onboarding-wizard" role="region" aria-label="Get started with Magpie">
+      <div className="onboarding-wizard-nav">
+        <BackLink step={step} onStepChange={setStep} />
+        {onClose && <button type="button" className="icon-button onboarding-wizard-close" onClick={onClose} aria-label="Close"><X size={17} /></button>}
+      </div>
       {step === "welcome" && <WelcomeStep onStart={() => setStep("project")} onSkipToWorkspace={onSkipToWorkspace} />}
       {step === "project" && (
         <ProjectStep
