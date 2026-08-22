@@ -32,8 +32,9 @@ Deno.test("the onboarding wizard reuses the existing authenticated mobile-captur
 
 Deno.test("a returning user can reopen the onboarding walkthrough on demand, without re-running the full first-run tour", async () => {
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
-  assert(app.includes("setIsOnboardingTourOpen(true)"), "the topbar must expose a way to reopen onboarding guidance at any time");
-  assert(app.includes('initialStep="pair"'), "reopening onboarding must not force a returning user back through Welcome/Project again");
+  assert(app.includes('setOnboardingTourStep("pair")'), "the topbar must expose a way to reopen onboarding guidance at any time");
+  assert(app.includes('setOnboardingTourStep("modes")'), "the empty-Collection prompt must reopen onboarding at the capture-modes step, not scroll the page");
+  assert(app.includes("initialStep={onboardingTourStep}"), "the modal must honor whichever step opened it, not force a returning user back through Welcome/Project");
 
   const flow = await Deno.readTextFile(new URL("src/onboarding/OnboardingWelcomeFlow.jsx", root));
   assert(flow.includes("STEP_ORDER"), "the wizard must support stepping backward, not just forward");

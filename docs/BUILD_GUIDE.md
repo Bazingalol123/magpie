@@ -1619,3 +1619,23 @@ Same-day further owner feedback on checkpoint 44's flow.
   `app.base44.com` issue is now confirmed reproducible by the owner but
   still needs a fresh repro with network logs before it's actionable from
   this repo's code.
+
+### 46. Wire the dead "See how the capture flow works" button to the real onboarding tour
+
+Owner noticed an existing empty-Collection prompt's "See how the capture
+flow works" button in the dashboard and asked whether to remove it or wire
+it to something real.
+
+- [x] **Build:** confirmed it was dead: `RecordTable`'s empty-Collection
+  branch called `window.scrollTo({ top: document.body.scrollHeight })`
+  with nothing "how it works"-like below the fold to scroll to. Wired it
+  to the real onboarding tour modal instead of removing it -- the copy was
+  already accurate, it just didn't do anything. Generalized the tour's
+  open state from a boolean (`isOnboardingTourOpen`) to
+  `onboardingTourStep` (`null` when closed, else the step name to open
+  at), so different entry points can jump to the most relevant step: the
+  topbar "How it works" button still opens at `pair`, while this
+  empty-Collection prompt now opens at `modes` (it's specifically about
+  the capture flow, not setup).
+- **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
+- **Verify:** 215/215 Deno tests, `npm run build` clean.

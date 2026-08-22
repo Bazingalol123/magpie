@@ -475,11 +475,11 @@ function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRe
   );
 }
 
-function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect }) {
+function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect, onOpenOnboardingTour }) {
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
-  if (!collection) return <EmptyCollection onSelect={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })} />;
+  if (!collection) return <EmptyCollection onSelect={onOpenOnboardingTour} />;
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
   const showCards = displayMode === "cards";
@@ -1200,7 +1200,7 @@ export default function App() {
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
-  const [isOnboardingTourOpen, setIsOnboardingTourOpen] = useState(false);
+  const [onboardingTourStep, setOnboardingTourStep] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -1740,7 +1740,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setIsOnboardingTourOpen(true)}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
@@ -1782,7 +1782,7 @@ export default function App() {
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
         <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
       </section>
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
@@ -1800,14 +1800,14 @@ export default function App() {
         />
       )}
       {isAgentOpen && <MagpieAgentPanel project={activeMission} collection={activeCollection} record={selectedRecord} onClose={() => setIsAgentOpen(false)} />}
-      {isOnboardingTourOpen && (
-        <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={() => setIsOnboardingTourOpen(false)}>
+      {onboardingTourStep && (
+        <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={() => setOnboardingTourStep(null)}>
           <div className="onboarding-tour-dialog" onMouseDown={(event) => event.stopPropagation()}>
             <OnboardingWelcomeFlow
               extensionInstalls={data.extensionInstalls}
               isPairing={isPairing}
               onPair={handleCreatePairing}
-              onSkipToWorkspace={() => setIsOnboardingTourOpen(false)}
+              onSkipToWorkspace={() => setOnboardingTourStep(null)}
               onCreateProject={createOnboardingProject}
               isCreatingProject={isCreatingOnboardingProject}
               projectError={onboardingProjectError}
@@ -1815,8 +1815,8 @@ export default function App() {
               onPasteCapture={submitMobileCapture}
               isMobileCapturing={isMobileCapturing}
               mobileCaptureError={mobileCaptureError}
-              initialStep="pair"
-              onClose={() => setIsOnboardingTourOpen(false)}
+              initialStep={onboardingTourStep}
+              onClose={() => setOnboardingTourStep(null)}
             />
           </div>
         </div>
