@@ -776,3 +776,45 @@ the next surface reaches for something else instead of repeating it.
 
 Landing page copy and visuals (`src/Landing.jsx`) are unchanged this
 checkpoint on purpose -- see the benchmark-first decision above.
+
+## De-templating pass, Phase 2: a bounded custom icon set, not a full replacement
+
+Build Guide checkpoint 49. The owner explicitly asked to push back if a full
+custom icon set looked like the wrong call, given the "refine, don't
+rebrand" decision already made in Phase 1. It does: replacing all of
+lucide-react would mean maintaining a parallel copy of dozens of generic
+action glyphs (close, back, arrow, check, trash) for no visible benefit,
+since those are exactly the icons a hand-designed product would also reach
+for a library over. The tell was never "this app uses lucide" -- it's that
+none of Magpie's own distinguishing concepts had their own visual identity.
+
+So this pass is deliberately narrow: six custom marks (`src/components/
+icons.jsx`) for the handful of ideas that recur across the product and are
+specific to Magpie -- the three capture modes, pairing/connection, the
+agent's own automatic behavior, and the one dedicated empty-Collection
+illustration -- built to lucide's own visual weight (24x24, 2px round
+stroke) so they sit next to the remaining lucide icons without clashing.
+Every other lucide usage in the product is untouched.
+
+Two of the six needed a second pass. Hand-written SVG path coordinates are
+easy to get subtly wrong without a design tool, so each mark was rendered
+in a real browser, both at its actual call-site size and blown up to 160px,
+before being treated as done (a temporary `public/_icon-preview.html`,
+deleted before committing -- never part of the shipped bundle). The first
+pairing-icon draft read as a barbell/headphones because two heavily
+rounded rects plus a faint dashed connector collapsed into two ovals at
+small sizes; tightening the corner radius and making the connector two
+visible segments around a bigger pulse dot fixed it. The first agent-icon
+draft (a filled triangle meant to suggest a bird's wings meeting at a
+point) just read as an arrowhead at any size; switching to the classic
+two-curved-stroke "gull" mark -- and to a stroke-based icon like the other
+five, instead of a filled one -- both fixed the legibility and made it
+visually consistent with the rest of the set.
+
+`PairingIcon` replacing `Key` everywhere pairing is the action is also a
+more accurate metaphor, not just a different one: pairing the extension is
+establishing a device link, not presenting a credential, and the six call
+sites it now covers (the pairing dialog, the topbar pair button, the
+onboarding pair step, all three `PairingChecklist` icons, and
+`ReconnectNotice`, which previously mixed `Key` and an unrelated `PlugZap`)
+all mean the same thing and now render the same icon.

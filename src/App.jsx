@@ -16,7 +16,6 @@ import {
   FileText,
   FolderPlus,
   Inbox,
-  Key,
   Layers3,
   Linkedin,
   LoaderCircle,
@@ -37,6 +36,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
+import { AgentIcon, EmptyNestIcon, PairingIcon } from "./components/icons.jsx";
 import Landing from "./Landing.jsx";
 import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
@@ -241,7 +241,7 @@ function PairingDialog({ pairing, onClose }) {
     <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
       <section className="pairing-dialog" role="dialog" aria-modal="true" aria-label="Pair Magpie extension" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head">
-          <div><div className="eyebrow"><Key size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
+          <div><div className="eyebrow"><PairingIcon size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
         <p>Copy both values into the Magpie extension's side panel. The pairing token is shown only now and is stored as a hash on the server.</p>
@@ -419,7 +419,7 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
 function EmptyCollection({ onSelect }) {
   return (
     <div className="empty-collection">
-      <div className="empty-icon"><Inbox size={25} /></div>
+      <div className="empty-icon"><EmptyNestIcon size={25} /></div>
       <h2>Your first Item is waiting.</h2>
       <p>Clip any product, listing, recipe, or article. Magpie will organize it into the right Collection automatically.</p>
       <button className="text-button" onClick={onSelect}>See how the capture flow works <ChevronRight size={16} /></button>
@@ -1069,7 +1069,7 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
         <header className="agent-head">
           <div className="agent-title">
             <MagpieMark size={32} />
-            <div><div className="eyebrow"><Sparkles size={12} /> evidence-grounded agent</div><h2>Ask Magpie</h2></div>
+            <div><div className="eyebrow"><AgentIcon size={12} /> evidence-grounded agent</div><h2>Ask Magpie</h2></div>
           </div>
           <div className="agent-head-actions">
             <button className="agent-new-button" onClick={startNewConversation} disabled={isLoadingConversation}>New chat</button>
@@ -1766,10 +1766,10 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
       </header>
       <section className="workspace-heading">
-        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
+        <div><div className="eyebrow"><AgentIcon size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
               setActiveMissionId(missionId);
               // Must mirror missionCollections' own derivation: switching to
               // "All Collections" (missionId "") has no mission_id to match,

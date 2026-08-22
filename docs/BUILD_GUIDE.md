@@ -1695,3 +1695,57 @@ it to something real.
   untouched this checkpoint — the owner called the landing page fine as-is
   and asked for a benchmark pass against real B2C product sites before
   editing it (Phase 5 of the plan), not an immediate rewrite.
+
+### 49. De-templating pass, Phase 2: bounded custom icon set
+
+- [x] **Build:** New `src/components/icons.jsx` exports six custom marks
+  (24x24 viewBox, 2px round stroke, same visual weight as lucide-react so
+  they don't clash) for the concepts that are actually specific to Magpie,
+  wired in wherever the audit found a generic lucide stand-in for them.
+  Lucide is untouched everywhere else — this stays a bounded set, not a
+  full custom library.
+  - `ClipElementIcon` / `SnipAreaIcon` / `SavePageIcon` — the three real
+    capture modes. All three build on one shared `ViewportFrame` (a small
+    page/browser outline) so they read as a family: a target reticle for
+    Clip Element, a dashed marquee for Snip Area, a fully filled interior
+    for Save Page. Replaces `MousePointerClick`/`Crop`/`FileText` in
+    `OnboardingWelcomeFlow.jsx`'s `MODE_SLIDES`.
+  - `PairingIcon` — two connected nodes with a pulse between them, since
+    pairing is a device link rather than a credential (a more accurate
+    metaphor than the key it replaces, not just a different one). Replaces
+    every `Key` used for the pair/reconnect action:
+    `App.jsx` (pairing dialog eyebrow, topbar "Pair extension"),
+    `OnboardingWelcomeFlow.jsx`'s `PairStep`, `PairingChecklist.jsx` (all
+    three), and `ReconnectNotice.jsx` (which also had its own `PlugZap`
+    step icon unified onto the same mark for consistency within that
+    surface).
+  - `AgentIcon` — the classic two-stroke gull/bird silhouette, replacing
+    `Sparkles` (the generic "AI feature" icon nearly every AI product uses)
+    at the two spots that specifically describe Magpie's own automatic
+    behavior: the `Ask Magpie` panel eyebrow and the dashboard's
+    "automatically organized, always current" heading eyebrow in `App.jsx`.
+    Other `Sparkles` usages (the onboarding welcome continue button, the
+    topbar "How it works" button, Landing) are left as lucide -- they're
+    decorative button chrome, not a recurring brand moment.
+  - `EmptyNestIcon` — an empty woven nest/bowl, replacing `Inbox` only in
+    the large empty-Collection illustration (`App.jsx`'s `EmptyCollection`).
+    The smaller inline "needs review" `Inbox` usages elsewhere are left as
+    lucide; this was scoped to the one dedicated illustration moment, not
+    every inbox-shaped icon in the product.
+  - Iterated on `PairingIcon` and `AgentIcon` after an initial pass looked
+    like a barbell and a plain arrowhead respectively at both 16px and a
+    160px blown-up render (a temporary `public/_icon-preview.html`, removed
+    before commit) — tightened the pairing nodes' corner radius and made
+    the connector visible as two segments plus a bigger pulse dot, and
+    switched the agent mark from a filled triangle to two curved strokes
+    forming the recognizable gull "M" shape instead.
+- **Files:** `src/components/icons.jsx` (new), `src/App.jsx`,
+  `src/onboarding/OnboardingWelcomeFlow.jsx`,
+  `src/onboarding/PairingChecklist.jsx`, `src/onboarding/ReconnectNotice.jsx`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Icons were checked
+  visually (both at their real call-site sizes and blown up large) via a
+  temporary static preview page served through the Vite dev server, not
+  through a full signed-in run of the onboarding/pairing/agent screens --
+  this repo's test credentials weren't available in this session. The
+  login page (which shares the same bundle and doesn't need a session) was
+  driven live in a real browser and rendered cleanly.

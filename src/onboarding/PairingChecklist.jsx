@@ -1,4 +1,5 @@
-import { Check, Download, Key, LoaderCircle, ShieldCheck } from "lucide-react";
+import { Check, Download, LoaderCircle, ShieldCheck } from "lucide-react";
+import { PairingIcon } from "../components/icons.jsx";
 import { OnboardingStage, PairingStepStatus, deriveOverallPairingStatus } from "./state.js";
 
 const EXTENSION_RELEASES_URL = "https://github.com/Bazingalol123/magpie/releases/latest";
@@ -42,11 +43,11 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
           </div>
         </li>
         <li className="onboarding-step onboarding-desktop-only">
-          <span className="onboarding-step-icon"><Key size={15} /></span>
+          <span className="onboarding-step-icon"><PairingIcon size={15} /></span>
           <div>
             <p>Pair the extension to your library</p>
             <button className="onboarding-cta" onClick={onPair} disabled={isPairing}>
-              {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
+              {isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />}
               {isReconnect ? "Reconnect extension" : "Pair extension"}
             </button>
             <span className="onboarding-shortcut">Picker shortcut: <kbd>Alt + Shift + M</kbd> · Mac <kbd>⌘ + Shift + M</kbd></span>
@@ -61,7 +62,7 @@ export default function PairingChecklist({ stage, extensionInstalls, isPairing, 
               <p role="status">{statusCopy(overallStatus)}</p>
               {overallStatus === PairingStepStatus.REVOKED && (
                 <button className="onboarding-cta onboarding-cta-secondary" onClick={onPair} disabled={isPairing}>
-                  {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />} Pair again
+                  {isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />} Pair again
                 </button>
               )}
             </div>
