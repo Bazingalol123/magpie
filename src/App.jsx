@@ -1392,6 +1392,23 @@ export default function App() {
     window.history.replaceState(null, "", remaining ? `?${remaining}` : window.location.pathname);
   }, [user]);
 
+  useEffect(() => {
+    // The OAuth provider round trip ends with a server-side redirect back to
+    // `${appBaseUrl}/api/apps/auth/final-callback?state=...` (Base44's own
+    // auth plumbing, not one of this app's routes). In production the
+    // custom domain's real backend performs a further redirect to a clean
+    // `from_url` before the SPA ever loads there. A local `npx base44 dev`
+    // session has been observed leaving the browser sitting on that raw
+    // `/api/apps/auth/*` URL (with its `state` JSON still in the query
+    // string) instead -- the session itself is valid (`base44.auth.me()`
+    // resolves fine), only the address bar is wrong. Strip it back to `/`
+    // whenever any `/api/*` path leaks into the browser URL, regardless of
+    // which auth path produced it (login or logout).
+    if (!window.location.pathname.startsWith("/api/")) return;
+    window.history.replaceState(null, "", "/");
+    forceRouteRender((version) => version + 1);
+  }, []);
+
   const openLogin = () => {
     window.history.pushState({}, "", "/login");
     forceRouteRender((version) => version + 1);

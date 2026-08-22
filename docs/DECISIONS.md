@@ -576,3 +576,39 @@ end, and a physical Android phone using the installed-PWA Share Target)
 was not performed in this pass — this sandbox has no phone to test with.
 This is the same category of gap as the extension's existing G3/G8
 real-Chrome items in `docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
+
+## Onboarding: real recorded media, teach-before-setup ordering, and dismissal stays client-side
+
+Build Guide checkpoint 43. Three related decisions from the same owner
+click-through session:
+
+**Real recordings over a coded illustration.** Asked to choose between a
+stylized CSS/SVG mockup of the capture flow and actually recording the real
+product, chose the latter: the existing `tests-e2e/` Playwright harness
+already drives the real unpacked extension against a real local `npx base44
+dev` backend, so recording real screenshots was barely more work than
+faking convincing ones, and is strictly more honest — a future UI change to
+the Side Panel or dashboard will make the recording visibly stale instead
+of leaving a mockup that quietly drifts from the real product.
+
+**Teach before setup.** The Learn step (real Side Panel + dashboard
+screenshots) is wired between the optional Project step and the Method
+(capture setup) step, not after it. Rationale: asking someone to install an
+extension or configure a phone Shortcut before they've seen what it's for
+is a higher-friction ask than showing the payoff first. This only reorders
+the pre-capture wizard steps (all local UI state); it does not change what
+counts as a real capture or touch the evidence-driven stage machine in
+`src/onboarding/state.js`.
+
+**Onboarding dismissal stays client-side (`localStorage`), not server-side.**
+Confirmed `dismissOnboarding()` only ever writes
+`localStorage["magpie.onboarding.dismissed"]` — there is no `User` field or
+settings entity tracking it. Explicitly asked whether to add one; owner
+chose to keep it client-side. Reasoning: this is a decision, not a bug —
+server-side tracking would need a real entity/backend change (User field or
+a settings function) and would go through the High-risk change gate for no
+clear benefit over the standard "onboarding is per-browser" pattern most
+products use. A fresh browser, device, or local-dev session showing the
+Welcome tour again is therefore expected behavior, including the specific
+case the owner hit (a brand-new `npx base44 dev` local session has no
+`localStorage` history from production).

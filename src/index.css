@@ -132,6 +132,11 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-wizard-actions { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .onboarding-wizard-actions-quiet { margin-top: 14px; }
 
+.onboarding-learn-gallery { margin: 6px 0 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.onboarding-learn-frame { margin: 0; padding: 0; display: grid; gap: 8px; }
+.onboarding-learn-frame img { width: 100%; display: block; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
+.onboarding-learn-frame figcaption { color: #5b6c60; font-size: 12px; line-height: 1.4; text-align: center; }
+
 .onboarding-method-grid { margin: 6px 0 0; padding: 0; display: grid; gap: 12px; list-style: none; }
 .onboarding-method-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; }
 .onboarding-method-card > div { display: grid; gap: 8px; width: 100%; }
@@ -457,6 +462,7 @@ button:disabled { cursor: wait; opacity: .7; }
   .onboarding-wizard-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .onboarding-method-card { padding: 12px; }
   .onboarding-cta-link { min-height: 44px; align-items: center; }
+  .onboarding-learn-gallery { grid-template-columns: 1fr; }
 
   .workspace-grid { display: block; min-height: 0; }
   .collection-sidebar { min-height: 0; margin-bottom: 12px; padding: 0; background: transparent; border: 0; box-shadow: none; }

@@ -49,6 +49,34 @@ function WelcomeStep({ onStart, onSkipToWorkspace }) {
   );
 }
 
+function LearnStep({ onNext }) {
+  return (
+    <div className="onboarding-wizard-step">
+      <div className="eyebrow">how it works</div>
+      <h1>Here's what happens when you save something.</h1>
+      <p className="onboarding-wizard-lede">
+        Real screenshots of Magpie's own Chrome extension and dashboard -- not a mockup. Set up
+        your capture method next; this is just so you know what to expect.
+      </p>
+      <div className="onboarding-learn-gallery">
+        <figure className="onboarding-learn-frame">
+          <img src="/onboarding/desktop-capture.gif" alt="The Magpie Side Panel capturing a page: ready, capturing, then captured" loading="lazy" />
+          <figcaption>Open the Side Panel and capture any page.</figcaption>
+        </figure>
+        <figure className="onboarding-learn-frame">
+          <img src="/onboarding/first-value.png" alt="A captured Item appearing organized in the Magpie dashboard" loading="lazy" />
+          <figcaption>It lands in your workspace, already organized.</figcaption>
+        </figure>
+      </div>
+      <div className="onboarding-wizard-actions">
+        <button type="button" className="onboarding-cta" onClick={onNext}>
+          <ArrowRight size={15} /> Set up my capture method
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProjectStep({ onCreate, onSkip, isCreating, error }) {
   const [title, setTitle] = useState("");
   const submit = (event) => {
@@ -219,11 +247,12 @@ export default function OnboardingWelcomeFlow({
           error={projectError}
           onCreate={async (title) => {
             const created = await onCreateProject(title);
-            if (created) setStep("method");
+            if (created) setStep("learn");
           }}
-          onSkip={() => setStep("method")}
+          onSkip={() => setStep("learn")}
         />
       )}
+      {step === "learn" && <LearnStep onNext={() => setStep("method")} />}
       {step === "method" && (
         <MethodStep
           extensionInstalls={extensionInstalls}

@@ -1541,3 +1541,47 @@ browser click-through performed this pass (no phone/local backend in this
 sandbox, same limitation noted throughout this file for other mobile/PWA
 work) — the CSS reflow in particular should get a real narrow-viewport
 check before shipping.
+
+## 2026-08-22 — Platform findings from recording real onboarding media + the logout investigation
+
+Three findings while building Build Guide checkpoint 43, worth recording
+since they're not obvious from reading the source alone:
+
+**`@base44/sdk`'s `logout(redirectUrl)` only sets `from_url`, never the
+navigation host.** Read `node_modules/@base44/sdk/dist/modules/auth.js`
+directly: both `loginWithProvider` and `logout` navigate to
+`${options.appBaseUrl}/api/apps/auth/...` — `appBaseUrl` is a single
+module-level constant in `src/api/base44Client.js`, computed once and
+shared by both calls. `logout`'s `redirectUrl` argument (this app passes
+`publicOrigin` from `handleSignOut`) only becomes the `from_url` *query
+param*, not the target host. So if login stays on `localhost` in a given
+page load, logout initiated from that same load is guaranteed to target
+the same host first — any redirect away to `app.base44.com` has to happen
+after that, server-side, inside whatever `npx base44 dev` does with the
+logout request locally. This repo's frontend code cannot explain or fix a
+divergence past that point; would need a fresh repro with network-level
+logging to go further.
+
+**Local `npx base44 dev`'s AI routing proxy is genuinely flaky/slow, not
+just slow.** `docs/ENGINEERING_NOTES.md` already noted AI Gateway calls
+proxy to production in local dev. Recording `tests-e2e/media-specs/`
+surfaced a concrete failure mode, not just latency: one run's routing
+agent hit `HttpError: The routing agent reached its step limit` and the
+Clip landed in `needs_review` instead of routing cleanly — a real,
+occasionally-reproducible outcome under this proxy setup, not a test bug.
+A second run of the identical spec routed cleanly
+(`routing_status=created_collection`). Anything that needs a *specific*
+clean-route outcome from local dev (this recording spec, and potentially
+future ones) should expect to retry, not treat a single `needs_review`
+result as a regression.
+
+**ffmpeg's concat demuxer will happily produce a multi-megabyte GIF from
+mismatched aspect ratios.** Animating a 380×760 Side Panel screenshot
+together with a 1280×800 dashboard screenshot in one `scale=640:-1` GIF
+produced an 8.8MB file (`[vf#0:0] Reconfiguring filter graph because video
+parameters changed` in the ffmpeg log is the tell). `palettegen`/
+`paletteuse` doesn't fix this — the size blowup is from the filter graph
+re-scaling per-frame, not palette bloat. Fix was product-level, not
+technical: don't animate two screenshots of genuinely different UI
+surfaces together; ship the dashboard frame as a static PNG instead (see
+`scripts/encode-onboarding-gifs.mjs`).

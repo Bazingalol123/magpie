@@ -354,7 +354,23 @@ non-goal against implementing revoke/rotate in this pass.
    documentation is done: refreshed `README.md`, `docs/GETTING_STARTED.md`
    (including unpacked-extension install), `docs/PRODUCT_GUIDE.md`, and the
    public `docs/API.md`.
-6. **Onboarding flow (was "G9, partially built"), completed 2026-08-21:**
+6. **Onboarding flow (was "G9, partially built"), completed 2026-08-21,
+   extended 2026-08-22 (Build Guide checkpoint 43):** owner ran the branch
+   for real via `npx base44 dev` and found four things: a stray
+   `/api/apps/auth/*` URL left in the address bar after local OAuth login
+   (fixed — `src/App.jsx` now strips any leaked `/api/*` path back to `/`);
+   a request for real walkthrough media, delivered by extending the
+   existing `tests-e2e/` real-extension Playwright harness to record actual
+   Side Panel + dashboard screenshots (`npm run record:onboarding-media`)
+   and wiring them into a new pre-setup "Learn" step
+   (`public/onboarding/desktop-capture.gif`,
+   `public/onboarding/first-value.png`); a `npx base44 dev`-local-only
+   logout redirect to `app.base44.com` that was investigated but traced to
+   something inside Base44's own local dev tooling, not this repo's code
+   (see `docs/ENGINEERING_NOTES.md`); and confirmation that onboarding
+   dismissal is `localStorage`-only by design, not a server-tracking gap
+   (see `docs/DECISIONS.md`). Branch `feat/onboarding-flow`, still not
+   merged or deployed.
    Build Guide checkpoint 42 (branch `feat/onboarding-flow`, not yet merged
    or deployed) replaces the old pairing-checklist-only first run with the
    full Welcome -> Project (optional) -> Method (Desktop/iPhone/Android/

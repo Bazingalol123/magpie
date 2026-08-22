@@ -1426,3 +1426,92 @@ round 2" section for the full detail.
 - **Next:** owner real-device pass (iPhone Shortcut share -> saved Item;
   Android installed-PWA share -> saved Item), then a signed-in browser
   click-through of the full wizard once a backend session is available.
+
+### 43. Owner click-through follow-ups: auth-callback URL cleanup, real onboarding walkthrough media, logout investigation
+
+Owner ran `feat/onboarding-flow` for real via `npx base44 dev` and reported
+four findings from an actual click-through:
+
+- [x] **Build:** stray `/api/apps/auth/*` URL left in the address bar after
+  OAuth login completed locally (session itself was valid). Added a mount
+  effect in `src/App.jsx` that detects any `/api/*` path leaking into
+  `window.location.pathname` and replaces it with `/` via
+  `history.replaceState`, regardless of which auth call produced it
+  (login or logout). Regression-guarded by
+  `tests/auth-callback-routing.test.ts`.
+- [x] **Build:** real onboarding walkthrough media, per "teach the user how
+  to use Magpie, then let them use it." Rejected a coded/stylized
+  illustration in favor of recording the actual product: extended the
+  existing real-extension-against-real-local-backend Playwright harness
+  (`tests-e2e/`, proven working — one existing spec re-run clean in this
+  sandbox first as a feasibility check) with a parallel, deliberately
+  separate `playwright.media.config.ts` +
+  `tests-e2e/media-specs/record-desktop-capture.spec.ts` that drives one
+  real page capture end to end and screenshots the real Side Panel
+  (ready/capturing/captured) and the real dashboard once the Item lands.
+  `scripts/encode-onboarding-gifs.mjs` (ffmpeg) turns the Side Panel
+  sequence into `public/onboarding/desktop-capture.gif` (79KB) and saves
+  the dashboard success frame as `public/onboarding/first-value.png`
+  (117KB) — a static image, not a mismatched-aspect-ratio GIF (an
+  intermediate version animating the 380x760 Side Panel frame together
+  with the 1280x800 dashboard frame produced an ugly 8.8MB file; a real
+  screenshot of the dashboard alone tells "it lands in your workspace"
+  cleanly). `npm run record:onboarding-media` re-runs both steps. Added a
+  new `LearnStep` to `src/onboarding/OnboardingWelcomeFlow.jsx`, wired
+  between Project and Method (`docs/DECISIONS.md`'s "teach before setup"
+  entry has the ordering rationale), showing both real images before
+  asking the user to set up a capture method.
+- **Investigated, not a code change:** owner reported logout redirecting to
+  `app.base44.com` instead of staying on `localhost` in the same
+  `npx base44 dev` session where login just worked. Traced as far as this
+  repo's code can explain it: `src/api/base44Client.js`'s `appBaseUrl` is a
+  single module-level value computed once per page load and used
+  identically by both `loginWithProvider` and `logout()` (confirmed by
+  reading the installed `@base44/sdk`'s `auth.js` — `logout(redirectUrl)`'s
+  `redirectUrl` argument only becomes the `from_url` query param, not the
+  navigation target host; the target host is always `options.appBaseUrl`).
+  Since login's initial request demonstrably reached the local backend, the
+  divergence — if reproducible — happens after that inside `npx base44
+  dev`'s own local auth-route handling (most plausibly session
+  cookies/logout needing to round-trip through the real platform host for
+  local dev, then failing to bounce back the way the already-fixed
+  production `from_url` case does), not in this repo's frontend or
+  `base44/functions/*`. Not fixable by editing our source without further
+  reproduction; flagged to the owner as a probable `base44 dev` CLI/local-
+  tooling limitation rather than a product bug.
+- **Decision, not a code change:** owner asked whether "Your first item
+  landed" reappearing was a server-tracking gap. Confirmed
+  `dismissOnboarding()` (`src/App.jsx`) only ever writes
+  `localStorage["magpie.onboarding.dismissed"]` — no server field exists.
+  Owner chose to keep this client-side (standard pattern, zero backend
+  risk) rather than add server-side tracking; a fresh browser/profile/local
+  session showing onboarding again is expected behavior, not a bug. See
+  `docs/DECISIONS.md`.
+- **Files:** `src/App.jsx`, `src/onboarding/OnboardingWelcomeFlow.jsx`,
+  `src/index.css`, `playwright.media.config.ts` (new),
+  `tests-e2e/media-specs/record-desktop-capture.spec.ts` (new),
+  `scripts/encode-onboarding-gifs.mjs` (new),
+  `public/onboarding/desktop-capture.gif`,
+  `public/onboarding/first-value.png` (new binary assets),
+  `tests/auth-callback-routing.test.ts`,
+  `tests/onboarding-media.test.ts` (new), `package.json`.
+- **Verify:** 211/211 Deno tests (3 new), all 17 `entry.ts` files
+  type-check clean (no backend files touched), every `extension/**/*.js`
+  parses, `rg "@base44/sdk" extension` clean, `npm run build` clean and
+  confirmed `dist/onboarding/*` is present, `git diff --check` clean. The
+  media-recording pipeline itself was run for real in this sandbox — a
+  real local `npx base44 dev` backend, a real registered test owner, the
+  real unpacked extension, and a real AI-routed capture (one run hit a
+  transient local AI-Gateway-proxy step-limit and landed in
+  `needs_review`; a re-run produced a clean `created_collection`, which is
+  the frame actually shipped) — not a mock.
+- **Not done:** the iOS/Android GIF-equivalent walkthrough content (this
+  pass covered Desktop only, matching where the working recording harness
+  already existed); a real-device click-through of the full onboarding
+  wizard in a browser (still blocked on this sandbox having no phone and,
+  for the base44.com logout question, no way to reproduce interactively).
+- **Next:** owner decides whether to pursue the `npx base44 dev` logout
+  divergence further (would need a fresh repro with network logs, since
+  this repo's code cannot explain it further); optionally record
+  matching walkthrough media for the iPhone Shortcut and Android Share
+  Target methods once real-device passes exist for them.
