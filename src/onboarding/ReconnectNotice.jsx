@@ -10,7 +10,7 @@ export default function ReconnectNotice({ isPairing, onPair }) {
   return (
     <section className="onboarding-panel onboarding-reconnect" role="region" aria-label="Reconnect the extension">
       <div className="onboarding-step">
-        <span className="onboarding-step-icon"><PairingIcon size={15} /></span>
+        <span className="onboarding-step-icon is-review"><PairingIcon size={15} /></span>
         <div>
           <p role="status">Your Chrome extension connection looks inactive.</p>
           <span className="onboarding-step-body">Reconnect to keep capturing from the Side Panel.</span>

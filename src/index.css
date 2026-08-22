@@ -23,6 +23,9 @@
   --status-blocked-border: #f1ddb6;
   --status-live-solid: #3568c4;
   --status-live-bg: #e8f0fb;
+  --status-error-solid: #a44a2f;
+  --status-error-bg: #fdf0ea;
+  --status-error-border: #f0d3c2;
 }
 
 :root { font-family: "DM Sans", sans-serif; color: #15261d; background: #f7f8f3; font-synthesis: none; }
@@ -134,6 +137,9 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-steps { margin: 0; padding: 0; display: grid; gap: 16px; list-style: none; }
 .onboarding-step { display: flex; gap: 12px; align-items: flex-start; }
 .onboarding-step-icon { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; color: #4a9957; background: #e7f1e4; border-radius: 9px; }
+.onboarding-step-icon.is-live { color: var(--status-live-solid); background: var(--status-live-bg); }
+.onboarding-step-icon.is-review { color: var(--status-review-solid); background: var(--status-review-bg); }
+.onboarding-step-icon.is-error { color: var(--status-error-solid); background: var(--status-error-bg); }
 .onboarding-step > div { display: grid; gap: 8px; }
 .onboarding-step p { margin: 0; color: #2c3f31; font-size: 13px; font-weight: 600; line-height: 1.4; }
 .onboarding-step-body { color: #5b6c60; font-weight: 400; font-size: 12.5px; line-height: 1.5; }

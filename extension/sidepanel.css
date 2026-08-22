@@ -17,10 +17,13 @@ main { min-height: 100%; display: flex; flex-direction: column; padding: 16px 16
 header { display: flex; align-items: center; gap: 9px; }
 header b { font-size: 19px; letter-spacing: -.045em; color: #193325; }
 .mark { width: 30px; height: 30px; display: block; }
+/* Mirrors the dashboard's --status-fresh / --status-review tokens
+   (src/index.css) -- hardcoded, not shared, since this is a separate CSS
+   bundle, but kept to the same literal values on purpose. */
 .pill { margin-left: auto; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; letter-spacing: .02em; color: #69806e; background: #e9efe5; }
-body[data-connected="true"] .pill { color: #2f6b3f; background: #dff0dc; }
+body[data-connected="true"] .pill { color: #2f6b3f; background: #e5f3e4; }
 body[data-connected="true"] .pill::before { content: "● "; font-size: 8px; }
-body[data-connected="false"] .pill { color: #8a5a1f; background: #fbeed8; }
+body[data-connected="false"] .pill { color: #ad8434; background: #fdf3e3; }
 
 .setup-callout { margin: 14px 0 4px; padding: 13px 14px; background: #fdf3e3; border: 1px solid #f1ddb6; border-radius: 12px; color: #7c5a22; }
 .setup-callout b { display: block; font-size: 13.5px; margin-bottom: 3px; }

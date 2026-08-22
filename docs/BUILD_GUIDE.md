@@ -2067,3 +2067,48 @@ both places it appears in the dashboard, not one isolated spot.
   collide with the distinct, already-shipped Folder navigational feature
   for Collections), and replacing the header/sidebar split with a single
   Linear-style left nav rail.
+
+### 57. R4: status color for onboarding and the extension, where real status exists
+
+- [x] **Build:** Per the dashboard-redesign plan, R4 carries the same
+  status-color/hierarchy rules into onboarding, landing/login, and the
+  extension -- applied only where a surface has real status to show;
+  landing/login's content is mock data with nothing real to color, so
+  neither was touched.
+  - `CaptureStatusBanner.jsx` (`src/onboarding/`) had the clearest real
+    status of any onboarding surface -- five real outcomes (in progress,
+    routed, created, needs review, failed) -- all rendered through the
+    exact same green `.onboarding-step-icon`, regardless of outcome. Now:
+    in-progress uses `--status-live` (new), needs-review uses
+    `--status-review` (existing amber), failed uses the new
+    `--status-error` (terracotta), and the two success outcomes keep the
+    existing default green rather than gaining a redundant `is-fresh`
+    modifier class. `ReconnectNotice.jsx`'s "connection looks inactive"
+    icon gets `--status-review` too -- the same "needs your attention
+    soon" semantic as needs-review.
+  - New token: `--status-error` (terracotta, `src/index.css`). Reusing
+    `--status-blocked` for this would have been wrong post-R3-correction
+    -- blocked is now amber ("needs attention"), and a real processing
+    failure is a distinct, more severe signal that belongs with the
+    danger-button terracotta, not blended into the same amber bucket as
+    "needs a quick decision."
+  - `extension/sidepanel.css`'s connection-status pill was already doing
+    the right semantic thing (green when paired, amber when not) before
+    this pass -- just with its own slightly different hex values. Aligned
+    to the literal values of `--status-fresh`/`--status-review` (the
+    extension is a separate CSS bundle and can't reference `src/
+    index.css`'s custom properties directly) so the same status reads as
+    the exact same color in both places.
+  - `docs/DESIGN_SYSTEM.md`'s token table corrected to match: it still
+    said `--status-blocked` was "existing danger terracotta," which R3
+    already disproved and fixed in code but not in this doc. Fixed here,
+    plus the new `--status-error` row.
+- **Files:** `src/index.css`, `src/onboarding/CaptureStatusBanner.jsx`,
+  `src/onboarding/ReconnectNotice.jsx`, `extension/sidepanel.css`,
+  `docs/DESIGN_SYSTEM.md`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. All four
+  `CaptureStatusBanner` outcomes rendered together against the real
+  compiled CSS via a temporary static preview (deleted before commit):
+  each is now a distinct, correct color at a glance -- blue/green/amber/
+  red -- with no code change needed to tell them apart beyond the color
+  itself.

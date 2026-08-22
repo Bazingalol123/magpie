@@ -24,9 +24,10 @@ for text/icons and a `-bg` tint for backgrounds/badges):
 |---|---|---|
 | `--status-fresh` | Recently captured, matches an active watch | existing `.watch-chip.on` green |
 | `--status-changed` | A field's value changed since last viewed | existing "review" amber |
-| `--status-review` | In the needs-review queue | same amber family as `changed` |
-| `--status-blocked` | Source requires sign-in / blocked | existing danger terracotta |
-| `--status-live` | A sync is happening right now | new — the only genuinely new hue |
+| `--status-review` | In the needs-review queue, or a connection needs attention | same amber family as `changed` |
+| `--status-blocked` | Source requires sign-in / blocked | same amber family — corrected in R3, was wrongly set to terracotta in R1 by pattern-matching against the danger button instead of checking what "blocked" actually renders as |
+| `--status-live` | A sync is happening right now, or something is in progress | new hue (blue) |
+| `--status-error` | A real failure — processing/capture error | terracotta — reserved for actual failures and destructive actions, distinct from "needs attention" (amber) |
 
 Brand green (`#254d32` primary, `#193d27` hover) stays reserved for
 actionable UI — buttons, links — so color never has to compete with
@@ -74,3 +75,11 @@ already been decided.
 - 2026-08-22 — status color tokens + hierarchy rules established
   (`docs/DASHBOARD_AUDIT.md`), superseding an unshipped draft that
   proposed hash-based Collection color instead.
+- 2026-08-22 — `--status-blocked` corrected from terracotta to amber to
+  match what "blocked" actually renders as everywhere else in the
+  product; `--status-error` added for genuine failures (terracotta stays
+  reserved for that and destructive actions, not "needs attention").
+  Applied to onboarding's `CaptureStatusBanner`/`ReconnectNotice` (R4) and
+  mirrored, as literal hex values, into the extension's already-correct
+  connection-status pill (`extension/sidepanel.css`), which can't share
+  `src/index.css`'s custom properties since it's a separate bundle.

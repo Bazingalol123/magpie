@@ -15,25 +15,30 @@ export default function CaptureStatusBanner({ clip, collections, onViewCollectio
   const isSuccess = outcome === CaptureOutcome.ROUTED_EXISTING || outcome === CaptureOutcome.CREATED_COLLECTION;
 
   let icon = <LoaderCircle className="spin" size={16} />;
+  let iconVariant = "is-live";
   let title = "Organizing your capture…";
   let body = "This usually takes a few seconds.";
   let action = null;
 
   if (outcome === CaptureOutcome.ROUTED_EXISTING) {
     icon = <ArrowRightLeft size={16} />;
+    iconVariant = "";
     title = "Your first item landed";
     body = collection ? `Filed into ${collection.name}.` : "Filed into an existing Collection.";
   } else if (outcome === CaptureOutcome.CREATED_COLLECTION) {
     icon = <FolderPlus size={16} />;
+    iconVariant = "";
     title = "Your first item landed";
     body = collection ? `Created a new Collection: ${collection.name}.` : "Created a new Collection for it.";
   } else if (outcome === CaptureOutcome.NEEDS_REVIEW) {
     icon = <Inbox size={16} />;
+    iconVariant = "is-review";
     title = "One capture needs a quick decision";
     body = "Magpie wasn't confident enough to file this automatically — take a look and choose where it goes.";
     action = <button className="onboarding-cta onboarding-cta-secondary" onClick={() => onOpenReview(clip.id)}>Review now</button>;
   } else if (outcome === CaptureOutcome.FAILED) {
     icon = <AlertTriangle size={16} />;
+    iconVariant = "is-error";
     title = "Something went wrong organizing this capture";
     body = clip?.processing_error || "You can try again or report this — it won't block future captures.";
     action = (
@@ -47,7 +52,7 @@ export default function CaptureStatusBanner({ clip, collections, onViewCollectio
   return (
     <section className="onboarding-panel" role="region" aria-label="First capture status">
       <div className="onboarding-step">
-        <span className="onboarding-step-icon">{icon}</span>
+        <span className={`onboarding-step-icon ${iconVariant}`}>{icon}</span>
         <div>
           <p role="status">{title}</p>
           <p className="onboarding-step-body">{body}</p>
