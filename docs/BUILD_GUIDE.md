@@ -1949,3 +1949,11 @@ checkpoint series below.
   states, and the live-status dot renders blue.
 - **Per the plan: pausing here for a visual check-in before continuing**
   to R3 (table/card default switch, workspace-grid layout) and beyond.
+
+**Owner feedback after checking R2 live:** didn't like `--status-live`
+blue on the topbar dot as an isolated accent. Resolved by committing to
+it as a real token instead of reverting it -- `.live-indicator` (the
+per-Collection "live" badge in the table panel header, `index.css:89`)
+was still hardcoded green (`#eff6ec`/`#47814f`/`#58a75e`) and is the same
+"live" concept; it now uses `--status-live` too. Blue now means "live" in
+both places it appears in the dashboard, not one isolated spot.
