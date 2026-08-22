@@ -7,6 +7,25 @@ function Mark() {
   return <img src={magpieMarkSrc} alt="" className="magpie-mark" width="34" height="34" />;
 }
 
+function GoogleMark() {
+  return (
+    <svg className="provider-mark" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z" />
+    </svg>
+  );
+}
+
+function AppleMark() {
+  return (
+    <svg className="provider-mark" width="16" height="16" viewBox="0 0 814 1000" fill="currentColor" aria-hidden="true">
+      <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-123.1C40.9 764.9 0 663.8 0 559.5c0-158.8 103.2-243.1 204.7-243.1 65.5 0 120.4 42.8 161.3 42.8 39 0 100.4-45.4 172.8-45.4 34.5 0 88.6 6.2 129.2 40.4-3.9-2.9-3.9-2.9-.9 0zM555.5 148c33.6-40.3 57.5-96.5 57.5-152.7 0-7.8-.6-15.7-2-22-52.9 2-115.7 35.3-153.8 79.5-30.9 34.5-59.7 90.7-59.7 147.7 0 8.5 1.3 17 2 19.7 3.2.6 8.5 1.3 13.8 1.3 47.6 0 107.5-31.9 142.2-73.5z" />
+    </svg>
+  );
+}
+
 function authError(error) {
   return error?.response?.data?.error || error?.message || "Something went wrong. Please try again.";
 }
@@ -74,8 +93,8 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
 
           {mode !== "verify" && (
             <div className="auth-provider-stack">
-              <button className="auth-provider google" onClick={() => handleProvider("google")} disabled={isSubmitting}><span className="provider-letter">G</span> Continue with Google</button>
-              <button className="auth-provider apple" onClick={() => handleProvider("apple")} disabled={isSubmitting}><span className="provider-letter apple-mark">●</span> Continue with Apple</button>
+              <button className="auth-provider google" onClick={() => handleProvider("google")} disabled={isSubmitting}><GoogleMark /> Continue with Google</button>
+              <button className="auth-provider apple" onClick={() => handleProvider("apple")} disabled={isSubmitting}><AppleMark /> Continue with Apple</button>
               <div className="auth-divider"><span>or</span></div>
             </div>
           )}

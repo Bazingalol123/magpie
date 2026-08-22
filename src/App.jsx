@@ -143,6 +143,27 @@ function hostFromUrl(value) {
   }
 }
 
+// Real favicons read as a real product tracking real sites; the letter
+// square is only a fallback for hosts a favicon service can't resolve.
+function SourceFavicon({ url, large }) {
+  const host = hostFromUrl(url);
+  const hasHost = Boolean(host) && host !== "source page";
+  const [failed, setFailed] = useState(false);
+  const sizeClass = large ? " source-favicon-lg" : "";
+  if (!hasHost || failed) {
+    return <span className={`source-favicon${sizeClass}`}>{hasHost ? host.charAt(0).toUpperCase() : "?"}</span>;
+  }
+  return (
+    <img
+      className={`source-favicon is-image${sizeClass}`}
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function isHttpUrl(value) {
   if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) return false;
   try {
@@ -514,7 +535,7 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
                   return (
                     <tr key={record.id} onClick={() => onSelect(record)}>
                       <td>
-                        <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
+                        <div className="source-cell"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
                       </td>
                       {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
                       <td><ChevronRight size={17} /></td>
@@ -560,7 +581,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
               {image ? (
                 <img src={image} alt="" loading="lazy" />
               ) : (
-                <span className="record-card-fallback">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>
+                <div className="record-card-fallback"><SourceFavicon url={record.source_url} large /></div>
               )}
               {record.freshness === "blocked" && (
                 <span className="record-card-badge" title="Source requires sign-in"><LockKeyhole size={11} /></span>
@@ -577,7 +598,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
                   </div>
                 );
               })}
-              <div className="record-card-source"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}</div>
+              <div className="record-card-source"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}</div>
             </div>
           </div>
         );

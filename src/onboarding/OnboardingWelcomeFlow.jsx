@@ -57,7 +57,7 @@ function WelcomeStep() {
   return (
     <div className="onboarding-wizard-step">
       <div className="eyebrow">welcome to magpie</div>
-      <h1>Turn what you find into an organized workspace.</h1>
+      <h1>Save it once. Magpie keeps it organized and current.</h1>
       <p className="onboarding-wizard-lede">
         Capture pages, listings, and articles as you research. Magpie reads each one, files it into
         the right Collection, and keeps it current -- so you can compare and decide instead of

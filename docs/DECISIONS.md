@@ -731,3 +731,48 @@ One accepted one-time cost: any account that dismissed onboarding under
 the old `localStorage` scheme will see it once more after this ships,
 since their dismissal was never recorded server-side. Not worth a
 migration -- the flow is idempotent and harmless to see again once.
+
+## De-templating pass, Phase 1: refine the design system rather than rebrand it
+
+Build Guide checkpoint 48. The owner's read: Magpie's product surfaces look
+scaffolded rather than designed -- not because any one choice is bad, but
+because the landing page, onboarding wizard, and login screen had
+independently converged on the same generic-AI-SaaS idiom (a "Turn X into Y"
+headline formula reused verbatim twice, an italicized accent word used as a
+tic in four different headlines, "01/02/03" numbered step badges reused in
+three unrelated places, a "G" letter and a "●" character standing in for the
+Google/Apple logos, and letter-avatar placeholders where a real favicon
+could render instead). A hand-designed product's marketing site, first-run
+flow, and login screen each have their own idiom under one shared identity;
+repeating the identical formula everywhere is the actual tell.
+
+Decided directly with the owner, in order of how much they change: keep the
+current green / DM Sans + Instrument Serif visual identity and the real bird
+mark rather than rebrand from zero; invest in a small custom icon set for
+Magpie-specific recurring concepts (capture modes, pairing status, the
+agent, empty states) rather than either staying 100% lucide-react or
+replacing all of it; and give the public landing page a benchmark pass
+against respected B2C products (Linear, Arc, Raycast, Superhuman, Notion)
+rather than rebuilding it, since the owner called it fine as-is.
+
+The five-phase plan, in the order agreed: (1) favicons, real OAuth marks,
+and voice guardrails -- this checkpoint; (2) the bounded custom icon set;
+(3) reducing the cross-surface headline/badge repetition down to at most one
+instance each; (4) pulling the Chrome extension side panel's separate
+stylesheet closer to the dashboard's tokens; (5) the landing benchmark
+research note and its resulting low-risk punch list.
+
+This checkpoint's three changes are deliberately all client-side, additive,
+and reversible: a favicon `<img>` with a same-behavior fallback, two brand
+SVGs swapped in for two placeholder characters, and one headline rewritten
+to stop duplicating the landing page's phrasing. None of it touches the
+capture/routing trust boundary, so it did not need the High/Critical change
+documentation this repo requires for backend-contract changes.
+
+`docs/VOICE.md` exists so future copy doesn't reach for the same templates
+again by default; it names which surface currently "owns" each device
+(landing owns the "Turn X into Y" formula and the italic accent word) so
+the next surface reaches for something else instead of repeating it.
+
+Landing page copy and visuals (`src/Landing.jsx`) are unchanged this
+checkpoint on purpose -- see the benchmark-first decision above.

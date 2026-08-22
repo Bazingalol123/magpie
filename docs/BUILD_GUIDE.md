@@ -1668,3 +1668,30 @@ it to something real.
   old `localStorage` scheme will see it once more after this ships (never
   recorded server-side); not worth a migration for a one-time, harmless
   re-show.
+
+### 48. De-templating pass, Phase 1: real favicons, real OAuth marks, voice guardrails
+
+- [x] **Build:** Owner-directed design pass to move the product away from a
+  generic-AI-scaffolded look. Phase 1 (this checkpoint) is the low-risk,
+  no-backend-change slice of a five-phase plan (`docs/DECISIONS.md` has the
+  full plan and audit). Three changes:
+  - Captured sources now show their real favicon (a new `SourceFavicon`
+    component in `src/App.jsx`, `<img>` against the Google favicons CDN
+    keyed off the existing `hostFromUrl()`), falling back to the existing
+    letter-avatar square on load failure or an unparsable host. Used in the
+    record table's source cell, the card grid's no-screenshot fallback, and
+    the card grid's footer source line.
+  - `src/LoginPage.jsx`'s "Continue with Google/Apple" buttons now render
+    the real Google and Apple brand marks (inline SVG) instead of a plain
+    "G" letter and a "●" character standing in for the Apple logo.
+  - New `docs/VOICE.md` records the copy guardrails the audit surfaced
+    (banned-by-default patterns, capped to one surface each) and the
+    onboarding welcome headline was rewritten to stop duplicating the
+    landing page's "Turn X into Y" formula.
+- **Files:** `src/App.jsx`, `src/LoginPage.jsx`, `src/index.css`,
+  `src/onboarding/OnboardingWelcomeFlow.jsx`, `docs/VOICE.md`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean.
+- **Deliberately deferred:** `src/Landing.jsx` copy and visuals are
+  untouched this checkpoint — the owner called the landing page fine as-is
+  and asked for a benchmark pass against real B2C product sites before
+  editing it (Phase 5 of the plan), not an immediate rewrite.
