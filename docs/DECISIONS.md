@@ -1014,3 +1014,48 @@ review." Terracotta stays reserved for destructive delete actions, a
 genuinely different concept from "this source needs attention."
 Corrected the token to match reality before it propagated into more
 places using the wrong color.
+
+## Header declutter: two bigger changes flagged and deliberately not done
+
+Build Guide checkpoint 56. The owner raised two ideas alongside "the
+header has too many buttons" and, after discussion, agreed both are
+separate work. Recording the reasoning now so neither has to be
+re-derived when someone does pick them up.
+
+**Rename "Project" to "Folder" in the UI.** Checked before agreeing to
+defer it: `docs/PRODUCT_CHARTER.md` and this file's own "Add bounded
+navigational folders in V3.1" entry describe a distinct, already-shipped
+Folder concept -- Collections can be organized into a Folder and one
+level of Subfolder for dashboard navigation. That's unrelated to Mission
+(labeled "Project" in the UI, per "Use clearer UI labels without renaming
+backend resources"). Renaming Project to Folder in the UI would make two
+different concepts share one name in the same product. Whoever picks
+this up needs to either pick a different target name or resolve that
+collision first -- it's not just a label swap, and it's also correctly
+flagged as touching the backend Mission entity, which is exactly the kind
+of destructive-migration risk the original "clearer UI labels without
+renaming backend resources" decision was written to avoid.
+
+**Replace the header/sidebar split with one left nav rail**, Linear-style
+-- global actions, Collections, and account all in a single sidebar, with
+little or no separate top bar. This is the strictly cleaner direction:
+Linear's actual product UI (screenshotted earlier this session, not just
+its marketing page) puts exactly this in one rail, and Magpie already has
+half the pieces (`CollectionSidebar` lists Collections; the account menu
+added this checkpoint is most of what a sidebar-bottom account entry
+would contain). But it's a real shell restructuring -- `.app-shell`,
+`.topbar`, `.collection-sidebar` CSS, and the mobile responsive behavior
+all change together -- not a same-session fix alongside everything else
+in this pass. Recorded as the recommended direction for a dedicated
+future pass rather than attempted piecemeal here.
+
+What *did* ship this checkpoint: consolidating the header's setup/account
+actions behind one menu, by generalizing the mobile-only dropdown that
+already existed rather than inventing a new component or jumping straight
+to the bigger rail redesign. Two real CSS specificity/ordering bugs were
+caught by checking `getComputedStyle` directly at multiple widths instead
+of trusting the markup -- see the checkpoint entry in `docs/BUILD_GUIDE.md`
+for both; the second (equal-specificity ties resolving by source order,
+not by which media query "should" win) is a sharp enough gotcha to watch
+for again anywhere a base rule and a media-query override end up with
+matching specificity.

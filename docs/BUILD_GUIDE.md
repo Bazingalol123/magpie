@@ -2006,3 +2006,64 @@ both places it appears in the dashboard, not one isolated spot.
   rendered against the real compiled CSS via a temporary static preview
   (built into `dist/`, deleted before commit): slides in cleanly, close
   button works, amber pulse dots render correctly, no clipping.
+
+### 56. Header declutter: consolidate setup/account actions into one menu
+
+- [x] **Build:** The desktop topbar's `.user-menu` had grown to up to nine
+  peer-level elements (Needs review, Ask Magpie, Activity, How it works,
+  Docs, Get extension, Pair extension, user identity, sign-out) -- the
+  same "rarely-used controls behind a menu" rule `docs/DESIGN_SYSTEM.md`
+  already states, not yet applied to the header itself.
+  - Frequent/primary actions stay inline: the conditional "Needs review"
+    badge button, "Ask Magpie", "Activity".
+  - Setup/account actions (How it works, Docs, Get extension, Pair
+    extension, user email, sign out) now live behind one account menu.
+    Implementation reuses the interaction pattern that already existed
+    (`isMobileMenuOpen` + `.mobile-menu` dropdown, previously gated to
+    mobile-only via `.mobile-menu-button { display: none }` above 680px)
+    rather than inventing a new one -- renamed to `isAccountMenuOpen` /
+    `.account-menu`, and its dropdown styling moved out of the 680px
+    media query into base rules so it works at every width. Trigger is
+    now a person+chevron icon button (`UserRound` + `ChevronDown`,
+    replacing the bare hamburger `Menu` icon, which is now unused and
+    removed from the import list).
+  - "Activity" also gets a redundant entry inside the account menu,
+    visible only below 680px (`.account-menu-mobile-only`) -- at that
+    width its inline `.pair-button` is hidden by an existing rule, so
+    without this it would regress the exact "unreachable, not just
+    hidden" mobile-reachability bug R3 (checkpoint 55) fixed for the
+    Activity overlay itself.
+  - Two real CSS bugs caught by testing the actual rendered/computed
+    state rather than trusting the markup, both around the same
+    mobile-only visibility toggle:
+    1. First attempt, `.account-menu-mobile-only { display: none }`
+       (one class) lost to the pre-existing `.mobile-menu button`
+       (class+element) rule setting `display: flex` -- element+class
+       beats a single class in specificity regardless of which one reads
+       "more specific" to a human. Fixed by matching selector shape:
+       `.mobile-menu button.account-menu-mobile-only`.
+    2. That fix then revealed a second bug: with both rules at equal
+       specificity, the *unconditional* base rule (added after the
+       existing 680px media query earlier in the file) won even inside
+       the media query, because equal-specificity ties resolve by
+       source order, not by whether a media query "should" apply.
+       Fixed by adding one more ancestor class to the media-query
+       override (`.user-menu .mobile-menu button...`) so it wins outright
+       rather than depending on file ordering staying accidentally
+       correct.
+  - Cleaned up two now-dead CSS rules (`.user-menu .desktop-signout`,
+    `.user-menu > span`) left over from the old markup shape, where those
+    were direct children of `.user-menu`; both now live inside the
+    account menu instead.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Rendered against
+  the real compiled CSS via a temporary static preview at three widths
+  (1200px, 680px boundary, 375px) with the computed `display` value of
+  `.account-menu-mobile-only` checked directly via
+  `getComputedStyle` -- not just eyeballed -- at each width before and
+  after each specificity fix.
+- **Deferred, not implemented, recorded for a future dedicated pass (see
+  `docs/DECISIONS.md`):** renaming "Project" to "Folder" in the UI (would
+  collide with the distinct, already-shipped Folder navigational feature
+  for Collections), and replacing the header/sidebar split with a single
+  Linear-style left nav rail.

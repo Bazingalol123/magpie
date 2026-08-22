@@ -21,7 +21,6 @@ import {
   LoaderCircle,
   LockKeyhole,
   LogOut,
-  Menu,
   MessageCircle,
   Target,
   Plus,
@@ -31,6 +30,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Trash2,
+  UserRound,
   Wand2,
   X,
 } from "lucide-react";
@@ -1244,7 +1244,7 @@ export default function App() {
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [onboardingTourStep, setOnboardingTourStep] = useState(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshNotice, setRefreshNotice] = useState(null);
@@ -1788,7 +1788,25 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => setIsActivityOpen(true)}><Activity size={15} /> Activity</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setIsActivityOpen(true)}><Activity size={14} /> Activity</button><button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">
+          {needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}
+          <button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button>
+          <button type="button" className="pair-button" onClick={() => setIsActivityOpen(true)}><Activity size={14} /> Activity</button>
+          <div className="account-menu">
+            <button type="button" className="account-menu-trigger icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu" aria-expanded={isAccountMenuOpen}><UserRound size={17} /><ChevronDown size={12} /></button>
+            {isAccountMenuOpen && (
+              <div className="mobile-menu" role="menu">
+                <button role="menuitem" className="account-menu-mobile-only" onClick={() => { setIsActivityOpen(true); setIsAccountMenuOpen(false); }}><Activity size={15} /> Activity</button>
+                <button role="menuitem" onClick={() => { setOnboardingTourStep("pair"); setIsAccountMenuOpen(false); }}><Sparkles size={15} /> How it works</button>
+                <a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a>
+                <a href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer" role="menuitem"><Download size={15} /> Get extension</a>
+                <button role="menuitem" onClick={() => { handleCreatePairing(); setIsAccountMenuOpen(false); }} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />} Pair extension</button>
+                <span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span>
+                <button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
       <section className="workspace-heading">
         <div><div className="eyebrow"><AgentIcon size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {

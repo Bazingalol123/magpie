@@ -493,9 +493,8 @@ button:disabled { cursor: wait; opacity: .7; }
   .user-menu { gap: 4px; }
   .user-menu .agent-launch-button { min-width: 112px; height: 44px; padding: 0 12px; justify-content: center; font-size: 11px; }
   .user-menu .agent-launch-button svg { width: 17px; height: 17px; }
-  .user-menu .desktop-signout { display: none; }
-  .user-menu > span { display: none; }
   .user-menu .pair-button, .topbar-center, .capture-status, .workspace-footer span:last-child { display: none; }
+  .user-menu .mobile-menu button.account-menu-mobile-only { display: flex; }
 
   .workspace-heading { padding: 28px 0 18px; display: block; }
   .workspace-heading .eyebrow { font-size: 9px; }
@@ -571,17 +570,17 @@ button:disabled { cursor: wait; opacity: .7; }
   .onboarding-mobile-note strong { color: #254d32; font-size: 13px; }
 }
 
-.user-menu { position: relative; }
-.mobile-menu-button { display: none; }
-.mobile-menu { display: none; }
+.user-menu { position: relative; display: flex; align-items: center; gap: 9px; }
+.account-menu { position: relative; }
+.account-menu-trigger { display: inline-flex; align-items: center; padding: 0 10px; width: auto; gap: 4px; color: #56665b; }
+.account-menu-trigger[aria-expanded="true"] { background: #e8eee6; color: #315c3a; }
+.mobile-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; min-width: 190px; padding: 6px; display: grid; gap: 2px; background: #fefffc; border: 1px solid #d8e2d6; border-radius: 12px; box-shadow: 0 16px 40px rgba(24,43,28,.16); }
+.mobile-menu a, .mobile-menu button, .mobile-menu-account { min-height: 40px; padding: 9px 11px; display: flex; align-items: center; gap: 9px; color: #3d5245; background: transparent; border-radius: 8px; font-size: 13px; text-decoration: none; text-align: left; }
+.mobile-menu a:hover, .mobile-menu button:hover { background: #eef4ea; }
+.mobile-menu-account { color: #78867b; font-size: 11px; border-top: 1px solid #e7ece5; border-bottom: 1px solid #e7ece5; border-radius: 0; overflow-wrap: anywhere; }
+.mobile-menu button.account-menu-mobile-only { display: none; }
 
 @media (max-width: 680px) {
-  .mobile-menu-button { display: grid; }
-  .user-menu .mobile-menu-button { width: 44px; height: 44px; }
-  .mobile-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; min-width: 190px; padding: 6px; display: grid; gap: 2px; background: #fefffc; border: 1px solid #d8e2d6; border-radius: 12px; box-shadow: 0 16px 40px rgba(24,43,28,.16); }
-  .mobile-menu a, .mobile-menu button, .mobile-menu-account { min-height: 44px; padding: 10px 11px; display: flex; align-items: center; gap: 9px; color: #3d5245; background: transparent; border-radius: 8px; font-size: 13px; text-decoration: none; text-align: left; }
-  .mobile-menu a:hover, .mobile-menu button:hover { background: #eef4ea; }
-  .mobile-menu-account { color: #78867b; font-size: 11px; border-top: 1px solid #e7ece5; border-bottom: 1px solid #e7ece5; border-radius: 0; overflow-wrap: anywhere; }
   .onboarding-mobile-workspace-cta { width: 100%; min-height: 44px; justify-content: center; }
 }
 
