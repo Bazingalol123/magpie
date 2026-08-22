@@ -132,11 +132,6 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-wizard-actions { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .onboarding-wizard-actions-quiet { margin-top: 14px; }
 
-.onboarding-learn-gallery { margin: 6px 0 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.onboarding-learn-frame { margin: 0; padding: 0; display: grid; gap: 8px; }
-.onboarding-learn-frame img { width: 100%; display: block; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
-.onboarding-learn-frame figcaption { color: #5b6c60; font-size: 12px; line-height: 1.4; text-align: center; }
-
 .onboarding-method-grid { margin: 6px 0 0; padding: 0; display: grid; gap: 12px; list-style: none; }
 .onboarding-method-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; }
 .onboarding-method-card > div { display: grid; gap: 8px; width: 100%; }
@@ -145,16 +140,32 @@ button:disabled { cursor: wait; opacity: .7; }
 .onboarding-paste-form { display: grid; gap: 8px; }
 .onboarding-paste-form input { padding: 9px 11px; color: #24352a; background: #fff; border: 1px solid #d8e2d5; border-radius: 8px; font-size: 12.5px; }
 
-.onboarding-wizard-nav { min-height: 20px; margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; }
 .onboarding-back-link { padding: 0; display: inline-flex; align-items: center; gap: 5px; color: #5b6c60; background: transparent; font-size: 12px; font-weight: 600; }
 .onboarding-back-link:hover { color: #315c3a; }
-.onboarding-wizard-close { margin-left: auto; }
-.onboarding-tour-dialog { width: min(100%, 720px); max-height: 88vh; overflow-y: auto; border-radius: 16px; box-shadow: 0 25px 70px rgba(24,43,28,.2); }
-.onboarding-tour-dialog .onboarding-panel { margin: 0; border-radius: 16px; }
+.onboarding-wizard-close { position: absolute; top: 14px; right: 14px; }
+.onboarding-tour-dialog { width: min(100%, 720px); max-height: 88vh; display: flex; border-radius: 16px; box-shadow: 0 25px 70px rgba(24,43,28,.2); }
+.onboarding-tour-dialog .onboarding-panel { flex: 1; min-height: 0; margin: 0; border-radius: 16px; }
+
+/* The wizard is a flex column so the footer (Back/Skip/Continue) always
+   stays pinned at the bottom of the modal instead of scrolling away with
+   long step content -- only .onboarding-wizard-scroll scrolls. */
+.onboarding-wizard { position: relative; display: flex; flex-direction: column; }
+.onboarding-wizard-scroll { min-height: 0; overflow-y: auto; }
+.onboarding-wizard-footer { margin-top: 16px; padding-top: 14px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #dfe9dc; }
+.onboarding-wizard-footer-actions { display: flex; align-items: center; gap: 10px; }
+
+.onboarding-carousel { margin: 6px 0 4px; display: grid; justify-items: center; gap: 10px; }
+.onboarding-carousel-frame { position: relative; width: 100%; max-width: 380px; height: 300px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
+.onboarding-carousel-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.onboarding-carousel-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; display: grid; place-items: center; color: #315c3a; background: #fff; border: 1px solid #dfe9dc; border-radius: 999px; box-shadow: 0 4px 12px rgba(28,56,36,.1); }
+.onboarding-carousel-arrow.left { left: -14px; }
+.onboarding-carousel-arrow.right { right: -14px; }
+.onboarding-carousel-caption { display: flex; align-items: center; gap: 6px; color: #3d4c42; font-size: 12.5px; text-align: center; }
+.onboarding-carousel-dots { display: flex; gap: 6px; }
+.onboarding-carousel-dot { width: 7px; height: 7px; padding: 0; background: #d8e2d5; border: 0; border-radius: 999px; }
+.onboarding-carousel-dot.active { width: 18px; background: #315c3a; }
 
 .onboarding-wizard-subhead { margin-top: 8px; color: #3d4c42; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
-.onboarding-learn-gallery-three { grid-template-columns: repeat(3, 1fr); }
-.onboarding-learn-gallery-three figcaption { display: flex; align-items: center; justify-content: center; gap: 5px; }
 
 .onboarding-preview-frame { margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
 .onboarding-preview-frame img { width: 100%; display: block; background: #fff; border: 1px solid #dfe9dc; border-radius: 12px; box-shadow: 0 8px 24px rgba(28,56,36,.06); }
@@ -491,9 +502,13 @@ button:disabled { cursor: wait; opacity: .7; }
   .onboarding-wizard-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .onboarding-method-card { padding: 12px; }
   .onboarding-cta-link { min-height: 44px; align-items: center; }
-  .onboarding-learn-gallery { grid-template-columns: 1fr; }
-  .onboarding-learn-gallery-three { grid-template-columns: 1fr; }
   .onboarding-mock-grid { grid-template-columns: 1fr; }
+  .onboarding-carousel-frame { height: 240px; }
+  .onboarding-carousel-arrow.left { left: 4px; }
+  .onboarding-carousel-arrow.right { right: 4px; }
+  .onboarding-wizard-footer { flex-wrap: wrap; }
+  .onboarding-wizard-footer-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .onboarding-wizard-footer-actions .onboarding-cta { min-height: 44px; justify-content: center; }
 
   .workspace-grid { display: block; min-height: 0; }
   .collection-sidebar { min-height: 0; margin-bottom: 12px; padding: 0; background: transparent; border: 0; box-shadow: none; }

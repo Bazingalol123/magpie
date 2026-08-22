@@ -1577,3 +1577,45 @@ and mobile deserved better than a link to docs.
 - **Next:** owner sends the iCloud Shortcut link once built; a real
   signed-in browser click-through of the full 7-step wizard once a backend
   session is available to this session or the owner does it directly.
+
+### 45. Onboarding polish: carousel for capture modes, persistent Back/Skip/Continue footer, teach-first order restored
+
+Same-day further owner feedback on checkpoint 44's flow.
+
+- [x] **Build:** Replaced the Modes step's static 3-column gallery with a
+  single-slide carousel (`ModeCarousel` in
+  `src/onboarding/OnboardingWelcomeFlow.jsx`) — one fixed-size, centered
+  frame (`object-fit: contain` so the tall Side Panel recording and the
+  wide page recordings render at the same box size), prev/next arrows, dot
+  indicators. Replaced every step's own inline Continue/Skip/Create
+  buttons with one persistent footer (`onboarding-wizard-footer`: Back ·
+  Skip onboarding · Continue) that stays pinned at the bottom of the modal
+  regardless of step content length — `.onboarding-wizard` is now a flex
+  column with only `.onboarding-wizard-scroll` scrolling. Continue is
+  step-aware (label/icon/handler keyed by the current step; the Project
+  step's title input state moved up to the wizard component so Continue
+  can read it and create-then-advance only when a title was actually
+  typed). Reverted `STEP_ORDER` back to
+  `welcome -> modes -> project -> pair -> collections -> agent -> sync`
+  per the owner's explicit "first we teach, then we setup" — see
+  `docs/DECISIONS.md` for why this is the second reversal on this same
+  question in one session, and the note to ask rather than guess a third
+  time.
+- **Files:** `src/onboarding/OnboardingWelcomeFlow.jsx`, `src/index.css`,
+  `tests/onboarding-media.test.ts` (rewritten to assert against the
+  `STEP_ORDER` array literal directly instead of scanning render-order
+  text, which produced a false positive against an unrelated `step ===
+  "project"` check inside `handleContinue`).
+- **Verify:** 215/215 Deno tests (3 new: carousel markup, persistent
+  footer, corrected step order), `npm run build` clean. Visual layout
+  (carousel centering/sizing, footer always visible under scrollable step
+  content) sanity-checked the same way as checkpoint 44 — a throwaway
+  static-HTML harness serving the real `src/index.css` and real generated
+  assets over a local HTTP server, screenshotted via Playwright and
+  reviewed directly, since this sandbox still can't sign in to drive the
+  live wizard.
+- **Not done:** still blocked on the owner for the iCloud Shortcut link
+  (unchanged from checkpoint 44); the `npx base44 dev` logout-to-
+  `app.base44.com` issue is now confirmed reproducible by the owner but
+  still needs a fresh repro with network logs before it's actionable from
+  this repo's code.

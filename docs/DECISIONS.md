@@ -672,3 +672,33 @@ with the manual build-it-yourself steps kept as a fallback for anyone who
 doesn't want to trust a shared link. Not done in this pass — blocked on
 that one real-device step from the owner, tracked in
 `docs/CLAUDE_CODE_HANDOFF.md`'s "Known gaps."
+
+## Onboarding order reverted to teach-first; unified footer replaces per-step buttons (supersedes checkpoint 44's pair-first order)
+
+Build Guide checkpoint 45. Same-day further owner feedback reversed
+checkpoint 44's pair-first ordering back to teach-first: `welcome -> modes
+-> project -> pair -> collections -> agent -> sync`. The owner's own words:
+"first we teach, then we setup." Two ordering changes in one session on
+the same question is a real signal, not noise — treat this ordering as
+settled only provisionally; if it moves a third time, that's worth a
+direct question before implementing rather than another silent swap.
+
+**Persistent footer, not per-step action buttons.** Every step previously
+rendered its own Continue/Skip/Create buttons inline, positioned
+differently depending on the step's content length. Replaced with one
+`onboarding-wizard-footer` (Back · Skip onboarding · Continue) that never
+moves: `.onboarding-wizard` is a flex column with only
+`.onboarding-wizard-scroll` scrolling, so the footer stays pinned at the
+bottom of the modal regardless of how tall a given step's content is. This
+required lifting Project's title input state up to the wizard component
+itself (`projectTitle`), since the shared Continue button needs to read it
+to decide "create then advance" vs. "just advance" — previously each step
+owned its own local form state and its own submit button.
+
+**Capture-mode gallery is a carousel, not a static 3-column grid.** All
+three real recordings (element hover, snip drag, page-save) now share one
+fixed-size, centered frame (`object-fit: contain`, so differently-shaped
+recordings — the tall portrait Side Panel vs. the wide page screenshots —
+still render at a uniform box size) with prev/next arrows and dot
+indicators, instead of three side-by-side cards of differing implied
+importance.

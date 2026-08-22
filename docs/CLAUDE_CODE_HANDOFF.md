@@ -384,6 +384,15 @@ non-goal against implementing revoke/rotate in this pass.
    in `docs/ENGINEERING_NOTES.md`. **Blocked on the owner:** a real-device
    iCloud Shortcut link for iOS (see `docs/DECISIONS.md`) — the manual
    build-it-yourself doc stays as the fallback until that link exists.
+   **Polished again same day (checkpoint 45):** the capture-mode gallery is
+   now a same-size, centered carousel instead of a static 3-column grid;
+   every step's own inline Continue/Skip/Create buttons were replaced by
+   one persistent Back/Skip/Continue footer that stays pinned regardless of
+   step content length; and `STEP_ORDER` reverted back to teach-first
+   (`welcome -> modes -> project -> pair -> ...`), reversing checkpoint
+   44's pair-first order per explicit owner correction — see
+   `docs/DECISIONS.md` for why this ordering should be treated as settled
+   only provisionally after flipping twice in one session.
    Branch `feat/onboarding-flow`, still not merged or deployed.
    Build Guide checkpoint 42 (branch `feat/onboarding-flow`, not yet merged
    or deployed) replaces the old pairing-checklist-only first run with the
