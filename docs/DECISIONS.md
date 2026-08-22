@@ -896,3 +896,51 @@ This closes the five-phase de-templating plan from Phase 1. What's left
 un-done and named for a follow-up, if wanted: the real-screenshot swap
 above, and matching lucide's remaining generic icon usage was explicitly
 ruled out of scope in Phase 2 rather than deferred.
+
+## Dashboard redesign, R1: a wrong first draft, corrected before shipping
+
+Build Guide checkpoint 53. Worth recording precisely because it was a real
+design mistake, caught by the owner in plan mode before any code shipped,
+not a hypothetical to guard against.
+
+The owner said the de-templating pass wasn't enough: the product is
+text-heavy, has almost no color differentiation, and asks users to read
+their way to understanding instead of seeing it. My first response
+proposed extending `App.jsx`'s `collectionDotIndex` (`hash(id) % 4`,
+currently just four muted sidebar-dot colors) into a six-color
+categorical palette applied to Collection cards, badges, and table
+accents -- "Collection = color identity." The owner rejected it directly:
+*"What value does this dot indicator have on a user?"* The honest answer
+is none. A color chosen by hashing an id carries no meaning a user can
+learn -- it's not "blue means Cameras" the way a real label would be,
+it's "blue happened to be what the hash produced for this specific id,"
+which a user still has to read the text label to decode. It was
+decoration wearing a function's clothes.
+
+The owner's second objection was sharper: *"why do we assume our current
+layout is doing great and sufficient?"* -- naming that the first draft had
+proposed layering color onto the dashboard's existing structure without
+ever questioning whether that structure was the actual problem. It was a
+fair hit: the research behind that draft (Figma and Wix) was their
+*marketing* pages, not their product UI, which isn't necessarily the same
+design language a working tool should borrow from.
+
+Corrected direction, reached together: color is reserved entirely for
+real status the data model already tracks (freshness, a changed field,
+needs-review, blocked, a live sync) -- never assigned by a hash or
+otherwise standing in for a category. This is verifiably how the
+comparable real products work in their actual product UI, not just their
+marketing pages -- a live screenshot of Linear's real issue view (same
+session) shows status and priority as an icon plus one word, colored only
+because that word is specifically true of that issue, never a decorative
+per-group color. And before proposing any layout change, `docs/
+DASHBOARD_AUDIT.md` was written first: a structural comparison of
+Magpie's actual rendered dashboard against that same Linear evidence,
+naming `RecordDetail` as the concrete worst offender (8-10 always-stacked
+text blocks with no color or size hierarchy) rather than assuming where
+the problem was.
+
+`docs/DESIGN_SYSTEM.md` exists as the durable output of getting this
+wrong once: the corrected color rule ("status only, never category") and
+the hierarchy rules from the audit are written down so the next redesign
+starts from a document instead of re-arriving at the same mistake.

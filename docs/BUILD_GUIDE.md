@@ -1857,3 +1857,47 @@ it to something real.
   driven live in a real browser at both the hero and the story section;
   eyebrow copy, single italic instance, and the removed numeral labels all
   confirmed with no layout regression.
+
+## Dashboard redesign -- status-driven color + structural audit
+
+The owner judged the de-templating pass insufficient on its own: the
+product is text-heavy, has almost no color differentiation, and asks
+users to read their way to understanding instead of seeing it. This
+starts a second design thread on the same branch, with its own
+checkpoint series below.
+
+### 53. R1: status-color tokens, a real structural audit, and the durable design-system doc
+
+- [x] **Build:** A first draft of this plan (generalizing the sidebar's
+  hash-based `.dot-1/2/3` Collection color into a bigger categorical
+  palette, then applying it on top of the existing layout) was wrong and
+  the owner corrected it before any code shipped -- see
+  `docs/DECISIONS.md` for the full correction. This checkpoint is the
+  redone R1:
+  - Five status-color tokens added to `src/index.css`'s `:root`
+    (`--status-fresh`, `--status-changed`, `--status-review`,
+    `--status-blocked`, `--status-live`, each with a `-solid` and `-bg`
+    variant), reusing the app's existing amber/terracotta/green wherever
+    a status already had a real color, adding exactly one new hue
+    (`--status-live`, blue). None are hash-assigned; each is only ever
+    applied when that specific condition is true for a record. No visual
+    change yet -- nothing consumes these tokens until R2.
+  - `docs/DASHBOARD_AUDIT.md` -- a structural audit of `src/App.jsx`'s
+    actual rendered dashboard (not assumed) against a live screenshot of
+    Linear's real issue-tracker UI captured the same session. Names
+    `RecordDetail` as the worst offender (8-10 always-stacked text
+    blocks, no color/size hierarchy), the three-always-visible-panel
+    `.workspace-grid` layout, and the table view's plain-text columns as
+    the concrete divergences -- and names `ActivityPanel`'s existing
+    icon-led, one-bold-fact-plus-timestamp pattern as the model to
+    generalize rather than replace.
+  - `docs/DESIGN_SYSTEM.md` -- the durable reference: the status-color
+    token table, the iconography rules already established in Phase 2,
+    and the hierarchy rules ("icon + one word beats a sentence," "one
+    bold primary fact per card," "rare controls behind a menu") that R2
+    onward apply. Exists so the next redesign starts from a document
+    instead of re-deriving all of this again.
+- **Files:** `src/index.css`, `docs/DASHBOARD_AUDIT.md` (new),
+  `docs/DESIGN_SYSTEM.md` (new).
+- **Verify:** 216/216 Deno tests, `npm run build` clean. No visual
+  surface to check yet -- this checkpoint is tokens and docs only.

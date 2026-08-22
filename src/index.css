@@ -4,6 +4,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Status color tokens -- see docs/DESIGN_SYSTEM.md. Each one is only ever
+   applied when that condition is actually true for a given record; none of
+   these are assigned by hashing an id or otherwise standing in for a
+   category. Reuses the app's existing amber/terracotta/green wherever a
+   status already had a real color before this token layer existed. */
+:root {
+  --status-fresh-solid: #2f6b3f;
+  --status-fresh-bg: #e5f3e4;
+  --status-changed-solid: #ad8434;
+  --status-changed-bg: #fdf3e3;
+  --status-changed-border: #f1ddb6;
+  --status-review-solid: #ad8434;
+  --status-review-bg: #fdf3e3;
+  --status-review-border: #f1ddb6;
+  --status-blocked-solid: #a44a2f;
+  --status-blocked-bg: #fdf0ea;
+  --status-blocked-border: #f0d3c2;
+  --status-live-solid: #3568c4;
+  --status-live-bg: #e8f0fb;
+}
+
 :root { font-family: "DM Sans", sans-serif; color: #15261d; background: #f7f8f3; font-synthesis: none; }
 * { box-sizing: border-box; }
 button, a { font: inherit; }
