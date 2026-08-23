@@ -16,27 +16,28 @@ import {
   FileText,
   FolderPlus,
   Inbox,
-  Key,
   Layers3,
   Linkedin,
   LoaderCircle,
   LockKeyhole,
   LogOut,
-  Menu,
   MessageCircle,
   Target,
   Plus,
   RefreshCw,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
+  UserRound,
   Wand2,
   X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { base44 } from "@/api/base44Client";
+import { AgentIcon, EmptyNestIcon, PairingIcon } from "./components/icons.jsx";
 import Landing from "./Landing.jsx";
 import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
@@ -143,6 +144,27 @@ function hostFromUrl(value) {
   }
 }
 
+// Real favicons read as a real product tracking real sites; the letter
+// square is only a fallback for hosts a favicon service can't resolve.
+function SourceFavicon({ url, large }) {
+  const host = hostFromUrl(url);
+  const hasHost = Boolean(host) && host !== "source page";
+  const [failed, setFailed] = useState(false);
+  const sizeClass = large ? " source-favicon-lg" : "";
+  if (!hasHost || failed) {
+    return <span className={`source-favicon${sizeClass}`}>{hasHost ? host.charAt(0).toUpperCase() : "?"}</span>;
+  }
+  return (
+    <img
+      className={`source-favicon is-image${sizeClass}`}
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function isHttpUrl(value) {
   if (typeof value !== "string" || !/^https?:\/\//i.test(value.trim())) return false;
   try {
@@ -220,7 +242,7 @@ function PairingDialog({ pairing, onClose }) {
     <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
       <section className="pairing-dialog" role="dialog" aria-modal="true" aria-label="Pair Magpie extension" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head">
-          <div><div className="eyebrow"><Key size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
+          <div><div className="eyebrow"><PairingIcon size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
         <p>Copy both values into the Magpie extension's side panel. The pairing token is shown only now and is stored as a hash on the server.</p>
@@ -398,7 +420,7 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
 function EmptyCollection({ onSelect }) {
   return (
     <div className="empty-collection">
-      <div className="empty-icon"><Inbox size={25} /></div>
+      <div className="empty-icon"><EmptyNestIcon size={25} /></div>
       <h2>Your first Item is waiting.</h2>
       <p>Clip any product, listing, recipe, or article. Magpie will organize it into the right Collection automatically.</p>
       <button className="text-button" onClick={onSelect}>See how the capture flow works <ChevronRight size={16} /></button>
@@ -514,7 +536,7 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
                   return (
                     <tr key={record.id} onClick={() => onSelect(record)}>
                       <td>
-                        <div className="source-cell"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
+                        <div className="source-cell"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
                       </td>
                       {columns.map((column) => <td key={column.name}><FieldValue value={fields[column.name] ?? "—"} /></td>)}
                       <td><ChevronRight size={17} /></td>
@@ -560,7 +582,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
               {image ? (
                 <img src={image} alt="" loading="lazy" />
               ) : (
-                <span className="record-card-fallback">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>
+                <div className="record-card-fallback"><SourceFavicon url={record.source_url} large /></div>
               )}
               {record.freshness === "blocked" && (
                 <span className="record-card-badge" title="Source requires sign-in"><LockKeyhole size={11} /></span>
@@ -577,7 +599,7 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
                   </div>
                 );
               })}
-              <div className="record-card-source"><span className="source-favicon">{hostFromUrl(record.source_url).charAt(0).toUpperCase()}</span>{hostFromUrl(record.source_url)}</div>
+              <div className="record-card-source"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}</div>
             </div>
           </div>
         );
@@ -586,30 +608,32 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
   );
 }
 
-function ActivityPanel({ enrichments, records, onSelect }) {
+function ActivityPanel({ enrichments, records, onSelect, onClose }) {
   const recordById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records]);
   return (
-    <aside className="activity-panel">
-      <div className="activity-heading"><Activity size={16} /><span>Field updates</span></div>
-      {enrichments.length ? (
-        <div className="activity-list">
-          {enrichments.slice(0, 6).map((enrichment) => {
-            const record = recordById.get(enrichment.record_id);
-            return (
-              <button key={enrichment.id} className="activity-item" onClick={() => record && onSelect(record)}>
-                <span className="activity-pulse"><Check size={11} /></span>
-                <span>
-                  <b>{enrichment.field}</b> changed to <strong>{enrichment.new_value}</strong>
-                  <small>{formatDate(enrichment.checked_at)}</small>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="activity-empty"><Clock3 size={20} /><p>Changes detected by your watches will appear here.</p></div>
-      )}
-    </aside>
+    <div className="detail-overlay activity-overlay" role="presentation" onMouseDown={onClose}>
+      <aside className="activity-panel" role="dialog" aria-modal="true" aria-label="Recent field updates" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="activity-heading"><Activity size={16} /><span>Field updates</span><button className="icon-button" onClick={onClose} aria-label="Close"><X size={17} /></button></div>
+        {enrichments.length ? (
+          <div className="activity-list">
+            {enrichments.slice(0, 6).map((enrichment) => {
+              const record = recordById.get(enrichment.record_id);
+              return (
+                <button key={enrichment.id} className="activity-item" onClick={() => record && onSelect(record)}>
+                  <span className="activity-pulse"><Check size={11} /></span>
+                  <span>
+                    <b>{enrichment.field}</b> changed to <strong>{enrichment.new_value}</strong>
+                    <small>{formatDate(enrichment.checked_at)}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="activity-empty"><Clock3 size={20} /><p>Changes detected by your watches will appear here.</p></div>
+        )}
+      </aside>
+    </div>
   );
 }
 
@@ -628,6 +652,13 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
   const screenshotUrl = screenshotUrlFor(clip);
   const isBlocked = record.freshness === "blocked";
   const isAutoPaused = watch?.last_error_code === "AUTO_PAUSED_BLOCKED" && !watch?.active;
+  // Status color, not decoration: a field only carries --status-changed
+  // when it has real recorded history, and shows when that last happened.
+  const lastChangeByField = new Map();
+  for (const item of enrichments) {
+    const existing = lastChangeByField.get(item.field);
+    if (!existing || new Date(item.checked_at) > new Date(existing.checked_at)) lastChangeByField.set(item.field, item);
+  }
   return (
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
       <aside className="detail-panel" role="dialog" aria-modal="true" aria-label="Item detail" onMouseDown={(event) => event.stopPropagation()}>
@@ -637,11 +668,17 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
         </div>
         {isHttpUrl(record.source_url) && <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>}
         <div className="structured-fields">
-          {Object.entries(fields).map(([name, value]) => (
-            <div className="field-row" key={name}><span>{name.replace(/_/g, " ")}</span><b><FieldValue value={value} /></b></div>
-          ))}
+          {Object.entries(fields).map(([name, value]) => {
+            const change = lastChangeByField.get(name);
+            return (
+              <div className={`field-row${change ? " is-changed" : ""}`} key={name} title={change ? `Changed from ${change.old_value || "empty"} · ${formatDate(change.checked_at)}` : undefined}>
+                <span>{name.replace(/_/g, " ")}</span>
+                <b><FieldValue value={value} />{change && <i className="field-changed-dot" aria-hidden="true" />}</b>
+              </div>
+            );
+          })}
         </div>
-        {record.mission_id && <div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
+        {record.mission_id &&<div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
         {screenshotUrl && <img className="clip-screenshot" src={screenshotUrl} alt="Captured source page" />}
         <CapturedContext clip={clip} />
         {isBlocked && (
@@ -670,17 +707,22 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
           </div>
         )}
         <div className="detail-actions">
-          <label className="refresh-strategy-label">Check with
-            <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
-              <option value="direct_http">Direct HTTP</option>
-              <option value="zyte">Zyte cloud (manual)</option>
-              <option value="owner_browser">My browser</option>
-            </select>
-          </label>
           <button className="secondary-button" onClick={() => onRefresh(refreshStrategy)} disabled={isRefreshing}>
             <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
           </button>
-          <span>Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+          <details className="refresh-options">
+            <summary aria-label="Refresh options"><SlidersHorizontal size={14} /></summary>
+            <div className="refresh-options-panel">
+              <label className="refresh-strategy-label">Check with
+                <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
+                  <option value="direct_http">Direct HTTP</option>
+                  <option value="zyte">Zyte cloud (manual)</option>
+                  <option value="owner_browser">My browser</option>
+                </select>
+              </label>
+              <span className="refresh-last-checked">Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+            </div>
+          </details>
         </div>
         {refreshNotice && <div className={`refresh-notice ${refreshNotice.outcome}`}>{refreshNotice.message}</div>}
         <div className="danger-zone">
@@ -1048,7 +1090,7 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
         <header className="agent-head">
           <div className="agent-title">
             <MagpieMark size={32} />
-            <div><div className="eyebrow"><Sparkles size={12} /> evidence-grounded agent</div><h2>Ask Magpie</h2></div>
+            <div><div className="eyebrow"><AgentIcon size={12} /> evidence-grounded agent</div><h2>Ask Magpie</h2></div>
           </div>
           <div className="agent-head-actions">
             <button className="agent-new-button" onClick={startNewConversation} disabled={isLoadingConversation}>New chat</button>
@@ -1200,8 +1242,9 @@ export default function App() {
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [onboardingTourStep, setOnboardingTourStep] = useState(null);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshNotice, setRefreshNotice] = useState(null);
@@ -1745,10 +1788,28 @@ export default function App() {
       <header className="topbar">
         <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
         <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">{needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}<button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button><button className="mobile-menu-button icon-button" onClick={() => setIsMobileMenuOpen((current) => !current)} aria-label="Open menu" aria-expanded={isMobileMenuOpen}><Menu size={18} /></button>{isMobileMenuOpen && <div className="mobile-menu" role="menu"><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}<button type="button" className="pair-button" onClick={() => setOnboardingTourStep("pair")}><Sparkles size={14} /> How it works</button><a className="pair-button docs-launch-button" href="/?docs=getting-started"><Book size={14} /> Docs</a><a className="pair-button" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={14} /> Get extension</a><button className="pair-button" onClick={handleCreatePairing} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Key size={14} />} Pair extension</button><span>{user.full_name || user.email}</span><button className="icon-button desktop-signout" onClick={handleSignOut} aria-label="Sign out"><LogOut size={16} /></button></div>
+        <div className="user-menu">
+          {needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}
+          <button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button>
+          <button type="button" className="pair-button" onClick={() => setIsActivityOpen(true)}><Activity size={14} /> Activity</button>
+          <div className="account-menu">
+            <button type="button" className="account-menu-trigger icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu" aria-expanded={isAccountMenuOpen}><UserRound size={17} /><ChevronDown size={12} /></button>
+            {isAccountMenuOpen && (
+              <div className="mobile-menu" role="menu">
+                <button role="menuitem" className="account-menu-mobile-only" onClick={() => { setIsActivityOpen(true); setIsAccountMenuOpen(false); }}><Activity size={15} /> Activity</button>
+                <button role="menuitem" onClick={() => { setOnboardingTourStep("pair"); setIsAccountMenuOpen(false); }}><Sparkles size={15} /> How it works</button>
+                <a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a>
+                <a href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer" role="menuitem"><Download size={15} /> Get extension</a>
+                <button role="menuitem" onClick={() => { handleCreatePairing(); setIsAccountMenuOpen(false); }} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />} Pair extension</button>
+                <span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span>
+                <button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
       <section className="workspace-heading">
-        <div><div className="eyebrow"><Sparkles size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
+        <div><div className="eyebrow"><AgentIcon size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
               setActiveMissionId(missionId);
               // Must mirror missionCollections' own derivation: switching to
               // "All Collections" (missionId "") has no mission_id to match,
@@ -1787,9 +1848,9 @@ export default function App() {
       />
       <section className="workspace-grid">
         <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "table"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
-        <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} />
+        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "cards"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
       </section>
+      {isActivityOpen && <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} onClose={() => setIsActivityOpen(false)} />}
       <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
       {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />}

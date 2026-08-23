@@ -6,18 +6,16 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Crop,
   Download,
   FileText,
-  Key,
   Link2,
   LoaderCircle,
-  MousePointerClick,
   Smartphone,
   Sparkles,
   TrendingDown,
   X,
 } from "lucide-react";
+import { ClipElementIcon, PairingIcon, SavePageIcon, SnipAreaIcon } from "../components/icons.jsx";
 import { PairingStepStatus, deriveOverallPairingStatus } from "./state.js";
 
 // Owner-directed order (docs/DECISIONS.md): teach the three real capture
@@ -57,7 +55,7 @@ function WelcomeStep() {
   return (
     <div className="onboarding-wizard-step">
       <div className="eyebrow">welcome to magpie</div>
-      <h1>Turn what you find into an organized workspace.</h1>
+      <h1>Save it once. Magpie keeps it organized and current.</h1>
       <p className="onboarding-wizard-lede">
         Capture pages, listings, and articles as you research. Magpie reads each one, files it into
         the right Collection, and keeps it current -- so you can compare and decide instead of
@@ -71,21 +69,21 @@ const MODE_SLIDES = [
   {
     src: "/onboarding/mode-element.gif",
     alt: "Hovering an element on a page highlights it, then it's captured",
-    icon: MousePointerClick,
+    icon: ClipElementIcon,
     label: "Clip Element",
     body: "Hover any element, then press C to clip it.",
   },
   {
     src: "/onboarding/mode-snip.gif",
     alt: "Dragging a rectangle over part of a page crops and captures it",
-    icon: Crop,
+    icon: SnipAreaIcon,
     label: "Snip Area",
     body: "Drag a rectangle over the part you want.",
   },
   {
     src: "/onboarding/desktop-capture.gif",
     alt: "Clicking Save Page in the Side Panel captures the whole page",
-    icon: FileText,
+    icon: SavePageIcon,
     label: "Save Page",
     body: "One click captures the whole page.",
   },
@@ -242,7 +240,7 @@ function PairStep({ extensionInstalls, isPairing, onPair }) {
       </p>
       <div className="onboarding-wizard-actions">
         <button type="button" className="onboarding-cta" onClick={onPair} disabled={isPairing || isPaired}>
-          {isPairing ? <LoaderCircle className="spin" size={15} /> : <Key size={15} />}
+          {isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />}
           {isPaired ? "Paired" : isReconnect ? "Reconnect extension" : "Pair extension"}
         </button>
         <a className="onboarding-cta onboarding-cta-secondary" href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">

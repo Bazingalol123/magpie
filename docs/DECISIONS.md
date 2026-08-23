@@ -731,3 +731,331 @@ One accepted one-time cost: any account that dismissed onboarding under
 the old `localStorage` scheme will see it once more after this ships,
 since their dismissal was never recorded server-side. Not worth a
 migration -- the flow is idempotent and harmless to see again once.
+
+## De-templating pass, Phase 1: refine the design system rather than rebrand it
+
+Build Guide checkpoint 48. The owner's read: Magpie's product surfaces look
+scaffolded rather than designed -- not because any one choice is bad, but
+because the landing page, onboarding wizard, and login screen had
+independently converged on the same generic-AI-SaaS idiom (a "Turn X into Y"
+headline formula reused verbatim twice, an italicized accent word used as a
+tic in four different headlines, "01/02/03" numbered step badges reused in
+three unrelated places, a "G" letter and a "●" character standing in for the
+Google/Apple logos, and letter-avatar placeholders where a real favicon
+could render instead). A hand-designed product's marketing site, first-run
+flow, and login screen each have their own idiom under one shared identity;
+repeating the identical formula everywhere is the actual tell.
+
+Decided directly with the owner, in order of how much they change: keep the
+current green / DM Sans + Instrument Serif visual identity and the real bird
+mark rather than rebrand from zero; invest in a small custom icon set for
+Magpie-specific recurring concepts (capture modes, pairing status, the
+agent, empty states) rather than either staying 100% lucide-react or
+replacing all of it; and give the public landing page a benchmark pass
+against respected B2C products (Linear, Arc, Raycast, Superhuman, Notion)
+rather than rebuilding it, since the owner called it fine as-is.
+
+The five-phase plan, in the order agreed: (1) favicons, real OAuth marks,
+and voice guardrails -- this checkpoint; (2) the bounded custom icon set;
+(3) reducing the cross-surface headline/badge repetition down to at most one
+instance each; (4) pulling the Chrome extension side panel's separate
+stylesheet closer to the dashboard's tokens; (5) the landing benchmark
+research note and its resulting low-risk punch list.
+
+This checkpoint's three changes are deliberately all client-side, additive,
+and reversible: a favicon `<img>` with a same-behavior fallback, two brand
+SVGs swapped in for two placeholder characters, and one headline rewritten
+to stop duplicating the landing page's phrasing. None of it touches the
+capture/routing trust boundary, so it did not need the High/Critical change
+documentation this repo requires for backend-contract changes.
+
+`docs/VOICE.md` exists so future copy doesn't reach for the same templates
+again by default; it names which surface currently "owns" each device
+(landing owns the "Turn X into Y" formula and the italic accent word) so
+the next surface reaches for something else instead of repeating it.
+
+Landing page copy and visuals (`src/Landing.jsx`) are unchanged this
+checkpoint on purpose -- see the benchmark-first decision above.
+
+## De-templating pass, Phase 2: a bounded custom icon set, not a full replacement
+
+Build Guide checkpoint 49. The owner explicitly asked to push back if a full
+custom icon set looked like the wrong call, given the "refine, don't
+rebrand" decision already made in Phase 1. It does: replacing all of
+lucide-react would mean maintaining a parallel copy of dozens of generic
+action glyphs (close, back, arrow, check, trash) for no visible benefit,
+since those are exactly the icons a hand-designed product would also reach
+for a library over. The tell was never "this app uses lucide" -- it's that
+none of Magpie's own distinguishing concepts had their own visual identity.
+
+So this pass is deliberately narrow: six custom marks (`src/components/
+icons.jsx`) for the handful of ideas that recur across the product and are
+specific to Magpie -- the three capture modes, pairing/connection, the
+agent's own automatic behavior, and the one dedicated empty-Collection
+illustration -- built to lucide's own visual weight (24x24, 2px round
+stroke) so they sit next to the remaining lucide icons without clashing.
+Every other lucide usage in the product is untouched.
+
+Two of the six needed a second pass. Hand-written SVG path coordinates are
+easy to get subtly wrong without a design tool, so each mark was rendered
+in a real browser, both at its actual call-site size and blown up to 160px,
+before being treated as done (a temporary `public/_icon-preview.html`,
+deleted before committing -- never part of the shipped bundle). The first
+pairing-icon draft read as a barbell/headphones because two heavily
+rounded rects plus a faint dashed connector collapsed into two ovals at
+small sizes; tightening the corner radius and making the connector two
+visible segments around a bigger pulse dot fixed it. The first agent-icon
+draft (a filled triangle meant to suggest a bird's wings meeting at a
+point) just read as an arrowhead at any size; switching to the classic
+two-curved-stroke "gull" mark -- and to a stroke-based icon like the other
+five, instead of a filled one -- both fixed the legibility and made it
+visually consistent with the rest of the set.
+
+`PairingIcon` replacing `Key` everywhere pairing is the action is also a
+more accurate metaphor, not just a different one: pairing the extension is
+establishing a device link, not presenting a credential, and the six call
+sites it now covers (the pairing dialog, the topbar pair button, the
+onboarding pair step, all three `PairingChecklist` icons, and
+`ReconnectNotice`, which previously mixed `Key` and an unrelated `PlugZap`)
+all mean the same thing and now render the same icon.
+
+## De-templating pass, Phase 3: the login page stops duplicating Landing's devices
+
+Build Guide checkpoint 50. `docs/VOICE.md` (Phase 1) already named Landing
+as the one surface allowed to keep the "Turn X into Y" headline formula and
+the single-italic-accent-word device, on the theory that repetition across
+surfaces was the actual problem, not either device in isolation. That only
+holds if the other surfaces actually stop reaching for them. `LoginPage.jsx`
+was the one place besides Landing still using the italic-accent-word H2
+and a third independent "01/02/03" numbered-badge treatment (after
+Landing's own two and the onboarding welcome headline fixed in Phase 1) --
+so this checkpoint removes both from the login page specifically, leaving
+Landing as the sole owner of each device until its Phase 5 benchmark pass
+decides whether to keep them there either.
+
+The numbered badges weren't simply deleted; they're replaced with a small
+solid dot that reuses a pattern the product already has elsewhere
+(`.collection-dot`, `.status-dot`) rather than inventing a fourth "step
+indicator" visual language. Landing itself is still untouched -- both of
+its instances of each device stay in place pending Phase 5.
+
+## De-templating pass, Phase 4: self-host the extension's font instead of importing it remotely
+
+Build Guide checkpoint 51. Bringing `extension/sidepanel.css` closer to
+`src/index.css`'s tokens could have meant literally copying the
+dashboard's `@import url('https://fonts.googleapis.com/...')` line. That
+was rejected: the side panel is opened far more often and far more
+briefly than the dashboard is loaded, and giving it a new per-open network
+call to a third-party font CDN -- with the attendant offline-breakage risk
+and a category of remote-resource loading the Chrome Web Store review
+process pays closer attention to for extensions than it does for websites
+-- would be a worse trade than the font mismatch it fixes. Downloading the
+two WOFF2 files the side panel actually needs (400 and 600 weight, Latin
+subset, ~14KB each) and bundling them as static extension assets gets the
+identical visual result -- confirmed both report `loaded` via
+`document.fonts` in a real render -- with zero runtime network dependency
+added, which is strictly better than what the dashboard itself does, not
+just a smaller version of it.
+
+The color-token change (three primary-brand-color spots moved from the
+side panel's own `#2b5738`/`#1e4229` to the dashboard's exact
+`#254d32`/`#193d27`) stayed intentionally partial. Matching every
+secondary green already in that file would be a full rewrite of a
+stylesheet that otherwise works fine, not the "partial, lightweight"
+alignment the Phase 1 plan called for.
+
+## De-templating pass, Phase 5: research confirmed the plan, but not the "low-risk" label on its best item
+
+Build Guide checkpoint 52. The Phase 1 plan guessed that swapping Landing's
+hand-built fake-UI mock scenes for real screenshots would be a low-risk
+punch-list item once the benchmark research was done. It wasn't, and this
+is worth recording because the guess was reasonable and still wrong: the
+research (`docs/LANDING_BENCHMARK.md`) fully confirmed the direction --
+Linear, Raycast, and Notion all use real, high-fidelity product screenshots
+as their hero visual, none use abstract mockups -- but *implementing* it
+for Magpie specifically ran into something the research couldn't surface:
+the three story-section mock scenes are written around a specific fictional
+"moving to Berlin" narrative, and Magpie's existing real capture assets are
+generic onboarding demos that don't depict that narrative. There's no
+mechanical swap available; it's a choice between recording new footage
+that actually matches the copy, or rewriting the copy to match footage
+that already exists. Both are legitimate content decisions, so this
+checkpoint stops at naming the choice in the benchmark doc rather than
+picking one unasked.
+
+The three items that were genuinely mechanical -- wording the two jargon
+eyebrows plainly, reducing the italic-accent device from three Landing
+instances to the one `docs/VOICE.md` already allows it, and dropping the
+"01/02/03" story-section labels -- shipped this checkpoint. All three are
+the same reductions Phases 1 and 3 already proved out elsewhere in the
+product; Phase 5's contribution was confirming, with live evidence from
+real competitor sites rather than the owner's or the author's judgment
+alone, that Landing should stop being the exception.
+
+This closes the five-phase de-templating plan from Phase 1. What's left
+un-done and named for a follow-up, if wanted: the real-screenshot swap
+above, and matching lucide's remaining generic icon usage was explicitly
+ruled out of scope in Phase 2 rather than deferred.
+
+## Dashboard redesign, R1: a wrong first draft, corrected before shipping
+
+Build Guide checkpoint 53. Worth recording precisely because it was a real
+design mistake, caught by the owner in plan mode before any code shipped,
+not a hypothetical to guard against.
+
+The owner said the de-templating pass wasn't enough: the product is
+text-heavy, has almost no color differentiation, and asks users to read
+their way to understanding instead of seeing it. My first response
+proposed extending `App.jsx`'s `collectionDotIndex` (`hash(id) % 4`,
+currently just four muted sidebar-dot colors) into a six-color
+categorical palette applied to Collection cards, badges, and table
+accents -- "Collection = color identity." The owner rejected it directly:
+*"What value does this dot indicator have on a user?"* The honest answer
+is none. A color chosen by hashing an id carries no meaning a user can
+learn -- it's not "blue means Cameras" the way a real label would be,
+it's "blue happened to be what the hash produced for this specific id,"
+which a user still has to read the text label to decode. It was
+decoration wearing a function's clothes.
+
+The owner's second objection was sharper: *"why do we assume our current
+layout is doing great and sufficient?"* -- naming that the first draft had
+proposed layering color onto the dashboard's existing structure without
+ever questioning whether that structure was the actual problem. It was a
+fair hit: the research behind that draft (Figma and Wix) was their
+*marketing* pages, not their product UI, which isn't necessarily the same
+design language a working tool should borrow from.
+
+Corrected direction, reached together: color is reserved entirely for
+real status the data model already tracks (freshness, a changed field,
+needs-review, blocked, a live sync) -- never assigned by a hash or
+otherwise standing in for a category. This is verifiably how the
+comparable real products work in their actual product UI, not just their
+marketing pages -- a live screenshot of Linear's real issue view (same
+session) shows status and priority as an icon plus one word, colored only
+because that word is specifically true of that issue, never a decorative
+per-group color. And before proposing any layout change, `docs/
+DASHBOARD_AUDIT.md` was written first: a structural comparison of
+Magpie's actual rendered dashboard against that same Linear evidence,
+naming `RecordDetail` as the concrete worst offender (8-10 always-stacked
+text blocks with no color or size hierarchy) rather than assuming where
+the problem was.
+
+`docs/DESIGN_SYSTEM.md` exists as the durable output of getting this
+wrong once: the corrected color rule ("status only, never category") and
+the hierarchy rules from the audit are written down so the next redesign
+starts from a document instead of re-arriving at the same mistake.
+
+## Dashboard redesign, R2: a floating popover over a scroll container clips, use inline expand instead
+
+Build Guide checkpoint 54. The first version of `RecordDetail`'s
+collapsed refresh-options control used `position: absolute` to float a
+small popover below its trigger icon, styled after a conventional
+dropdown-menu pattern. Rendered against the actual compiled CSS in a real
+browser (a temporary static preview, not the live app -- see the
+checkpoint's Verify note for why), it was silently clipped whenever it
+opened near the bottom of `.detail-panel`'s `overflow-y: auto` scroll
+area: an absolutely-positioned descendant doesn't escape an ancestor's
+scroll clipping just because it's visually "floating." This is exactly
+the class of bug that reading JSX never surfaces and only shows up
+rendered -- worth naming as a reason this pass keeps testing everything
+in a real browser rather than trusting the markup alone.
+
+Fixed by dropping the floating-popover approach entirely in favor of a
+normal inline expand -- the panel content pushes whatever's below it
+down when opened, the same way `.clip-raw-toggle` (an existing
+`<details>`/`<summary>` disclosure elsewhere in this same panel) already
+behaves. No positioning math, no clipping surface, and one fewer distinct
+interaction pattern for the codebase to carry. The tradeoff (opening it
+shifts layout below it, rather than floating over it) was judged worth
+it for the robustness -- if a genuine floating popover is wanted
+somewhere later, it needs real anchor-positioning logic (a ref + measured
+offsets, or a portal), not `position: absolute` inside a scrollable
+ancestor.
+
+## Dashboard redesign, R3: don't "fix" a design decision that already works
+
+Build Guide checkpoint 55. The plan's R3 line item -- "table/card default
+switch" -- was written from `docs/DASHBOARD_AUDIT.md`'s claim that table
+is still the dashboard's default `displayMode`. That claim was checked
+before acting on it and turned out to be incomplete: `App.jsx:192`'s
+`inferCollectionDisplayMode` already picks cards vs. table per Collection
+based on real data -- cards when most of that Collection's records have a
+captured screenshot, table when they don't. That's a genuinely good,
+already-shipped heuristic: a Collection of mostly numeric/text fields
+(price comparisons, say) is easier to compare row-by-row in a table than
+scattered across cards, while a Collection with real photos benefits from
+seeing them. Forcing an always-cards default, as R3 was originally
+scoped, would have made the dashboard worse for exactly the Collections
+where a table earns its density.
+
+This is worth recording for the same reason the R1 correction was: the
+audit's job is to find real problems, not to justify a pre-decided fix.
+Checking the actual behavior before changing it, and being willing to
+leave R3's plan half undone when the "problem" turns out not to be one,
+matters more than shipping everything a plan named.
+
+What R3 did ship is the audit's other, verified-real finding: three
+panels competing for attention at once. `ActivityPanel` is no longer a
+permanent grid column; it's a topbar-launched overlay reusing the app's
+existing `.detail-overlay` pattern. This incidentally fixes a real
+regression the old version had -- `.activity-panel { display: none }`
+below 990px made it fully unreachable on tablet-width screens, not just
+hidden on desktop, which is a worse failure than "always visible and
+competing for space." The new version is reachable at every width via
+the topbar button or (below 680px, where `.pair-button` itself is
+hidden) the mobile hamburger menu.
+
+Also caught and fixed here: `--status-blocked` (defined in R1) was wrong.
+It was set to the terracotta danger-red by pattern-matching against
+`.danger-button` rather than checking what "blocked" actually renders as
+today -- every real instance (`.blocked-notice`, `.blocked-badge`,
+`.record-card-badge`) already uses the amber family, the same as "needs
+review." Terracotta stays reserved for destructive delete actions, a
+genuinely different concept from "this source needs attention."
+Corrected the token to match reality before it propagated into more
+places using the wrong color.
+
+## Header declutter: two bigger changes flagged and deliberately not done
+
+Build Guide checkpoint 56. The owner raised two ideas alongside "the
+header has too many buttons" and, after discussion, agreed both are
+separate work. Recording the reasoning now so neither has to be
+re-derived when someone does pick them up.
+
+**Rename "Project" to "Folder" in the UI.** Checked before agreeing to
+defer it: `docs/PRODUCT_CHARTER.md` and this file's own "Add bounded
+navigational folders in V3.1" entry describe a distinct, already-shipped
+Folder concept -- Collections can be organized into a Folder and one
+level of Subfolder for dashboard navigation. That's unrelated to Mission
+(labeled "Project" in the UI, per "Use clearer UI labels without renaming
+backend resources"). Renaming Project to Folder in the UI would make two
+different concepts share one name in the same product. Whoever picks
+this up needs to either pick a different target name or resolve that
+collision first -- it's not just a label swap, and it's also correctly
+flagged as touching the backend Mission entity, which is exactly the kind
+of destructive-migration risk the original "clearer UI labels without
+renaming backend resources" decision was written to avoid.
+
+**Replace the header/sidebar split with one left nav rail**, Linear-style
+-- global actions, Collections, and account all in a single sidebar, with
+little or no separate top bar. This is the strictly cleaner direction:
+Linear's actual product UI (screenshotted earlier this session, not just
+its marketing page) puts exactly this in one rail, and Magpie already has
+half the pieces (`CollectionSidebar` lists Collections; the account menu
+added this checkpoint is most of what a sidebar-bottom account entry
+would contain). But it's a real shell restructuring -- `.app-shell`,
+`.topbar`, `.collection-sidebar` CSS, and the mobile responsive behavior
+all change together -- not a same-session fix alongside everything else
+in this pass. Recorded as the recommended direction for a dedicated
+future pass rather than attempted piecemeal here.
+
+What *did* ship this checkpoint: consolidating the header's setup/account
+actions behind one menu, by generalizing the mobile-only dropdown that
+already existed rather than inventing a new component or jumping straight
+to the bigger rail redesign. Two real CSS specificity/ordering bugs were
+caught by checking `getComputedStyle` directly at multiple widths instead
+of trusting the markup -- see the checkpoint entry in `docs/BUILD_GUIDE.md`
+for both; the second (equal-specificity ties resolving by source order,
+not by which media query "should" win) is a sharp enough gotcha to watch
+for again anywhere a base rule and a media-query override end up with
+matching specificity.

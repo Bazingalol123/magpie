@@ -78,7 +78,7 @@ export default function Landing({ isSigningIn, onSignIn }) {
 
       <section className="ld-hero" ref={heroRef}>
         <div className="ld-hero-copy">
-          <div className="eyebrow"><Sparkles size={13} /> web intelligence, kept alive</div>
+          <div className="eyebrow"><Sparkles size={13} /> clip, organize, stay current</div>
           <h1>Turn the messy web into <em>living, structured collections.</em></h1>
           <p>Clip any listing, product, job, or recipe. Magpie understands what it is, files it with its siblings, and keeps watching the source so your research never goes stale.</p>
           <button className="primary-button ld-cta" onClick={onSignIn} disabled={isSigningIn} aria-label="Sign in to start using Magpie">
@@ -138,12 +138,11 @@ export default function Landing({ isSigningIn, onSignIn }) {
       <section className="ld-story">
         <div className="ld-story-intro" data-reveal>
           <div className="eyebrow"><Layers3 size={13} /> one journey, real structure</div>
-          <h2>Moving to Berlin? <em>Watch it become a workspace.</em></h2>
+          <h2>Moving to Berlin? Watch it become a workspace.</h2>
         </div>
 
         <div className="ld-scene-row" data-reveal>
           <div className="ld-scene-copy">
-            <span className="ld-scene-index">01</span>
             <h3>Clip an apartment from any listing site</h3>
             <p>Hover, press <kbd>C</kbd>, done. The original page, screenshot, and selected evidence travel with the capture.</p>
           </div>
@@ -162,7 +161,6 @@ export default function Landing({ isSigningIn, onSignIn }) {
 
         <div className="ld-scene-row reverse" data-reveal>
           <div className="ld-scene-copy">
-            <span className="ld-scene-index">02</span>
             <h3>Collections build themselves</h3>
             <p>Apartments, Neighborhoods, Moving companies — each capture lands as a structured row you can actually compare.</p>
           </div>
@@ -177,7 +175,6 @@ export default function Landing({ isSigningIn, onSignIn }) {
 
         <div className="ld-scene-row" data-reveal>
           <div className="ld-scene-copy">
-            <span className="ld-scene-index">03</span>
             <h3>The web moves. Your data follows.</h3>
             <p>A rent changes, a listing disappears, a deadline shifts — Magpie updates the right Item and keeps the evidence-backed history.</p>
           </div>
@@ -191,8 +188,8 @@ export default function Landing({ isSigningIn, onSignIn }) {
 
       <section className="ld-ai">
         <div className="ld-ai-intro" data-reveal>
-          <div className="eyebrow"><Sparkles size={13} /> bounded AI, deterministic writes</div>
-          <h2>AI does the thinking. <em>Code decides what gets written.</em></h2>
+          <div className="eyebrow"><Sparkles size={13} /> what the AI actually does</div>
+          <h2>AI does the thinking. Code decides what gets written.</h2>
           <p>Magpie isn't a folder you file things into by hand. An AI layer proposes, reads, and explains — every write is still validated by ordinary server code, never invented from a hunch.</p>
         </div>
         <div className="ld-usecase-grid">

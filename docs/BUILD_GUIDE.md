@@ -1668,3 +1668,447 @@ it to something real.
   old `localStorage` scheme will see it once more after this ships (never
   recorded server-side); not worth a migration for a one-time, harmless
   re-show.
+
+### 48. De-templating pass, Phase 1: real favicons, real OAuth marks, voice guardrails
+
+- [x] **Build:** Owner-directed design pass to move the product away from a
+  generic-AI-scaffolded look. Phase 1 (this checkpoint) is the low-risk,
+  no-backend-change slice of a five-phase plan (`docs/DECISIONS.md` has the
+  full plan and audit). Three changes:
+  - Captured sources now show their real favicon (a new `SourceFavicon`
+    component in `src/App.jsx`, `<img>` against the Google favicons CDN
+    keyed off the existing `hostFromUrl()`), falling back to the existing
+    letter-avatar square on load failure or an unparsable host. Used in the
+    record table's source cell, the card grid's no-screenshot fallback, and
+    the card grid's footer source line.
+  - `src/LoginPage.jsx`'s "Continue with Google/Apple" buttons now render
+    the real Google and Apple brand marks (inline SVG) instead of a plain
+    "G" letter and a "●" character standing in for the Apple logo.
+  - New `docs/VOICE.md` records the copy guardrails the audit surfaced
+    (banned-by-default patterns, capped to one surface each) and the
+    onboarding welcome headline was rewritten to stop duplicating the
+    landing page's "Turn X into Y" formula.
+- **Files:** `src/App.jsx`, `src/LoginPage.jsx`, `src/index.css`,
+  `src/onboarding/OnboardingWelcomeFlow.jsx`, `docs/VOICE.md`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean.
+- **Deliberately deferred:** `src/Landing.jsx` copy and visuals are
+  untouched this checkpoint — the owner called the landing page fine as-is
+  and asked for a benchmark pass against real B2C product sites before
+  editing it (Phase 5 of the plan), not an immediate rewrite.
+
+### 49. De-templating pass, Phase 2: bounded custom icon set
+
+- [x] **Build:** New `src/components/icons.jsx` exports six custom marks
+  (24x24 viewBox, 2px round stroke, same visual weight as lucide-react so
+  they don't clash) for the concepts that are actually specific to Magpie,
+  wired in wherever the audit found a generic lucide stand-in for them.
+  Lucide is untouched everywhere else — this stays a bounded set, not a
+  full custom library.
+  - `ClipElementIcon` / `SnipAreaIcon` / `SavePageIcon` — the three real
+    capture modes. All three build on one shared `ViewportFrame` (a small
+    page/browser outline) so they read as a family: a target reticle for
+    Clip Element, a dashed marquee for Snip Area, a fully filled interior
+    for Save Page. Replaces `MousePointerClick`/`Crop`/`FileText` in
+    `OnboardingWelcomeFlow.jsx`'s `MODE_SLIDES`.
+  - `PairingIcon` — two connected nodes with a pulse between them, since
+    pairing is a device link rather than a credential (a more accurate
+    metaphor than the key it replaces, not just a different one). Replaces
+    every `Key` used for the pair/reconnect action:
+    `App.jsx` (pairing dialog eyebrow, topbar "Pair extension"),
+    `OnboardingWelcomeFlow.jsx`'s `PairStep`, `PairingChecklist.jsx` (all
+    three), and `ReconnectNotice.jsx` (which also had its own `PlugZap`
+    step icon unified onto the same mark for consistency within that
+    surface).
+  - `AgentIcon` — the classic two-stroke gull/bird silhouette, replacing
+    `Sparkles` (the generic "AI feature" icon nearly every AI product uses)
+    at the two spots that specifically describe Magpie's own automatic
+    behavior: the `Ask Magpie` panel eyebrow and the dashboard's
+    "automatically organized, always current" heading eyebrow in `App.jsx`.
+    Other `Sparkles` usages (the onboarding welcome continue button, the
+    topbar "How it works" button, Landing) are left as lucide -- they're
+    decorative button chrome, not a recurring brand moment.
+  - `EmptyNestIcon` — an empty woven nest/bowl, replacing `Inbox` only in
+    the large empty-Collection illustration (`App.jsx`'s `EmptyCollection`).
+    The smaller inline "needs review" `Inbox` usages elsewhere are left as
+    lucide; this was scoped to the one dedicated illustration moment, not
+    every inbox-shaped icon in the product.
+  - Iterated on `PairingIcon` and `AgentIcon` after an initial pass looked
+    like a barbell and a plain arrowhead respectively at both 16px and a
+    160px blown-up render (a temporary `public/_icon-preview.html`, removed
+    before commit) — tightened the pairing nodes' corner radius and made
+    the connector visible as two segments plus a bigger pulse dot, and
+    switched the agent mark from a filled triangle to two curved strokes
+    forming the recognizable gull "M" shape instead.
+- **Files:** `src/components/icons.jsx` (new), `src/App.jsx`,
+  `src/onboarding/OnboardingWelcomeFlow.jsx`,
+  `src/onboarding/PairingChecklist.jsx`, `src/onboarding/ReconnectNotice.jsx`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Icons were checked
+  visually (both at their real call-site sizes and blown up large) via a
+  temporary static preview page served through the Vite dev server, not
+  through a full signed-in run of the onboarding/pairing/agent screens --
+  this repo's test credentials weren't available in this session. The
+  login page (which shares the same bundle and doesn't need a session) was
+  driven live in a real browser and rendered cleanly.
+
+### 50. De-templating pass, Phase 3: cap the headline/badge repetition at one surface
+
+- [x] **Build:** `docs/VOICE.md` names Landing as the surface that owns the
+  "Turn X into Y" headline formula and the single-italic-accent-word
+  device; every other surface duplicating either one should stop. Phase 1
+  already fixed the onboarding welcome headline. This checkpoint fixes
+  `src/LoginPage.jsx`, the remaining offender: its hero `<h2>` dropped the
+  `<em>Keep it useful.</em>` italic treatment (now plain text), and its
+  three-row "how it works" card dropped the `01`/`02`/`03` numeral badges
+  (`.auth-flow-icon`, `font: 11px "DM Mono"`) in favor of a small solid dot
+  (`.auth-flow-dot`) matching the dot language already used elsewhere in
+  the product (`.collection-dot`, `.status-dot`) instead of introducing a
+  fourth distinct "step" motif.
+  `src/Landing.jsx` still owns both devices and is intentionally
+  unchanged -- it's the one surface each is allowed to keep, and it stays
+  deferred to Phase 5's benchmark pass regardless.
+- **Files:** `src/LoginPage.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Login page driven
+  live in a real browser; headline renders as plain text and the three
+  flow rows show a small dot in place of the numeral badge.
+
+### 51. De-templating pass, Phase 4: pull the extension side panel toward the dashboard's tokens
+
+- [x] **Build:** `extension/sidepanel.css` was a fully separate design
+  system (system-ui/Segoe UI, a slightly different green family, no
+  monospace) with no shared source with `src/index.css` -- closing that gap
+  was the point, not a full rewrite. Two changes:
+  - Self-hosted DM Sans, weights 400 and 600 (the only two the side panel
+    actually needs), as local WOFF2 files (`extension/fonts/dm-sans-
+    400.woff2`, `dm-sans-600.woff2`, ~14KB each, Latin subset) declared via
+    `@font-face` at the top of `sidepanel.css` and set as the body font,
+    falling back to the previous `"Segoe UI", system-ui` stack. Deliberately
+    **not** the dashboard's `@import url(fonts.googleapis.com/...)` --
+    the side panel is a small, frequently-opened surface and shouldn't gain
+    a new network dependency (or any Chrome Web Store remote-resource
+    scrutiny) just to match a typeface. Self-hosting gets the same visual
+    result with zero runtime network calls; confirmed both weights report
+    `loaded` via `document.fonts` in a real browser render.
+  - The three spots carrying the side panel's primary brand color (the
+    "Clip element" hero button gradient, the `.save` button, the
+    auto-refresh toggle's `accent-color`) now use the dashboard's exact
+    `#254d32` / `#193d27` instead of the side panel's own slightly
+    different `#2b5738` / `#1e4229`. Body text and background were also
+    changed to the dashboard's exact `#15261d` / `#f7f8f3` (both were
+    already visually near-identical, so this is a token-exactness fix, not
+    a visible color shift). The several other secondary greens already in
+    `sidepanel.css` (button/icon accents, hover states) are deliberately
+    left alone -- matching every shade would be a full rewrite, not the
+    "partial, lightweight" alignment this phase called for.
+- **Files:** `extension/sidepanel.css`, `extension/fonts/dm-sans-400.woff2`
+  (new), `extension/fonts/dm-sans-600.woff2` (new). No `manifest.json`
+  change needed -- the fonts are static assets the side panel's own page
+  loads by relative path, the same as its existing `icons/*.png`.
+- **Verify:** `node --check` clean on every `extension/**/*.js` (unchanged
+  by this pass but re-run), `@base44/sdk` grep clean, 216/216 Deno tests,
+  `npm run build` clean. `sidepanel.html` was served from a local static
+  server and driven live in a real browser (the extension APIs it calls
+  aren't available outside a real Chrome extension context, so this
+  checked the CSS/font/color rendering, not `chrome.*` interactions) --
+  both `DM Sans` weights loaded, and the hero button/header render in the
+  dashboard's exact green and typeface.
+
+### 52. De-templating pass, Phase 5: landing benchmark research and the low-risk punch-list items
+
+- [x] **Build:** New `docs/LANDING_BENCHMARK.md` records a live-browser
+  comparison against Linear, Raycast, and Notion's landing pages (opened
+  and screenshotted 2026-08-22, not recalled from memory), the concrete
+  patterns all three share, and a four-item punch list ranked by how
+  mechanical each change actually is. Implemented the three that turned
+  out to be genuinely mechanical:
+  - `src/Landing.jsx`'s two jargon eyebrows ("web intelligence, kept
+    alive", "bounded AI, deterministic writes") reworded to plain,
+    concrete language ("clip, organize, stay current"; "what the AI
+    actually does") -- same pattern as Phase 1's `docs/VOICE.md` pass on
+    onboarding/login, just not done on Landing until the benchmark
+    confirmed real product sites don't use this device at all.
+  - The italic-accent-word device, which `docs/VOICE.md` already named
+    Landing as owning, is now used once on that page instead of three
+    times (kept on the hero H1, removed from the story H2 and the AI
+    section H2) -- same reduction Phase 3 already proved out on the login
+    page.
+  - The "01/02/03" `ld-scene-index` numeral labels in the story section
+    are removed; the `ld-steps` section's icon-based steps are unaffected
+    (an icon isn't the numbered-badge motif this pass targets). Confirmed
+    removing the labels doesn't affect `.ld-scene-row`'s grid layout --
+    they were a plain block element with no layout dependents.
+  - Three now-dead CSS rules removed alongside their JSX
+    (`.ld-story-intro h2 em`, `.ld-final h2 em`, `.ld-ai-intro h2 em`,
+    `.ld-scene-index`).
+  - **Not implemented:** the punch list's highest-value, best-evidenced
+    item -- replacing the story section's hand-built `.ld-mock-*` fake-UI
+    illustrations with real screenshots, which is what all three
+    benchmarked sites actually do. Looked mechanical in the plan; wasn't
+    once the actual JSX was read. The three mock scenes illustrate a
+    specific fictional "moving to Berlin" narrative that doesn't match any
+    of Magpie's existing real capture assets (those are generic
+    capture-flow demos from onboarding). Swapping them in would either
+    break the narrative or require rewriting the copy around whatever the
+    real assets show -- a content decision, not a mechanical substitution,
+    so it's recorded in the benchmark doc for the owner to decide rather
+    than guessed at.
+- **Files:** `docs/LANDING_BENCHMARK.md` (new), `src/Landing.jsx`,
+  `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Landing page
+  driven live in a real browser at both the hero and the story section;
+  eyebrow copy, single italic instance, and the removed numeral labels all
+  confirmed with no layout regression.
+
+## Dashboard redesign -- status-driven color + structural audit
+
+The owner judged the de-templating pass insufficient on its own: the
+product is text-heavy, has almost no color differentiation, and asks
+users to read their way to understanding instead of seeing it. This
+starts a second design thread on the same branch, with its own
+checkpoint series below.
+
+### 53. R1: status-color tokens, a real structural audit, and the durable design-system doc
+
+- [x] **Build:** A first draft of this plan (generalizing the sidebar's
+  hash-based `.dot-1/2/3` Collection color into a bigger categorical
+  palette, then applying it on top of the existing layout) was wrong and
+  the owner corrected it before any code shipped -- see
+  `docs/DECISIONS.md` for the full correction. This checkpoint is the
+  redone R1:
+  - Five status-color tokens added to `src/index.css`'s `:root`
+    (`--status-fresh`, `--status-changed`, `--status-review`,
+    `--status-blocked`, `--status-live`, each with a `-solid` and `-bg`
+    variant), reusing the app's existing amber/terracotta/green wherever
+    a status already had a real color, adding exactly one new hue
+    (`--status-live`, blue). None are hash-assigned; each is only ever
+    applied when that specific condition is true for a record. No visual
+    change yet -- nothing consumes these tokens until R2.
+  - `docs/DASHBOARD_AUDIT.md` -- a structural audit of `src/App.jsx`'s
+    actual rendered dashboard (not assumed) against a live screenshot of
+    Linear's real issue-tracker UI captured the same session. Names
+    `RecordDetail` as the worst offender (8-10 always-stacked text
+    blocks, no color/size hierarchy), the three-always-visible-panel
+    `.workspace-grid` layout, and the table view's plain-text columns as
+    the concrete divergences -- and names `ActivityPanel`'s existing
+    icon-led, one-bold-fact-plus-timestamp pattern as the model to
+    generalize rather than replace.
+  - `docs/DESIGN_SYSTEM.md` -- the durable reference: the status-color
+    token table, the iconography rules already established in Phase 2,
+    and the hierarchy rules ("icon + one word beats a sentence," "one
+    bold primary fact per card," "rare controls behind a menu") that R2
+    onward apply. Exists so the next redesign starts from a document
+    instead of re-deriving all of this again.
+- **Files:** `src/index.css`, `docs/DASHBOARD_AUDIT.md` (new),
+  `docs/DESIGN_SYSTEM.md` (new).
+- **Verify:** 216/216 Deno tests, `npm run build` clean. No visual
+  surface to check yet -- this checkpoint is tokens and docs only.
+
+### 54. R2: RecordDetail cut down to the audited shape, status color applied
+
+- [x] **Build:** The highest-value, highest-risk surface named in
+  `docs/DASHBOARD_AUDIT.md`. `RecordDetail` (`App.jsx:639`):
+  - `.field-row` now carries `--status-changed` (background tint + solid
+    text + a small dot, `.field-changed-dot`) when that field has real
+    recorded history, computed from `enrichments` (already scoped to the
+    selected record) via a `lastChangeByField` map keyed by field name --
+    not hash-assigned, not decorative; a row only colors when that field
+    specifically has a change on record. The row's `title` attribute
+    carries the old value and when it changed, for anyone who does want
+    to read further.
+  - The refresh-strategy `<select>` and the "Last checked" text -- a
+    control most users touch rarely, previously always rendered inline --
+    now live behind a `<details>`/`<summary>` trigger (`SlidersHorizontal`
+    icon), matching the codebase's existing `.clip-raw-toggle` disclosure
+    idiom rather than inventing a new one. The primary action ("Check
+    source now") stays a single always-visible button using whichever
+    strategy was last chosen.
+  - The global "Syncing live" `.status-dot` now uses `--status-live`
+    (blue) instead of a plain hardcoded green, so "something is
+    live/syncing" has one consistent color across the dashboard.
+  - **Real bug caught by visual testing, fixed before commit:** the first
+    version of the refresh-options disclosure used `position: absolute`
+    to float as a popover. Rendered against the actual compiled CSS in a
+    real browser, it was silently clipped by `.detail-panel`'s
+    `overflow-y: auto` whenever it opened near the bottom of the scroll
+    area -- exactly the kind of thing that's invisible reading JSX and
+    only shows up rendered. Switched to a normal inline expand (content
+    pushes following elements down, like `.clip-raw-toggle` already does)
+    instead of a floating popover -- no positioning math, no clipping
+    surface, one fewer novel interaction pattern in the codebase.
+  - Consolidated two separately-declared `.detail-actions` CSS rules
+    (pre-existing duplicate selectors with conflicting `margin`/`gap`
+    values from different edits over time) into one, while touching this
+    exact block anyway.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Rendered against
+  the real compiled CSS via a static preview page (temporary, built into
+  `dist/`, deleted before commit -- `RecordDetail` needs a signed-in
+  session with real record/enrichment data this environment doesn't have
+  credentials for) with representative changed-field data: confirmed the
+  amber highlight is immediately visible without reading labels, the
+  refresh-options trigger opens/closes cleanly with no clipping in both
+  states, and the live-status dot renders blue.
+- **Per the plan: pausing here for a visual check-in before continuing**
+  to R3 (table/card default switch, workspace-grid layout) and beyond.
+
+**Owner feedback after checking R2 live:** didn't like `--status-live`
+blue on the topbar dot as an isolated accent. Resolved by committing to
+it as a real token instead of reverting it -- `.live-indicator` (the
+per-Collection "live" badge in the table panel header, `index.css:89`)
+was still hardcoded green (`#eff6ec`/`#47814f`/`#58a75e`) and is the same
+"live" concept; it now uses `--status-live` too. Blue now means "live" in
+both places it appears in the dashboard, not one isolated spot.
+
+### 55. R3: de-permanentize the activity panel; a card-default assumption turned out to already be handled
+
+- [x] **Build:** The plan's R3 line item was "table/card default switch +
+  ActivityPanel/workspace-grid layout change." Investigating the first
+  half before touching it found the audit's "table is still the default
+  `displayMode`" claim was wrong: `App.jsx:192`'s `inferCollectionDisplayMode`
+  already picks cards vs. table per Collection based on real data (cards
+  when over half that Collection's records have a captured screenshot,
+  table otherwise) -- a genuinely reasonable, already-shipped heuristic,
+  not an oversight to override. Forcing an always-cards default would
+  have *regressed* it for text/numeric-heavy Collections where a table
+  is the better comparison view. Left it alone rather than "fixing" a
+  design decision that was already correct -- see `docs/DECISIONS.md`.
+  - The real, audited problem -- three panels competing for attention at
+    once (`.workspace-grid`: sidebar / table / activity, always visible)
+    -- is fixed: `ActivityPanel` is no longer a permanent third grid
+    column. It's now a topbar-launched overlay (`isActivityOpen` state,
+    a new "Activity" button next to "How it works," reusing the app's
+    existing `.detail-overlay` slide-in pattern rather than inventing a
+    new one), added to the mobile hamburger menu too so it's reachable at
+    every width -- fixing a real regression the old column-based version
+    had: `.activity-panel { display: none }` below 990px made it
+    unreachable on tablet, not just hidden on desktop.
+  - `.workspace-grid` drops to two grid tracks (`215px minmax(0, 1fr)`);
+    its existing 990px breakpoint already used that same two-column
+    shape as a fallback, so this unifies the layout across breakpoints
+    rather than introducing a new one.
+  - `.activity-pulse` (the field-change icon in the activity list) now
+    uses `--status-changed` instead of a hardcoded green -- the same
+    "field changed" concept R2 colored in `RecordDetail`, now consistent
+    across both places it appears.
+  - **A real error in R1's tokens, caught before it spread further:**
+    `--status-blocked` was defined as the terracotta danger-red
+    (`#a44a2f`), assumed by pattern-matching against `.danger-button`
+    without checking what "blocked" actually looks like today. It
+    doesn't match -- every real blocked-source indicator in the app
+    (`.blocked-notice`, `.blocked-badge`, `.record-card-badge`) already
+    uses the amber family (`#ad8434`/`#fdf3e3`), the same as "needs
+    review." Terracotta-red is specifically reserved for destructive
+    delete actions, a different concept. Fixed the token definition to
+    match reality and wired it into all three existing hardcoded spots,
+    rather than shipping a new, inconsistent "blocked" color alongside
+    the real one.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Activity overlay
+  rendered against the real compiled CSS via a temporary static preview
+  (built into `dist/`, deleted before commit): slides in cleanly, close
+  button works, amber pulse dots render correctly, no clipping.
+
+### 56. Header declutter: consolidate setup/account actions into one menu
+
+- [x] **Build:** The desktop topbar's `.user-menu` had grown to up to nine
+  peer-level elements (Needs review, Ask Magpie, Activity, How it works,
+  Docs, Get extension, Pair extension, user identity, sign-out) -- the
+  same "rarely-used controls behind a menu" rule `docs/DESIGN_SYSTEM.md`
+  already states, not yet applied to the header itself.
+  - Frequent/primary actions stay inline: the conditional "Needs review"
+    badge button, "Ask Magpie", "Activity".
+  - Setup/account actions (How it works, Docs, Get extension, Pair
+    extension, user email, sign out) now live behind one account menu.
+    Implementation reuses the interaction pattern that already existed
+    (`isMobileMenuOpen` + `.mobile-menu` dropdown, previously gated to
+    mobile-only via `.mobile-menu-button { display: none }` above 680px)
+    rather than inventing a new one -- renamed to `isAccountMenuOpen` /
+    `.account-menu`, and its dropdown styling moved out of the 680px
+    media query into base rules so it works at every width. Trigger is
+    now a person+chevron icon button (`UserRound` + `ChevronDown`,
+    replacing the bare hamburger `Menu` icon, which is now unused and
+    removed from the import list).
+  - "Activity" also gets a redundant entry inside the account menu,
+    visible only below 680px (`.account-menu-mobile-only`) -- at that
+    width its inline `.pair-button` is hidden by an existing rule, so
+    without this it would regress the exact "unreachable, not just
+    hidden" mobile-reachability bug R3 (checkpoint 55) fixed for the
+    Activity overlay itself.
+  - Two real CSS bugs caught by testing the actual rendered/computed
+    state rather than trusting the markup, both around the same
+    mobile-only visibility toggle:
+    1. First attempt, `.account-menu-mobile-only { display: none }`
+       (one class) lost to the pre-existing `.mobile-menu button`
+       (class+element) rule setting `display: flex` -- element+class
+       beats a single class in specificity regardless of which one reads
+       "more specific" to a human. Fixed by matching selector shape:
+       `.mobile-menu button.account-menu-mobile-only`.
+    2. That fix then revealed a second bug: with both rules at equal
+       specificity, the *unconditional* base rule (added after the
+       existing 680px media query earlier in the file) won even inside
+       the media query, because equal-specificity ties resolve by
+       source order, not by whether a media query "should" apply.
+       Fixed by adding one more ancestor class to the media-query
+       override (`.user-menu .mobile-menu button...`) so it wins outright
+       rather than depending on file ordering staying accidentally
+       correct.
+  - Cleaned up two now-dead CSS rules (`.user-menu .desktop-signout`,
+    `.user-menu > span`) left over from the old markup shape, where those
+    were direct children of `.user-menu`; both now live inside the
+    account menu instead.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. Rendered against
+  the real compiled CSS via a temporary static preview at three widths
+  (1200px, 680px boundary, 375px) with the computed `display` value of
+  `.account-menu-mobile-only` checked directly via
+  `getComputedStyle` -- not just eyeballed -- at each width before and
+  after each specificity fix.
+- **Deferred, not implemented, recorded for a future dedicated pass (see
+  `docs/DECISIONS.md`):** renaming "Project" to "Folder" in the UI (would
+  collide with the distinct, already-shipped Folder navigational feature
+  for Collections), and replacing the header/sidebar split with a single
+  Linear-style left nav rail.
+
+### 57. R4: status color for onboarding and the extension, where real status exists
+
+- [x] **Build:** Per the dashboard-redesign plan, R4 carries the same
+  status-color/hierarchy rules into onboarding, landing/login, and the
+  extension -- applied only where a surface has real status to show;
+  landing/login's content is mock data with nothing real to color, so
+  neither was touched.
+  - `CaptureStatusBanner.jsx` (`src/onboarding/`) had the clearest real
+    status of any onboarding surface -- five real outcomes (in progress,
+    routed, created, needs review, failed) -- all rendered through the
+    exact same green `.onboarding-step-icon`, regardless of outcome. Now:
+    in-progress uses `--status-live` (new), needs-review uses
+    `--status-review` (existing amber), failed uses the new
+    `--status-error` (terracotta), and the two success outcomes keep the
+    existing default green rather than gaining a redundant `is-fresh`
+    modifier class. `ReconnectNotice.jsx`'s "connection looks inactive"
+    icon gets `--status-review` too -- the same "needs your attention
+    soon" semantic as needs-review.
+  - New token: `--status-error` (terracotta, `src/index.css`). Reusing
+    `--status-blocked` for this would have been wrong post-R3-correction
+    -- blocked is now amber ("needs attention"), and a real processing
+    failure is a distinct, more severe signal that belongs with the
+    danger-button terracotta, not blended into the same amber bucket as
+    "needs a quick decision."
+  - `extension/sidepanel.css`'s connection-status pill was already doing
+    the right semantic thing (green when paired, amber when not) before
+    this pass -- just with its own slightly different hex values. Aligned
+    to the literal values of `--status-fresh`/`--status-review` (the
+    extension is a separate CSS bundle and can't reference `src/
+    index.css`'s custom properties directly) so the same status reads as
+    the exact same color in both places.
+  - `docs/DESIGN_SYSTEM.md`'s token table corrected to match: it still
+    said `--status-blocked` was "existing danger terracotta," which R3
+    already disproved and fixed in code but not in this doc. Fixed here,
+    plus the new `--status-error` row.
+- **Files:** `src/index.css`, `src/onboarding/CaptureStatusBanner.jsx`,
+  `src/onboarding/ReconnectNotice.jsx`, `extension/sidepanel.css`,
+  `docs/DESIGN_SYSTEM.md`.
+- **Verify:** 216/216 Deno tests, `npm run build` clean. All four
+  `CaptureStatusBanner` outcomes rendered together against the real
+  compiled CSS via a temporary static preview (deleted before commit):
+  each is now a distinct, correct color at a glance -- blue/green/amber/
+  red -- with no code change needed to tell them apart beyond the color
+  itself.
