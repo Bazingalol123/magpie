@@ -2395,5 +2395,14 @@ both places it appears in the dashboard, not one isolated spot.
   B active. The complete Deno suite passes 255/255, all
   24 Function entry points type-check, every Extension script parses, the
   Extension contains no `@base44/sdk` import, `npm run build` succeeds, and
-  `git diff --check` is clean. No deploy ran; hosted two-owner verification
-  remains gated by issue #20 and explicit owner approval.
+  `git diff --check` is clean.
+- **Deployed 2026-08-24 after explicit owner approval:** pushed commit
+  `d485d68` to `origin/codex/issue-61-pairing-lifecycle`, synced all ten
+  entity schemas, deployed the four changed pairing Functions and the three
+  redesign Functions required by the site, then deployed the Vite site.
+  `base44 functions list` reported 24 remote Functions; both
+  `magpieorelse.base44.app` and `magpiecapture.com` returned `200`; anonymous
+  POSTs to all seven endpoints returned their intended `401` boundary. A
+  signed-in hosted lifecycle and hosted two-owner verification remain gated
+  by issue #20. The Extension source was pushed, but no new Chrome extension
+  artifact was published by this Base44 release.

@@ -1842,3 +1842,31 @@ One full-suite rerun also exposed a Windows-only static-test problem unrelated
 to pairing: the Escape contract searched for a literal LF-only blank line in a
 CRLF checkout. The assertion now finds the next function declaration instead;
 runtime behavior and `extension/content.js` were unchanged.
+
+## 2026-08-24 — Pairing and redesign deployment required one coherent backend set
+
+The issue #61 release initially targeted the four changed pairing Functions
+and the site. The post-deploy inventory then exposed a real dependency gap:
+the redesigned frontend also calls `correct-record-field`,
+`create-saved-search`, and `undo-routing-resolution`, but those three
+Functions were not yet present remotely. Publishing only the site and pairing
+Functions would therefore have left visible production controls pointing at
+missing endpoints.
+
+After checking the redesign plan and schema diff, the remaining migration was
+safe and additive: `Collection` gained three optional saved-search fields,
+`ExtensionInstall` gained optional `paired_at`, and `RoutingDecision` gained
+two optional undo-state fields. Existing tokens require no rewrite or
+backfill. `npx base44 entities push` synced all ten local schemas, and targeted
+Function deploys completed the 24-Function remote inventory. The site was
+already published at `https://magpieorelse.base44.app` and the custom domain
+`https://magpiecapture.com`; both returned `200` after the completed release.
+
+Anonymous POST smoke checks covered `extension-context`, the three pairing
+management Functions, and the three redesign Functions. Every call reached
+the deployed Function and returned its intended `401` authentication boundary
+(`extension-context` specifically required a pairing token). This is useful
+reachability and trust-boundary evidence, but it is not a substitute for a
+signed-in production walkthrough or the open hosted two-owner isolation gate.
+The repository commit was pushed; publishing a new Chrome extension artifact
+remains a separate release operation.

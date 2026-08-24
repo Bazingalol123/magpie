@@ -80,7 +80,7 @@ the extension.
 | Surface | Load-bearing use |
 |---|---|
 | Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `RefreshAttempt`, `ExtensionInstall` |
-| Backend functions | 24 in `base44/functions/` locally: pairing create/context/list/revoke, Project and saved-search creation, ingestion, routing/retry/undo, audited field correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools. The redesign and three pairing-management functions are local pending deploy. |
+| Backend functions | 24 deployed Functions: pairing create/context/list/revoke, Project and saved-search creation, ingestion, routing/retry/undo, audited field correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools. |
 | AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
 | Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
 | Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
@@ -90,10 +90,11 @@ the extension.
 
 ## Current status
 
-Deployed in production (code confirmed live via `deploy-base44.yml` GitHub
-Actions run history as of 2026-08-16; see `docs/BETA_LIMITATIONS.md` for
-per-feature verification status — deployed code and manually-verified UX are
-tracked separately, not conflated):
+Deployed in production (the 2026-08-24 release was pushed directly with the
+Base44 CLI; earlier releases are also confirmed by `deploy-base44.yml` GitHub
+Actions history). See `docs/BETA_LIMITATIONS.md` for per-feature verification
+status — deployed code and manually verified UX are tracked separately, not
+conflated:
 
 - six capture modes including a drag-to-snip visual tool, with
   layout-independent keyboard shortcuts and status-aware toasts;
@@ -117,15 +118,20 @@ had a manual sign-in click-through since their latest change (notably
 Collection/Project deletion and the onboarding checklist). See
 `docs/BETA_LIMITATIONS.md` for the claim-by-claim breakdown.
 
-The 2026-08-24 redesign is implemented locally and not deployed. It renames
-review to Nest, adds the Library/Signals/Search shell, persists live searches
-as routing-ineligible `saved_search` Collections, records a real pairing
-handshake, adds Connected Browsers list/revoke/reconnect lifecycle management,
-adds a short owner-only route undo, and makes tablet field
-correction an audited server write. These require the entity/function/site
-deployment set listed in `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`; push
-notifications remain deliberately unbuilt pending a separate VAPID and
-subscription-lifecycle design.
+The 2026-08-24 redesign and issue #61 pairing lifecycle are deployed. The
+release synced all ten entity schemas, confirmed all 24 Functions on the
+remote app, and published the site to both `magpieorelse.base44.app` and
+`magpiecapture.com`. It renames review to Nest, adds the
+Library/Signals/Search shell, persists live searches as routing-ineligible
+`saved_search` Collections, records a real pairing handshake, adds Connected
+Browsers list/revoke/reconnect lifecycle management, adds a short owner-only
+route undo, and makes tablet field correction an audited server write. The
+seven new or changed endpoint boundaries were live-smoked anonymously and
+returned their intended `401`; a signed-in hosted lifecycle and hosted
+two-owner isolation pass remain open. Push notifications remain deliberately
+unbuilt pending a separate VAPID and subscription-lifecycle design. The
+Extension source is pushed, but publishing a new Chrome extension artifact is
+a separate release step and was not part of this Base44 deploy.
 
 Release gates (re-run locally 2026-08-24): 255/255 Deno tests; all 24 backend entry
 points type-check; the production build passes; extension scripts parse; no
