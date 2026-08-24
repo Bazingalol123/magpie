@@ -88,10 +88,42 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Expected cases:** unauthenticated `401`; malformed label is bounded/defaulted.
 - **Security invariant:** raw token is never persisted.
 
+### `list-extension-pairings` — local pending deploy
+
+- **Caller:** signed-in dashboard owner only.
+- **Success:** `200`; returns a newest-first list capped at 100 rows with only
+  `id`, `label`, `active`, `created_at`, `paired_at`, and `last_used_at`.
+- **Expected cases:** unauthenticated `401`.
+- **Security invariant:** the owner is taken from the authenticated user, not
+  the request; neither the raw token nor `token_hash` is selected or returned.
+
+### `revoke-extension-pairing` — local pending deploy
+
+- **Caller:** signed-in dashboard owner only.
+- **Input:** `{ installation_id }`, bounded to the platform's ID shape.
+- **Success:** `200 { revoked: true }`; retrying an already-revoked owned row
+  is a no-op success.
+- **Expected cases:** malformed ID `400`; unauthenticated `401`; unknown and
+  foreign-owner IDs both return the same `404` without confirming existence.
+
+### `revoke-all-extension-pairings` — local pending deploy
+
+- **Caller:** signed-in dashboard owner only.
+- **Success:** `200 { revoked_count }`; deactivates every currently active
+  pairing owned by the caller and is safe to retry.
+- **Expected cases:** unauthenticated `401`.
+- **Implementation note:** the function pages the owner-scoped rows and uses
+  service-role single-row updates. Base44's local runtime forwards
+  `updateMany` to production and can report zero local updates without an
+  error, so that primitive is deliberately not used here.
+
 ### `extension-context`
 
 - **Caller:** paired extension.
 - **Hosted V3 success:** `200`; returns `auto_organize: true` plus bounded active Project context (`projects`, with `missions` retained for compatibility). An empty selection explicitly means no Mission.
+- **Local redesign addition, pending deploy:** also returns the authenticated
+  non-secret `extension_id`; the Side Panel stores it beside the token so the
+  browser can identify its server row without gaining any read capability.
 - **Expected cases:** missing token `401`; inactive/invalid pairing `403`; no Missions returns an empty list.
 - **Security invariant:** cannot read candidates, clips, collections, or enrichments.
 
@@ -358,12 +390,17 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
   unauthenticated `401`; cross-owner Record or Collection `403`; missing
   Record/Collection/field `404`; stale or unchanged expected value `409`.
 
-### Extension pairing handshake — redesign, local pending deploy
+### Extension pairing handshake and management — redesign, local pending deploy
 
 The first authenticated `extension-context` call stamps
 `ExtensionInstall.paired_at`. The dashboard watches that owner-scoped row and
 closes the token modal from server evidence. `last_used_at` remains reserved
-for a successful clip ingestion.
+for a successful clip ingestion. The dashboard's Connected Browsers dialog
+loads only sanitized metadata through `list-extension-pairings`, supports
+confirmed per-browser and revoke-every-browser actions, and shows a reconnect
+notice when pairing history exists but no active pairing remains. A pairing
+authentication `403` clears only `extensionToken` and `extensionId` in the
+Extension; the non-secret ingest URL and local refresh URL memory remain.
 
 ### Record
 

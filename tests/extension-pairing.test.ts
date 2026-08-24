@@ -26,5 +26,28 @@ Deno.test("extension context records a distinct server-side pairing handshake", 
   const entry = await Deno.readTextFile(new URL("../base44/functions/extension-context/entry.ts", import.meta.url));
   if (!schema.includes('"paired_at"')) throw new Error("ExtensionInstall must persist handshake evidence separately from ingestion use");
   if (!entry.includes("pairing.paired_at") || !entry.includes("ExtensionInstall.update")) throw new Error("extension-context must stamp the first authenticated handshake");
+  if (!entry.includes("extension_id: pairing.id")) throw new Error("extension-context must identify the authenticated browser without exposing its token hash");
   if (entry.includes("last_used_at")) throw new Error("extension-context must not reinterpret last_used_at as a pairing handshake");
+});
+
+Deno.test("a revoked pairing clears only local credentials and directs the browser to reconnect", async () => {
+  const worker = await Deno.readTextFile(new URL("../extension/service-worker.js", import.meta.url));
+  const panel = await Deno.readTextFile(new URL("../extension/sidepanel.js", import.meta.url));
+  const credentialRemoval = 'remove(["extensionToken", "extensionId"])';
+
+  if (!worker.includes("response.status === 403") || !worker.includes(credentialRemoval)) {
+    throw new Error("service-worker capture paths must clear revoked pairing credentials on 403");
+  }
+  if (worker.includes('remove(["extensionToken", "extensionId", "ingestUrl"])')) {
+    throw new Error("revocation recovery must preserve ingestUrl so the owner can open the dashboard");
+  }
+  if (!panel.includes("response.status === 403") || !panel.includes(credentialRemoval)) {
+    throw new Error("Side Panel context loading must recover from a revoked pairing");
+  }
+  if (!panel.includes("extensionId: body.extension_id")) {
+    throw new Error("Side Panel must persist the server-issued browser identifier");
+  }
+  if (!worker.includes("Open the Magpie dashboard to reconnect") || !panel.includes("Open the Magpie dashboard to reconnect")) {
+    throw new Error("revoked browsers must get an actionable reconnect message");
+  }
 });

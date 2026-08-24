@@ -140,7 +140,7 @@ misclassified page does not kill a healthy watch. The owner can resume at any
 time; extension-assisted recapture-to-update remains future "Living knowledge"
 scope.
 
-## The extension's refresh memory is local-only and dies with the pairing token
+## The extension's refresh memory is local-only; uninstall wipes it, revocation does not
 
 Refresh-on-revisit needs the extension to recognize pages the owner previously
 captured. It remembers only URLs it itself submitted, stored in
@@ -155,6 +155,12 @@ for newly captured or re-clipped pages, with dashboard source links as the
 recovery path. The designated future fix is a bounded URL-hash seed handed to
 the extension at pairing time by the authenticated dashboard — an explicit
 owner action on the trusted surface — never a read capability for the token.
+
+A server-side pairing revoke is intentionally narrower than uninstalling the
+Extension. On the next pairing-authenticated `403`, the browser removes only
+`extensionToken` and its non-secret `extensionId`. It keeps `ingestUrl` so the
+owner can open the right dashboard and keeps `savedUrls` so a fresh pairing can
+resume refresh-on-revisit without the server ever disclosing browsing history.
 
 Auto-refresh defaults on with a popup toggle, is bounded to explicitly saved
 pages, is rate-limited to once per URL per 12 hours, and announces itself with
@@ -1076,3 +1082,19 @@ searches are a distinct `saved_search` Collection type excluded from routing;
 route undo is an owner-only 30-second server workflow; and tablet correction is
 an owner-only function that appends an Enrichment audit row. No production
 entity, function, secret, or site deployment was performed in this refactor.
+
+## 2026-08-24 — Pairings are multiple, explicit, and never silently rotated
+
+An owner may keep several active browser pairings. Creating a new pairing does
+not revoke an old one, and Magpie does not bundle token creation with revoke:
+the raw token is returned once, so an ambiguous retry cannot safely recover it.
+Replacement is therefore two owner-visible actions—pair the new browser, then
+separately confirm revoke on the old row.
+
+The management API is intentionally small: a sanitized newest-first list of at
+most 100 rows, idempotent revoke-one, and **Revoke every browser** for an
+emergency reset. Unknown and foreign IDs both return `404`. Expiration, label
+editing, undo/reactivation, and automatic rotation remain deferred. Existing
+tokens require no migration: `last_used_at` proves legacy use, while the next
+successful context load stamps `paired_at` and stores the non-secret
+`extensionId` in that browser.

@@ -80,7 +80,7 @@ the extension.
 | Surface | Load-bearing use |
 |---|---|
 | Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `RefreshAttempt`, `ExtensionInstall` |
-| Backend functions | 21 in `base44/functions/` locally: pairing/handshake, extension context, Project and saved-search creation, ingestion, routing/retry/undo, audited field correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools. The three redesign functions are local pending deploy. |
+| Backend functions | 24 in `base44/functions/` locally: pairing create/context/list/revoke, Project and saved-search creation, ingestion, routing/retry/undo, audited field correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools. The redesign and three pairing-management functions are local pending deploy. |
 | AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
 | Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
 | Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
@@ -120,13 +120,14 @@ Collection/Project deletion and the onboarding checklist). See
 The 2026-08-24 redesign is implemented locally and not deployed. It renames
 review to Nest, adds the Library/Signals/Search shell, persists live searches
 as routing-ineligible `saved_search` Collections, records a real pairing
-handshake, adds a short owner-only route undo, and makes tablet field
+handshake, adds Connected Browsers list/revoke/reconnect lifecycle management,
+adds a short owner-only route undo, and makes tablet field
 correction an audited server write. These require the entity/function/site
 deployment set listed in `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`; push
 notifications remain deliberately unbuilt pending a separate VAPID and
 subscription-lifecycle design.
 
-Release gates (re-run locally 2026-08-24): 237/237 Deno tests; all 21 backend entry
+Release gates (re-run locally 2026-08-24): 255/255 Deno tests; all 24 backend entry
 points type-check; the production build passes; extension scripts parse; no
 extension SDK import; live smoke tests documented in
 `docs/CLAUDE_CODE_HANDOFF.md` cover authentication, typed 404s, the original
@@ -165,11 +166,11 @@ directory.
 
 ```text
 base44/entities/        Owner-scoped Base44 schemas
-base44/functions/       21 backend functions (ingest, routing/review/undo, saved search, correction, deletion, refresh, bug reports, Agent tools)
+base44/functions/       24 backend functions (pairing lifecycle, ingest, routing/review/undo, saved search, correction, deletion, refresh, bug reports, Agent tools)
 base44/shared/          Deterministic validation and reusable backend logic
 extension/              MV3 picker, snip tool, worker, and pairing side panel
 src/                    Landing page and realtime dashboard
-tests/                  237 pure Deno fixtures
+tests/                  255 pure Deno fixtures
 docs/                   User docs, API reference, charter, and engineering history
 ```
 

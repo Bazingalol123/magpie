@@ -78,7 +78,9 @@ Deno.test("Escape cancels element and snip modes from both the page and the focu
   const contentJs = await Deno.readTextFile(new URL("content.js", extensionDirUrl));
   const sidepanelJs = await Deno.readTextFile(new URL("sidepanel.js", extensionDirUrl));
   const keydownStart = contentJs.indexOf('document.addEventListener("keydown"');
-  const keydownEnd = contentJs.indexOf("\n\nfunction cancelCaptureMode", keydownStart);
+  // Search by declaration instead of a literal LF-only blank line so this
+  // contract is stable in Windows checkouts with CRLF source files.
+  const keydownEnd = contentJs.indexOf("function cancelCaptureMode", keydownStart);
   const keydownBlock = contentJs.slice(keydownStart, keydownEnd);
 
   assert(

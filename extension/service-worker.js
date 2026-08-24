@@ -10,6 +10,12 @@ function createRequestId() {
 }
 const REFRESH_MIN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const MAX_REMEMBERED_URLS = 500;
+const RECONNECT_MESSAGE = "This browser was disconnected. Open the Magpie dashboard to reconnect.";
+
+async function clearRevokedPairing() {
+  // Keep ingestUrl so the Side Panel can still open the correct dashboard.
+  await chrome.storage.local.remove(["extensionToken", "extensionId"]);
+}
 
 // Every capture path (picker/snip in content.js, Side Panel buttons, the right-click
 // menu) funnels through here before hitting the network. One in-flight capture
@@ -151,6 +157,10 @@ async function submitCapture(payload) {
   });
 
   const body = await response.json().catch(() => ({}));
+  if (response.status === 403) {
+    await clearRevokedPairing();
+    throw new Error(RECONNECT_MESSAGE);
+  }
   if (!response.ok) {
     const requestId = typeof body.request_id === "string" ? body.request_id : response.headers.get("x-request-id");
     const reference = requestId ? ` Reference ID: ${requestId}` : "";
@@ -217,6 +227,11 @@ async function maybeAutoRefresh(tabId, url) {
     body: JSON.stringify({ source_url: key, raw_text: evidence.raw_text }),
   });
   const body = await response.json().catch(() => ({}));
+  if (response.status === 403) {
+    await clearRevokedPairing();
+    await notifyTab(tabId, { message: RECONNECT_MESSAGE, state: "error" });
+    return;
+  }
   if (response.ok && body.outcome === "updated") {
     await notifyTab(tabId, {
       message: `Magpie caught ${body.change_count} change${body.change_count === 1 ? "" : "s"} on this saved page.`,

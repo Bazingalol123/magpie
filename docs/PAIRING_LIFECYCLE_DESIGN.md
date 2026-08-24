@@ -1,11 +1,83 @@
 # Extension pairing lifecycle — research and design (issue #61)
 
-> Discovery-phase design note. **No revoke, rotate, list, or schema change is
-> implemented by this document.** Per issue #61's non-goals, implementation
-> is split into small follow-up PRs only after this discovery is approved by
-> the owner. This note also serves as the design deliverable for #27 (pairing
-> installation management), which this issue supersedes as the concrete
-> design vehicle.
+> Began as the discovery deliverable for issues #61 and #27. The owner approved
+> the design on 2026-08-24 and the list/revoke/reconnect lifecycle is now
+> implemented and locally verified on branch
+> `codex/issue-61-pairing-lifecycle`; it is **not deployed**. Sections that
+> describe “current behavior” at discovery time are retained as the audit
+> baseline, with implementation outcomes called out below.
+
+## Owner approval and redesign reconciliation (2026-08-24)
+
+The owner approved implementation after the dashboard redesign landed. The
+following decisions resolve §11 and supersede older wording in this note where
+the redesign changed current behavior:
+
+- Magpie supports multiple active browser pairings. Creating a pairing never
+  revokes another pairing implicitly.
+- "Replace" remains two explicit actions: create and confirm the new pairing,
+  then revoke the old pairing. `create-extension-pairing` remains unchanged.
+- Missing and foreign `installation_id` values both return `404`, so the API
+  never confirms another owner's pairing exists.
+- `list-extension-pairings` is a flat, newest-first, bounded list of at most
+  100 rows for MVP. It returns only `id`, `label`, `active`, `created_at`,
+  `paired_at`, and `last_used_at`; it never returns `token_hash`.
+- `revoke-all-extension-pairings` means every active browser pairing owned by
+  the caller. The UI must call it "Revoke every browser" and disclose that
+  every Extension will need to reconnect.
+- Expiration, idle timeout, label editing, and revoke undo remain deferred.
+  An accidental revoke is recovered by creating a new pairing, never by
+  restoring or recovering the old raw token.
+- The Extension clears only the credential pair (`extensionToken` and the
+  non-secret row identifier `extensionId`) after a pairing-auth `403`. It
+  preserves `ingestUrl` and `savedUrls` so the owner can still open the
+  Dashboard and harmless refresh-on-revisit memory is not destroyed.
+
+The merged redesign added optional `ExtensionInstall.paired_at` and makes the
+first authenticated `extension-context` request stamp it. Existing pairings
+need no migration: `last_used_at` remains proof of a successful legacy use,
+and the next successful context request adds `paired_at`. Pairing-management
+status is therefore:
+
+- active with neither timestamp: **Awaiting setup**;
+- active with `paired_at` but no `last_used_at`: **Connected, no captures yet**;
+- active with `last_used_at`: **Active**;
+- `active: false`: **Revoked**.
+
+The redesign also removed the old `OnboardingPanel` render path. The source
+files for `ReconnectNotice`/`PairingChecklist` still exist, but they are not a
+reachable reconnect surface in the redesigned app. Implementation must add a
+real Connected browsers/account surface and a visible reconnect notice when a
+returning owner's pairing history exists but no active pairing remains.
+
+## Implementation outcome (2026-08-24, local pending deploy)
+
+- Added owner-authenticated `list-extension-pairings`,
+  `revoke-extension-pairing`, and `revoke-all-extension-pairings` Functions.
+  List output is explicitly sanitized; unknown and foreign IDs share one
+  `404`; individual revoke is idempotent.
+- Added the dashboard **Connected browsers** dialog, four distinct lifecycle
+  statuses, two-step confirmations for one/all revokes, and a desktop/mobile
+  reconnect notice when every historical pairing is inactive.
+- `extension-context` now returns the authenticated non-secret
+  `extension_id`; the Side Panel stores it. Capture, refresh-on-revisit, and
+  context loading special-case a pairing-auth `403`, remove the stale token
+  and ID, preserve `ingestUrl`/`savedUrls`, and show actionable reconnect copy.
+- No token migration or entity backfill exists or is needed. Legacy rows use
+  `last_used_at`; the next successful context request adds `paired_at` and
+  teaches the Extension its ID.
+- Local Base44 verification found that `ExtensionInstall.updateMany` is not
+  supported by the local runtime: the request is forwarded toward production
+  and returned `{ updated: 0 }` without changing local matches. Revoke-all
+  therefore pages owner-scoped rows and uses the same proven service-role
+  single-row update as revoke-one. Two active local pairings were revoked and
+  a follow-up list returned zero active rows.
+- Focused Deno contracts, backend type checks, Extension syntax checks, the
+  Vite production build, and authenticated desktop/390×844 browser checks
+  pass. A local two-owner check confirmed A cannot list B's pairing, A gets
+  `404` trying to revoke B's ID, and A's revoke-all leaves B active. Hosted
+  two-owner isolation and deployment remain gated by issue #20 and explicit
+  owner approval.
 
 ## Review round 1 (Hermes, 2026-08-17) — resolved
 
@@ -227,14 +299,14 @@ specify.
 
 ## 4. Security / threat model
 
-| Scenario | Current behavior | Risk | Mitigation in this design |
+| Scenario | Behavior at discovery | Risk | Implemented mitigation |
 |---|---|---|---|
 | Token copied off a shared/managed machine | Works indefinitely; no expiry, no owner visibility into which machines hold a copy | Silent write access to the owner's ingest pipeline (capture spam / junk Collections) — cannot read data (extension boundary already prevents that) | List surfaces `label`, `created_at`, `last_used_at` so an owner can spot an unrecognized/stale entry and revoke it |
 | Owner loses a device with the token still in `chrome.storage.local` | No revoke path exists at all today | Same as above, indefinitely | New `revoke-extension-pairing` function; revoked tokens are rejected on the very next request (already proven — `requireExtensionPrincipal` checks `active` synchronously on every call, no caching) |
 | Owner wants to nuke all installs and start clean (suspected broader compromise, e.g. leaked `BUGS.local.md`-style local file) | No bulk path | Manual per-row revoke is slow and error-prone under time pressure | `revoke-all-extension-pairings` (owner-authenticated, revokes every active row for that owner in one call) |
 | Attacker enumerates/guesses `extension_id` | N/A — `extension_id` is a Base44-generated row id, not a capability; the *token* is the credential, and it is 32 random bytes, never guessable | Low | List/revoke functions must still validate the installation belongs to `requireUser(base44).id` before mutating (never trust a client-supplied `owner_id`) |
 | Cross-owner revoke (owner A revokes owner B's pairing by guessing/observing an id) | N/A, no function exists yet | Would be a real RLS/trust-boundary bug if the new function forgot the ownership check | Explicit `installation.owner_id === user.id` check before any mutation, mirroring `delete-record`'s pattern; covered by #20's hosted two-owner matrix (§2, §6) |
-| Extension keeps calling with a revoked token after revoke | Generic error toast only; local token is never cleared (§1) | User sees repeated confusing failures instead of a clear reconnect prompt | Extension-side change (§5): on `403` specifically, clear the stored token/URL and show the existing `PairingChecklist` "reconnect" copy path |
+| Extension keeps calling with a revoked token after revoke | Generic error toast only; local token is never cleared (§1) | User sees repeated confusing failures instead of a clear reconnect prompt | On `403` specifically, clear `extensionToken`/`extensionId`, preserve `ingestUrl`/`savedUrls`, and show the reachable dashboard/Side Panel reconnect path |
 | Raw token exposure in logs/UI | `create-extension-pairing` returns the raw token once in the response body; `PairingDialog` renders it once and it is never persisted client-side beyond that render; server never logs it (only `token_hash` is stored) | Low, matches existing design intent (`docs/API_AND_FAILURE_MAP.md:89` "raw token is never persisted") | List/revoke functions must never select or return `token_hash` — return only `id`, `label`, `active`, `created_at`, `last_used_at` |
 | Rate limiting / abuse of the revoke/list functions themselves | Not evaluated — out of scope per issue #61 non-goals ("Do not add... general Base44 credentials"; expiration/rate-limiting is explicitly listed as a deferrable question, #10 in the issue body) | Low for MVP (owner-authenticated, low call volume) | Deferred; note as a later hardening item, not a blocker |
 
@@ -244,7 +316,7 @@ motivation/likelihood (no incident data exists for this specific entity);
 **`Unknown`** whether Base44's platform applies any rate limiting to
 Functions independent of anything Magpie adds.
 
-## 5. Proposed API contract
+## 5. API contract (implemented locally, pending deploy)
 
 All three new functions follow the existing owner-authenticated pattern
 (`requireUser`, `base44.asServiceRole.entities...`, `errorResponse`) used by
@@ -276,9 +348,8 @@ signed-in-owner-only, exactly like `delete-record`/`delete-collection`.
 - **Caller:** signed-in owner only.
 - **Method:** `POST`.
 - **Request:** `{ "installation_id": "..." }`.
-- **Behavior:** load the row via `getOrNull`, `404` if missing, `403` (or
-  `404` to avoid confirming existence — pick one and match `delete-record`'s
-  existing convention, TBD) if `owner_id !== user.id`, else
+- **Behavior:** load the row via `getOrNull`; return the same `404` if missing
+  or owned by somebody else, else
   `entities.ExtensionInstall.update(id, { active: false })`.
 - **Success `200`:** `{ "revoked": true }`. Idempotent: revoking an
   already-inactive row is a no-op success, not an error (matches
@@ -361,54 +432,45 @@ required by #61's acceptance criteria or #27's, and adding it would expand
 scope beyond "list/revoke/rotate." Flagged as a candidate follow-up, not a
 gap in this design.
 
-## 6. Proposed UI/UX
+## 6. UI/UX contract (implemented locally, pending deploy)
 
-- **Dashboard: a "Connected browsers" panel** (new, likely inside the
-  existing account/settings surface or a new `PairingManagementDialog`
-  reusing `pairing-dialog` CSS classes already in `src/App.jsx`) listing
+- **Dashboard: a "Connected browsers" panel** in the existing account rail,
+  implemented as `PairingManagementDialog` and reusing the pairing-dialog
+  visual language. It lists
   each pairing's `label`, a relative "last used" time (or "never used" —
   distinct from #27's "never-used tokens" requirement), and a `Revoke`
-  button per row plus a `Revoke all other pairings` bulk action.
-- **Identifying "this browser."** Because the extension currently stores no
-  non-secret pairing id locally (§1 gap), the dashboard cannot mark
-  "this is the browser you're using right now" in the list purely from
-  server state. **Proposed fix, in scope for the follow-up implementation:**
-  have the extension also store the `extension_id` from
-  `create-extension-pairing`'s response and surface it in
-  `extension-context`'s response (currently `{auto_organize, projects,
-  missions}` only) so a future "which browser is this" affordance is
-  possible without changing the trust boundary — `extension_id` is a
-  non-secret row id, not a capability, so returning it does not weaken the
-  write-only guarantee. Until built, the list simply cannot self-highlight
-  the current browser; label text is the only disambiguator, which is why
-  `create-extension-pairing`'s label default should probably become more
-  specific than the current flat `"Chrome extension"` (e.g. include OS/browser
-  hint) — flagged as a UX nice-to-have, not a blocker.
+  button per row plus a **Revoke every browser** bulk action.
+- **Identifying "this browser."** At discovery, the Extension stored no
+  non-secret pairing ID. The implemented fix adds `extension_id` to the
+  authenticated `extension-context` response and stores it in the Side Panel
+  after a successful load. The dashboard still cannot read another Chrome
+  process's local storage and therefore does not self-highlight a row; label
+  text remains the disambiguator there. The browser itself now knows its row
+  for future Extension-side affordances. `extension_id` is not a capability,
+  so this does not weaken the write-only guarantee. A more specific automatic
+  label remains a UX nice-to-have, not a blocker.
 - **Revoke confirmation.** A revoke is destructive to that browser's ability
   to capture — needs a confirm step, following the existing two-step
   confirm pattern already used for Item deletion
   (`docs/CLAUDE_CODE_HANDOFF.md`: "Item deletion with two-step confirm").
-- **Reconnect entry point.** `PairingChecklist.jsx` already has the
-  `PairingStepStatus.REVOKED` branch and "Pair again" button (§1) — no new
-  onboarding UI needed, just needs the new revoke action to actually be
-  reachable from somewhere that produces that state.
-- **"Replace this browser's pairing" is a two-step UI flow, not one button
-  (review round 2).** Since `replace_installation_id` is deferred (§5), the
-  dashboard composes the existing `create-extension-pairing` call and the
-  new `revoke-extension-pairing` call as two separately confirmed user
-  actions: (1) create and show the new token in `PairingDialog` as today,
-  requiring the existing "I saved the token" acknowledgment; (2) only after
-  that acknowledgment, offer a distinct "Revoke the previous pairing on this
-  browser?" prompt that calls `revoke-extension-pairing` for the old
-  `installation_id`. This ordering means an interrupted flow always fails
-  toward "both pairings still active" (safe) rather than toward the old
-  pairing being revoked before the user has confirmed the new one actually
-  arrived.
-- **Extension behavior on `403` specifically (new):** `submitCapture`
-  (`extension/service-worker.js`) should special-case `response.status ===
-  403` to clear `ingestUrl`/`extensionToken` from `chrome.storage.local` and
-  show a distinct "Your pairing was revoked or expired — reconnect in the
-  dashboard" toast, instead of today's generic error message. `401`
+- **Reconnect entry point.** The redesigned App now renders a reachable
+  warning when pairing history exists but no active row remains. The account
+  action becomes **Reconnect browser**, and the warning offers both
+  **View browsers** and **Reconnect** (the secondary action is collapsed on
+  narrow screens).
+- **"Replace this browser's pairing" remains two explicit actions, not one
+  bundled call (review round 2).** **Pair another browser** creates and shows
+  the new one-time token; the dialog closes when server handshake evidence
+  arrives (or the owner can finish later). The old pairing stays active. The
+  owner then reopens **Connected browsers** and separately confirms revoke on
+  the old row. An interrupted flow therefore fails toward "both pairings are
+  active" rather than disconnecting the old browser before the new one has
+  connected.
+- **Extension behavior on `403` specifically:** `submitCapture`, automatic
+  refresh, and Side Panel context loading special-case `response.status ===
+  403` to clear `extensionToken`/`extensionId` from `chrome.storage.local`,
+  preserve `ingestUrl`/`savedUrls`, and show a distinct "This browser was
+  disconnected. Open the Magpie dashboard to reconnect." message. `401`
   (missing token, e.g. never paired) keeps today's "Open the Magpie
   extension and add your paired token first" message — the two cases are
   different user situations and should not share copy.
@@ -432,7 +494,7 @@ gap in this design.
 - **No migration script needed.** Every row already has `active: true` by
   the entity's schema default; there is nothing to backfill.
 
-## 8. Test matrix (for the follow-up implementation PRs, not this note)
+## 8. Test matrix and current evidence
 
 - Unit (pure, Deno):
   - `list-extension-pairings` never includes `token_hash` in its response shape.
@@ -460,7 +522,7 @@ gap in this design.
     and then separately revoking the old one via `revoke-extension-pairing`
     produces the same end state as two independent, already-tested actions
     — no new backend test surface, since no backend code couples them.
-  - Extension-side: after a `403`, local storage is cleared and the next
+  - Extension-side: after a `403`, stale pairing credentials are cleared and the next
     capture attempt shows the "not paired" state, not a stale error loop.
 - Live/hosted smoke (per `docs/API_AND_FAILURE_MAP.md`'s existing pattern,
   same shape as the 2026-07-25 refresh-capture checkpoint in §1): create a
@@ -512,7 +574,7 @@ gap in this design.
     The affected owner must create a new pairing (re-pair) rather than
     expect the old one restored.
 
-## 10. Documentation impact map (for follow-up PRs)
+## 10. Documentation impact map
 
 - `docs/API_AND_FAILURE_MAP.md`: add `list-extension-pairings`,
   `revoke-extension-pairing`, `revoke-all-extension-pairings` entries in the
@@ -526,28 +588,21 @@ gap in this design.
   same pattern as the existing refresh-memory decision.
 - `docs/BUILD_GUIDE.md`: new checkpoint documenting files/tests/verify
   commands, per this repo's standard checkpoint format.
-- `docs/GETTING_STARTED.md` / `docs/PRODUCT_GUIDE.md` (owned by issue #38,
-  not this issue): update only after implementation ships, per #38's own
-  "no document claims a feature is Production-deployed when it is only
-  locally verified" rule.
+- `docs/GETTING_STARTED.md` / `docs/PRODUCT_GUIDE.md` now describe the new
+  lifecycle in this local branch; `README.md` and this note keep it explicitly
+  pending deploy so no document claims production verification early.
 - Issue #27: recommend closing as superseded by #61's implementation
   follow-ups, or re-scoping to explicitly point at them, to avoid duplicate
   tracking (§2).
 
-## 11. Open questions (unresolved, flagged `Unknown` — owner input needed before implementation)
+## 11. Resolved and deferred questions
 
-1. `revoke-extension-pairing` on a foreign/unknown id: `404` for both cases
-   (hides existence, matches typical API-security practice) or `403` for
-   "exists but not yours"? `delete-record`'s current pattern should be
-   checked/followed for consistency — not confirmed in this pass.
-2. Should `list-extension-pairings` be paginated server-side, or is a flat
-   list acceptable given realistic pairing counts are small (a handful of
-   browsers per owner, not hundreds)? Leaning flat list for MVP; flagged for
-   owner sign-off rather than decided unilaterally here.
-3. Whether to also store/return `extension_id` client-side now (§6's "this
-   browser" affordance) as part of the same implementation pass, or as a
-   separate follow-up — affects how many files the first PR touches.
-4. Expiration/idle-timeout for unused pairings (#61 question 9): explicitly
+1. **Resolved:** `revoke-extension-pairing` returns `404` for both foreign and
+   unknown IDs, hiding existence.
+2. **Resolved:** listing is a flat, newest-first page capped at 100 rows.
+3. **Resolved:** `extension-context` returns `extension_id` and the Side Panel
+   stores it; no raw token or token hash is added to any read response.
+4. **Deferred:** expiration/idle-timeout for unused pairings (#61 question 9): explicitly
    deferred by this design; no proposal made.
 5. **Pre-existing ambiguous-retry gap in plain `create-extension-pairing`**
    (surfaced by review round 2, §5): if a `create-extension-pairing`
@@ -570,6 +625,8 @@ gap in this design.
 - [x] Documentation update list, current vs. planned (§10).
 - [x] Test and live-verification plan, including old-token-rejected /
       other-owner-unaffected (§8).
-- [ ] Implementation split into small follow-up PRs — **not started**, per
-      this issue's explicit non-goal; owner approval of this design is the
-      prerequisite next step.
+- [x] Owner approved implementation; the backend, dashboard, Extension
+      recovery, tests, and documentation are implemented locally on
+      `codex/issue-61-pairing-lifecycle`.
+- [ ] Hosted two-owner verification, deployment, and production smoke — not
+      attempted without explicit deploy approval; issue #20 remains the gate.

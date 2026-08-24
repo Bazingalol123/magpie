@@ -1806,3 +1806,39 @@ token` action. It now drives the persistent desktop account rail and `Finish
 later`. A real Chromium test starts element capture on a fixture whose own
 bubbling handler swallows Escape, then starts a visual snip and presses Escape
 with the Side Panel focused; both overlays are removed without an ingest call.
+
+## 2026-08-24 — Pairing revoke-all cannot use local `updateMany`
+
+Issue #61's initial revoke-all implementation used the documented
+`ExtensionInstall.updateMany({ owner_id, active: true }, { $set: ... })`
+shape. The local Function returned normally with `updated: 0`, but a sanitized
+follow-up list still showed both matching pairings active. The Base44 dev log
+explained why: the `/entities/ExtensionInstall/update-many` route is not
+supported locally and was being passed toward production. That makes the call
+unsuitable for a locally testable security control even though its SDK shape
+is documented.
+
+The implementation now pages rows by authenticated `owner_id` and applies the
+same service-role single-row `update(id, { active: false })` primitive already
+proven by revoke-one. It checks ownership again before every update, skips
+inactive rows, and is safe to retry after a partial failure. A restarted local
+`base44 dev` run created two active pairings, returned `revoked_count: 2`, and
+then listed zero active rows. A separately revoked token returned `403` on
+`extension-context`.
+
+The browser lifecycle was checked through an authenticated local dashboard as
+well: the Connected Browsers dialog rendered Awaiting setup and Connected
+states without token material, the two-step revoke confirmation was reachable,
+and a 390×844 viewport showed the all-revoked reconnect banner without
+horizontal overflow. No hosted data or deployment was touched.
+
+A second synthetic owner closed the local isolation loop: owner A's sanitized
+list did not include owner B's active row; A's revoke request against B's ID
+returned the same `404` as an unknown ID; A's revoke-all reported zero and B's
+row remained active. B then revoked its own row for cleanup. This is local
+evidence only—the hosted two-owner gate in issue #20 remains open.
+
+One full-suite rerun also exposed a Windows-only static-test problem unrelated
+to pairing: the Escape contract searched for a literal LF-only blank line in a
+CRLF checkout. The assertion now finds the next function declaration instead;
+runtime behavior and `extension/content.js` were unchanged.

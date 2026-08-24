@@ -2357,3 +2357,43 @@ both places it appears in the dashboard, not one isolated spot.
   test passes both Escape paths against a fixture page that deliberately
   intercepts bubbling Escape events. The complete 246-test Deno suite and
   production Vite build also pass. No backend resource or deploy changed.
+
+### 67. Implement the extension pairing lifecycle (issue #61)
+
+- [x] Add signed-in-owner Functions for a sanitized pairing list, idempotent
+  revoke-one, and revoke-every-browser. Missing and foreign IDs share `404`;
+  list responses never contain a raw token or `token_hash`.
+- [x] Add the redesigned dashboard's **Connected browsers** dialog with
+  Awaiting setup, Connected, Active, and Revoked states; per-row and all-row
+  confirmation; and a responsive reconnect notice when no active pairing
+  remains.
+- [x] Return the authenticated non-secret `extension_id` from
+  `extension-context`, persist it in the Side Panel, and special-case pairing
+  `403` responses across capture, automatic refresh, and context loading.
+  Clear only `extensionToken`/`extensionId`; preserve `ingestUrl` and
+  `savedUrls` so recovery does not erase harmless local context.
+- [x] Preserve every existing token without a migration. Legacy
+  `last_used_at` remains valid evidence; the next successful context load
+  stamps `paired_at` and teaches the browser its row ID.
+- **Files:** `base44/shared/pairing-management.ts`,
+  `base44/functions/{list-extension-pairings,revoke-extension-pairing,revoke-all-extension-pairings}/entry.ts`,
+  `base44/functions/extension-context/entry.ts`, `src/App.jsx`,
+  `src/pairing-lifecycle.js`, `src/index.css`, `extension/service-worker.js`,
+  `extension/sidepanel.js`, pairing tests, and pairing/user documentation.
+- **You'll know this works when:** two pairings remain active after creating
+  the second; the management list reveals no token material; a confirmed
+  revoke immediately makes that token return `403`; revoke-every-browser
+  leaves zero active owner rows; and both dashboard and Side Panel direct the
+  owner to reconnect without losing the dashboard URL.
+- **Verified 2026-08-24:** a real local Base44 owner created two pairings and
+  completed one `extension-context` handshake. The list returned two sanitized
+  rows; one revoked token returned `403`; after correcting the local runtime's
+  unsupported `updateMany` behavior, revoke-all returned `revoked_count: 2`
+  and a follow-up list returned zero active rows. Authenticated browser checks
+  passed at desktop and 390×844. A second local owner proved that lists are
+  isolated, foreign revoke returns `404`, and owner A's revoke-all leaves owner
+  B active. The complete Deno suite passes 255/255, all
+  24 Function entry points type-check, every Extension script parses, the
+  Extension contains no `@base44/sdk` import, `npm run build` succeeds, and
+  `git diff --check` is clean. No deploy ran; hosted two-owner verification
+  remains gated by issue #20 and explicit owner approval.

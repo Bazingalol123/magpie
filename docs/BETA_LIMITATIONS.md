@@ -106,7 +106,8 @@ here so they aren't mistaken for oversights. Full detail in
   the app owner's `role: admin` account now has the same restricted access
   as every other owner, with no special read path.
 - Extension refresh-on-revisit memory is local-only and is lost when the
-  extension is removed or re-paired; coverage rebuilds through recapture.
+  extension is removed. A server-side pairing revoke preserves that harmless
+  local URL memory while clearing the unusable token and browser ID.
 - No visual schema editor, no connector export (Sheets/Notion), no arbitrary
   nested folders — see the Product Charter's non-goals.
 - The bug-report form (`report-bug`) has no rate limiting and is dashboard-
