@@ -128,6 +128,16 @@ Deno.test("cross-owner Collection ID is rejected", () => {
   assert(result.reason_codes.includes("cross_owner_candidate"), "expected stable cross-owner reason");
 });
 
+Deno.test("a saved-search Collection is never eligible for capture routing", () => {
+  const result = routeCapture({
+    ownerId: "owner-1",
+    collections: [collection({ collection_type: "saved_search" })],
+    proposal: proposal(),
+  });
+  assertEquals(result.outcome, "review", "saved searches are views, not routing destinations");
+  assert(result.reason_codes.includes("ineligible_scope"), "expected an ineligible target reason");
+});
+
 Deno.test("synonym name reuses an eligible Collection alias", () => {
   const result = routeCapture({
     ownerId: "owner-1",
@@ -508,4 +518,62 @@ Deno.test("unsupported fields are dropped when two safe Collection fields remain
     { name: "price", label: "מחיר", type: "number" },
   ], "expected only safe canonical fields");
   assertEquals(result.fields, { title: "Canon EOS R6", price: 7299 }, "expected safe extracted values");
+});
+
+Deno.test("a schema at the raised 12-field cap is fully accepted", () => {
+  const schema: RoutingField[] = Array.from({ length: 12 }, (_, index) => ({
+    name: `field_${index}`,
+    label: `Field ${index}`,
+    type: "string",
+  }));
+  const fields = Object.fromEntries(schema.map((field) => [field.name, `value-${field.name}`]));
+
+  const result = routeCapture({
+    ownerId: "owner-1",
+    collections: [],
+    proposal: proposal({
+      outcome: "new",
+      existing_collection_id: undefined,
+      collection_name: "Widgets",
+      schema,
+      fields,
+      confidence: 0.92,
+      reason_codes: ["no_equivalent_collection"],
+    }),
+  });
+
+  assert(result.outcome === "new", "a 12-field schema must not be rejected");
+  assertEquals(result.schema.length, 12, "expected all 12 fields to survive normalization");
+  assertEquals(Object.keys(result.fields).length, 12, "expected all 12 field values to survive normalization");
+});
+
+Deno.test("a schema beyond the 12-field cap is truncated, not rejected", () => {
+  const schema: RoutingField[] = Array.from({ length: 15 }, (_, index) => ({
+    name: `field_${index}`,
+    label: `Field ${index}`,
+    type: "string",
+  }));
+  const fields = Object.fromEntries(schema.map((field) => [field.name, `value-${field.name}`]));
+
+  const result = routeCapture({
+    ownerId: "owner-1",
+    collections: [],
+    proposal: proposal({
+      outcome: "new",
+      existing_collection_id: undefined,
+      collection_name: "Widgets",
+      schema,
+      fields,
+      confidence: 0.92,
+      reason_codes: ["no_equivalent_collection"],
+    }),
+  });
+
+  assert(result.outcome === "new", "an oversized schema should truncate rather than send the capture to review");
+  assertEquals(result.schema.length, 12, "expected the schema to be capped at 12 fields");
+  assertEquals(
+    result.schema.map((field) => field.name),
+    schema.slice(0, 12).map((field) => field.name),
+    "expected the first 12 proposed fields to survive, in order",
+  );
 });

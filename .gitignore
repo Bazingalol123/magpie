@@ -22,14 +22,19 @@ dist
 .app.json*
 .types/
 
-# Agent tooling (local skill mirrors and lockfile)
+# Agent tooling (local skill mirrors, session state, and lockfile)
 .claude/
+.codex/
 .agents/
 skills-lock.json
 
+# One-time local handoffs and source design bundles
+/HANDOFF_TO_CODEX.md
+/Magpie Capture design pitch.zip
+/design_handoff_magpie_redesign/
+
 # Playwright MCP session output (snapshots/screenshots from manual test runs)
 .playwright-mcp/
-
 # Playwright E2E harness (tests-e2e/) — local run artifacts and the
 # credentials/runtime file global-setup writes for the local test owner and
 # spawned dev-server ports/PIDs. Never contains real user data: the owner

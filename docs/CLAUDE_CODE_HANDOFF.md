@@ -521,3 +521,24 @@ Do not write entity or production code until you update the risk plan and API
 failure map. Preserve the MV3 plain-fetch trust boundary. Do not deploy without
 my explicit approval.
 ```
+
+## 2026-08-24 — Redesign refactor is local and release-gated
+
+The corrected `design_handoff_magpie_redesign` screens are now implemented in
+the React dashboard: one left rail; Nest, Library, Signals, and Search; Cards
+default with a Table override; status-only Collection dots; changed-first
+mobile browsing and Nest swipe triage; one-task capture setup; the retained
+auth flow with the revised product example; a page-to-fields landing hero;
+and tablet evidence/field correction.
+
+Four interactions have real Base44 contracts rather than client-only state:
+`ExtensionInstall.paired_at` from `extension-context`, saved-search Collection
+fields plus `create-saved-search`, audited `correct-record-field`, and the
+30-second `undo-routing-resolution`. They were exercised against local
+`base44 dev`; 237 Deno fixtures, all 21 entry-point checks, extension syntax/
+SDK-boundary checks, and the Vite build pass. Nothing was pushed or deployed.
+The next owner decision is whether to deploy the additive entity changes,
+three new functions plus modified `extension-context`/routing functions, and
+the site together. Push notifications remain a separate Critical change
+requiring VAPID secrets, subscription storage, delivery/retry, and permission
+UX; do not add a decorative control in the meantime.

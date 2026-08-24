@@ -12,6 +12,9 @@
     "schema_signature": { "type": "string", "maxLength": 500, "description": "Deterministic normalized field-name and type signature" },
     "schema_version": { "type": "integer", "minimum": 1, "default": 1, "description": "Version of the reusable Collection schema" },
     "routing_profile_json": { "type": "string", "description": "JSON-encoded bounded aliases and correction cues used by routing" },
+    "collection_type": { "type": "string", "enum": ["structured", "saved_search"], "default": "structured", "description": "Structured routed rows or a live saved-search view" },
+    "saved_query": { "type": "string", "maxLength": 240, "description": "Owner-authored workspace query for a saved_search Collection" },
+    "saved_query_json": { "type": "string", "maxLength": 1000, "description": "Versioned normalized saved-search definition" },
     "status": { "type": "string", "enum": ["active", "archived"], "default": "active", "description": "Whether new captures may route into this Collection" },
     "origin": { "type": "string", "enum": ["agent", "user", "legacy"], "default": "legacy", "description": "How this Collection was first established" },
     "is_shared_readonly": { "type": "boolean", "default": false, "description": "Reserved for future read-only sharing" }

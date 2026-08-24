@@ -326,6 +326,45 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 
 ## Entity state map
 
+### `create-saved-search` — redesign, local pending deploy
+
+- **Caller:** signed-in dashboard owner.
+- **Input:** bounded `{ name, query, mission_id? }`.
+- **Success:** `201` with a real `Collection` whose `collection_type` is
+  `saved_search`; an identical owner/scope/query returns the existing row.
+- **Safety:** routing excludes saved-search Collections in automatic matching
+  and manual redirect. Legacy Collections remain structured without backfill.
+- **Expected cases:** malformed input `400`; unauthenticated `401`; missing
+  Project `404`; cross-owner Project `403`.
+
+### `undo-routing-resolution` — redesign, local pending deploy
+
+- **Caller:** signed-in dashboard owner during the 30-second undo window.
+- **Input:** `{ clip_id }` for a just-created Collection route.
+- **Success:** restores the Clip to `needs_review`, marks the durable decision
+  `resolution_state: undone`, removes the just-created Record, and removes its
+  new owner Collection only when no other Record uses it.
+- **Refusal:** returns `409` after the window, for a non-created route, or once
+  the Item has a watch or Enrichment. Cross-owner access is `403`.
+
+### `correct-record-field` — redesign, local pending deploy
+
+- **Caller:** signed-in dashboard owner only; never the pairing-token path.
+- **Input:** `{ record_id, field, expected_value, new_value }`, with bounded
+  scalar values.
+- **Success:** updates one schema-declared field and appends one Enrichment
+  with `agent_id: owner-correction-v1`.
+- **Expected cases:** malformed/non-scalar/unsupported input `400`;
+  unauthenticated `401`; cross-owner Record or Collection `403`; missing
+  Record/Collection/field `404`; stale or unchanged expected value `409`.
+
+### Extension pairing handshake — redesign, local pending deploy
+
+The first authenticated `extension-context` call stamps
+`ExtensionInstall.paired_at`. The dashboard watches that owner-scoped row and
+closes the token modal from server evidence. `last_used_at` remains reserved
+for a successful clip ingestion.
+
 ### Record
 
 - `enrichment_status`: latest check outcome.

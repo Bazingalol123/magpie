@@ -166,6 +166,7 @@ export async function processStoredClip(
       schema_signature: result.schema_signature,
       schema_version: 1,
       routing_profile_json: JSON.stringify({ aliases: [] }),
+      collection_type: "structured",
       status: "active",
       origin: "agent",
       is_shared_readonly: false,
@@ -372,7 +373,7 @@ function proposalSuggestion(value: unknown) {
     ? normalizeCollectionName(parsed.collection_name).slice(0, 48) || undefined
     : undefined;
   const schema = Array.isArray(parsed?.schema)
-    ? parsed.schema.slice(0, 8).flatMap((item) => {
+    ? parsed.schema.slice(0, 12).flatMap((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return [];
       const field = item as Record<string, unknown>;
       const fieldName = typeof field.name === "string"

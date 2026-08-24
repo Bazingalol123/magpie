@@ -20,3 +20,11 @@ Deno.test("the ingest URL never points at the retired Base44 hostname", () => {
     throw new Error("new pairings must not receive the old Base44-hosted ingest URL");
   }
 });
+
+Deno.test("extension context records a distinct server-side pairing handshake", async () => {
+  const schema = await Deno.readTextFile(new URL("../base44/entities/extension-install.jsonc", import.meta.url));
+  const entry = await Deno.readTextFile(new URL("../base44/functions/extension-context/entry.ts", import.meta.url));
+  if (!schema.includes('"paired_at"')) throw new Error("ExtensionInstall must persist handshake evidence separately from ingestion use");
+  if (!entry.includes("pairing.paired_at") || !entry.includes("ExtensionInstall.update")) throw new Error("extension-context must stamp the first authenticated handshake");
+  if (entry.includes("last_used_at")) throw new Error("extension-context must not reinterpret last_used_at as a pairing handshake");
+});

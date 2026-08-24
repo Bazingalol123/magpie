@@ -17,6 +17,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     startPicker(message.mode);
     return undefined;
   }
+  if (message?.type === "magpie:cancel-picker") {
+    sendResponse({ cancelled: cancelCaptureMode() });
+    return undefined;
+  }
   if (message?.type === "magpie:capture-context") {
     try {
       sendResponse(buildContextPayload(message.mode, message.context));
@@ -48,6 +52,16 @@ document.addEventListener("contextmenu", (event) => {
 }, true);
 
 document.addEventListener("keydown", (event) => {
+  // Capture Escape before the host page can stop propagation. The picker is
+  // an extension-owned modal interaction, so cancelling it must not also
+  // trigger the page's own Escape behavior (closing a dialog, exiting a
+  // player, and so on).
+  if (event.key === "Escape" && (pickerActive || snipActive)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    cancelCaptureMode();
+    return;
+  }
   // event.code identifies the physical key, so shortcuts work on any keyboard
   // layout (event.key becomes "ב" on a Hebrew layout for the same key).
   if (event.altKey && event.shiftKey && (event.code === "KeyM" || event.key.toLowerCase() === "m")) {
@@ -58,9 +72,24 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     if (hoveredElement) captureElement(hoveredElement);
   }
-  if (pickerActive && event.key === "Escape") stopPicker();
-  if (snipActive && event.key === "Escape") stopSnip();
-});
+}, true);
+
+function cancelCaptureMode() {
+  const wasActive = pickerActive || snipActive;
+  if (pickerActive) stopPicker();
+  if (snipActive) stopSnip();
+  if (wasActive) notifyCaptureModeEnded("cancelled");
+  return wasActive;
+}
+
+function notifyCaptureModeEnded(reason) {
+  try {
+    const pending = chrome.runtime.sendMessage({ type: "magpie:capture-mode-ended", reason });
+    pending?.catch?.(() => {});
+  } catch {
+    // The page cleanup is authoritative; a closed Side Panel needs no notice.
+  }
+}
 
 function startPicker(mode = "element") {
   if (mode === "visual") {
@@ -141,6 +170,7 @@ function drawSnipRect(event) {
 function onSnipUp(event) {
   const start = snipStart;
   stopSnip();
+  notifyCaptureModeEnded("finished");
   if (!start) return;
   const rect = {
     left: Math.min(start.x, event.clientX),
@@ -233,6 +263,7 @@ async function captureElement(element) {
     capture_rect: rectPayload(rect),
   };
   stopPicker();
+  notifyCaptureModeEnded("finished");
 
   if (!payload.raw_text) {
     showToast("Choose an element with visible text.", "error");

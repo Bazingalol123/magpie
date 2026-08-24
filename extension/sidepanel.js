@@ -13,6 +13,7 @@ const captureButtons = [
   document.getElementById("start-visual"),
   document.getElementById("save-page"),
 ];
+let activeCaptureTabId = null;
 
 function setCaptureButtonsBusy(busy) {
   captureButtons.forEach((button) => { button.disabled = busy; });
@@ -24,6 +25,30 @@ chrome.runtime.sendMessage({ type: "magpie:capture-status" }, (response) => {
     status.textContent = "A capture is already running — wait a moment.";
   }
 });
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== "magpie:capture-mode-ended") return undefined;
+  if (!sender.tab?.id || sender.tab.id === activeCaptureTabId) activeCaptureTabId = null;
+  status.textContent = message.reason === "cancelled"
+    ? "Capture cancelled."
+    : "Capturing — organizing in Magpie.";
+  return undefined;
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || activeCaptureTabId === null) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const tabId = activeCaptureTabId;
+  activeCaptureTabId = null;
+  chrome.tabs.sendMessage(tabId, { type: "magpie:cancel-picker" })
+    .then((response) => {
+      if (response?.cancelled) status.textContent = "Capture cancelled.";
+    })
+    .catch(() => {
+      // The tab may have navigated or closed; there is no picker left to clean.
+    });
+}, true);
 
 chrome.storage.local.get({ autoRefreshEnabled: true }).then((config) => {
   autoRefresh.checked = config.autoRefreshEnabled;
@@ -95,6 +120,7 @@ async function startPicker(mode) {
   setCaptureButtonsBusy(true);
   try {
     await startPickerInTab(tab.id, mode);
+    activeCaptureTabId = tab.id;
     status.textContent = mode === "visual"
       ? "Drag on the page to select the area to clip."
       : "Hover an element on the page, then press C to clip it.";

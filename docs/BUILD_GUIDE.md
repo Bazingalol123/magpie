@@ -2112,3 +2112,248 @@ both places it appears in the dashboard, not one isolated spot.
   each is now a distinct, correct color at a glance -- blue/green/amber/
   red -- with no code change needed to tell them apart beyond the color
   itself.
+
+### 58. Raise the routing agent's schema-field cap from 8 to 12
+
+- [x] **Build:** the AI Gateway routing agent (`requestAgentRoutingProposal`
+  in `base44/shared/classification.ts`, the live provider behind
+  `processStoredClip`) was capped at 8 reusable schema fields per Collection
+  and 8 `record_fields` per extraction -- hardcoded independently in five
+  places (`classification.ts`'s `ROUTING_RESPONSE_FORMAT.schema_fields`/
+  `record_fields` `maxItems`, two system-prompt strings, and
+  `routing.ts`'s `normalizeRoutingSchema` default plus four inline
+  `normalizeSchema(..., 1|2, 8)` call sites). Raised every one of these to
+  12, plus `routing-persistence.ts`'s `proposalSuggestion` audit-trail
+  slice. 12, not a larger number, because `agent-tools.ts`'s
+  `boundedObject`/`boundedSchema` already cap the fields the conversational
+  `magpie_organizer` Agent sees per Item/Collection at 12 -- going higher
+  in the routing agent would extract fields that then silently never
+  appear in "Ask Magpie" comparisons, a regression in a different surface.
+  No entity or schema change: `Collection.schema_json`/`Record.fields_json`
+  are unbounded JSON strings in `base44/entities/*.jsonc`, so this is a
+  pure code-constant change with no migration. Deliberately left the dead
+  legacy `classifyStoredClip`/`classifyCapture`/`classifyMissionCapture`
+  path in `classification.ts` (confirmed unimported by any `entry.ts`,
+  per the issue #47 audit) untouched rather than editing code that cannot
+  run.
+- **Files:** `base44/shared/routing.ts`, `base44/shared/classification.ts`,
+  `base44/shared/routing-persistence.ts`, `tests/routing.test.ts` (two new
+  fixtures: a 12-field schema is fully accepted, a 15-field proposal
+  truncates to the first 12 rather than being rejected to review).
+- **Verify:** 218/218 Deno tests (216 prior + 2 new), all 17 `entry.ts`
+  files `deno check` clean, `node --check` clean on every
+  `extension/**/*.js`, `@base44/sdk`-in-`extension/` grep clean, `npm run
+  build` clean. No entity or function deploy performed -- not requested by
+  the owner this pass.
+
+### 59. Redesign handoff: Nest, Library, Signals, Search, and responsive surfaces
+
+- [x] **Phase A — shell and real data map:** replace the split header/sidebar
+  dashboard with one left navigation rail and one content surface. Keep all
+  content driven by the existing owner-scoped Base44 reads and realtime
+  subscriptions. Add `RefreshAttempt` to the bounded dashboard load so Signals
+  can distinguish a running check from a decorative pulse.
+- [x] **Phase B — Nest and Collections:** render `needs_review` Captures as
+  cards with their stored RoutingDecision reason/confidence and the four real
+  `resolve-routing` actions. Keep confidently filed Captures out of the Nest.
+  Make Cards the initial Collection mode and add an explicit Cards/Table
+  segmented override. Keep Item detail to primary content plus one collapsed
+  rare-controls row.
+- [x] **Phase C — Signals and Search:** derive the feed from Enrichment,
+  Record, WatchRule, and RefreshAttempt rows; name the producing watch rule;
+  expose real pause/resume writes through `agent-configure-monitoring`. Search
+  loaded Item fields, captured text, and source hosts, identify the matching
+  field, and parse bounded numeric comparators such as `under 70000`.
+- [x] **Phase D — onboarding and public surfaces:** reduce onboarding to the
+  single task of connecting a capture source, close the pairing modal only
+  when ExtensionInstall realtime evidence confirms use, and move the real
+  capture-mode recordings into the empty Nest. Keep the shipped auth contract
+  and replace only Login's product example; preserve Landing copy while making
+  its hero mechanism visible before scroll.
+- [x] **Phase E — responsive behavior:** on phones, make Nest/Collections/
+  Signals/Ask reachable from a bottom navigation and make Collection browsing
+  changed-first. On tablet, render captured evidence beside structured fields;
+  field correction ships only with the owner-validating audited backend
+  contract recorded in `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`.
+- **Files:** `src/App.jsx`, `src/index.css`, focused components/helpers under
+  `src/`, onboarding/login/landing files, and any explicitly approved backend
+  correction files.
+- **You'll know this works when:** a signed-in local Base44 session can resolve
+  a real Nest Capture, switch a real Collection between Cards and Table, see
+  typed Signal states and mutate a real watch, search real Item/Capture data,
+  and complete pairing without any fixture/demo rows. Desktop (1440×900),
+  tablet (1024×768), and phone (390×844) renders have no clipped primary
+  actions; `npm run build` and the full Deno/entry-point gates pass.
+- **Verified 2026-08-24:** the local Base44 runtime loaded the redesigned
+  entity schemas and all 21 functions. A throwaway owner created a persisted
+  `saved_search` Collection, completed a real extension-context handshake,
+  routed then undid a real Nest capture, and corrected a typed Record field;
+  that correction wrote an `owner-correction-v1` Enrichment. The public hero
+  and login example were checked at the rendered desktop viewport. Push
+  delivery remains deliberately outside this checkpoint because no VAPID
+  sender/secret or subscription lifecycle exists; see `docs/DECISIONS.md`.
+
+### 60. Keep an empty Library reachable during first-run onboarding
+
+- [x] Restrict the new-account Nest redirect to the bare `/` entry route.
+  An explicit Library navigation must remain on `/library` even when the owner
+  has zero Collections, Records, and Clips.
+- **Files:** `src/App.jsx`, `tests/onboarding-flow-wiring.test.ts`.
+- **You'll know this works when:** a brand-new owner entering at `/` is guided
+  to `/nest`, but selecting Library renders its real zero-Collection empty
+  state instead of immediately returning to Nest.
+- **Verified 2026-08-24:** the focused seven-test onboarding contract, the
+  complete 232-test Deno suite, and the production Vite build pass.
+
+### 61. Close the mobile, watch, Search, and comparison UI parity gaps
+
+- [x] Audit every corrected redesign section against the current React/CSS and
+  the supplied mobile captures; record implemented, partial, missing, and
+  explicitly superseded concepts in `docs/UI_PARITY_AUDIT.md`.
+- [x] Let a phone user select every owner-visible Collection directly. Flatten
+  the mobile Library hierarchy to the active Collection, Changed/All counts,
+  sort, and compact cards instead of repeating desktop Project chrome.
+- [x] Add a direct Item watch form for field, hourly/daily/weekly schedule, and
+  source strategy. Persist through the existing owner-validating
+  `agent-configure-monitoring` function; do not create client-only state.
+- [x] Make phone Nest a one-card triage deck and keep swipe/right/left actions
+  mapped to the same real routing writes as the visible buttons.
+- [x] Keep actions and Ask in populated Search results, and add a real
+  multi-Item compare tray/view over owner-loaded Record data.
+- **Files:** `src/App.jsx`, `src/index.css`, focused UI contract tests,
+  `docs/UI_PARITY_AUDIT.md`, `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** at 390px every Collection is reachable,
+  Changed and All explain their counts, cards match the compact reference, one
+  Nest card is triaged at a time, and a watch can be created without chat and
+  survives reload. On desktop/tablet, two selected Items open a differing-field
+  comparison. No entity or backend-function change is required.
+- **Verified 2026-08-24:** a 390×844 browser session switched between two real
+  auto-filed Collections, checked Changed/All counts and compact cards, then
+  created a daily Watch directly from Item details. The persisted Watch showed
+  in Signals. At 1280×820, two real camera Items opened a five-field-difference
+  comparison, and populated Search retained scopes, Watch, Ask, Items, and
+  Collection results. The full 237-test Deno suite, all 21 backend entry-point
+  checks, and the production Vite build pass. No deploy ran.
+
+### 62. Remediate the authenticated mobile and lifecycle UX audit
+
+- [x] Keep Project context and switching visible on phones, enter a newly
+  created Project immediately, and make the destination explicit in both Add
+  capture and Search.
+- [x] Fall back to All when a Collection has no changed Items while preserving
+  an owner's explicit Changed/All choice per Collection.
+- [x] Split true first-run Nest setup from the returning-owner “All caught up”
+  state; keep long triage actions above the phone bottom navigation and retain
+  a visible swipe hint.
+- [x] Expose direct Watch creation/editing in Item detail and make paired-source
+  calls to action reflect actual ExtensionInstall state.
+- [x] Add reachable Collection deletion and expand both Collection and Project
+  confirmations to name the permanent Collection, Item, Watch, capture, and
+  history cascade.
+- **Files:** `src/App.jsx`, `src/index.css`,
+  `tests/redesign-ui-parity.test.ts`,
+  `tests/onboarding-flow-wiring.test.ts`,
+  `docs/UX_QA_AUDIT_2026-08-24.md`, `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** a 390px owner can identify and switch the
+  active Project, create and land inside a Project, choose where a capture or
+  saved search belongs, see All selected for `Changed 0`, reach Nest actions
+  with long content, create a Watch without chat, and preview the full cascade
+  before removing a Collection or Project.
+- **Verified 2026-08-24:** all 244 Deno tests pass, including the new source
+  contracts for these journeys, and the production Vite build completes. The
+  restored authenticated session completed the post-fix desktop and 390×844
+  pass: a disposable Project was created and entered, selected on mobile,
+  exposed in capture/Search scope controls, and then removed after its full
+  cascade confirmation. No deploy ran.
+
+### 63. Define the usage and monetization boundary before billing work
+
+- [x] Separate customer-facing Captures, Watches, and cloud checks from an
+  internal normalized usage ledger. Identify the provider cost drivers,
+  tentative Free/Plus packaging, safety limits, and the required backend work.
+- **Files:** `docs/USAGE_AND_MONETIZATION_PROPOSAL.md`.
+- **You'll know this works when:** product can explain what is free and paid
+  without exposing provider jargon, and engineering has explicit requirements
+  for idempotent metering, owner-scoped usage reads, service-only writes,
+  provider spend limits, reconciliation, and fail-safe downgrade behavior.
+- **Verified 2026-08-24:** proposal checked against the current official Zyte
+  request-tier pricing and Base44 credit documentation. It is intentionally
+  non-operative: no billing/quota entity, Function, secret, or deploy changed.
+
+### 64. Capture the owner's name and replace tiny Nest previews with a guide
+
+- [x] Ask email signups for first and last name, preserve them through OTP, and
+  save the combined `full_name` with Base44's authenticated `auth.updateMe()`
+  before the workspace receives its user object.
+- [x] Replace Nest's three tiny mode tiles with one readable preview and an
+  optional four-step dialog. Show one real recording at a time with persistent
+  Back, Next, progress, Close, and Done controls; finish by explaining the
+  Collections/Nest/Signals outcome and offering real capture routes.
+- [x] Reuse the same guide from the empty Library instead of creating a second
+  onboarding surface. Do not auto-open or trap a first-time owner.
+- **Files:** `src/LoginPage.jsx`, `src/App.jsx`, `src/index.css`,
+  `src/onboarding/CaptureGuideDialog.jsx`,
+  `tests/base44-client-config.test.ts`,
+  `tests/onboarding-flow-wiring.test.ts`, `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** an email signup cannot continue without both
+  name fields; after OTP the saved user has a non-empty `full_name`; and the
+  desktop/390px guide shows large media while Back/Next traverse all four real
+  steps without horizontal overflow or a hidden footer.
+- **Verified 2026-08-24:** the authenticated desktop guide traversed all four
+  steps forward and backward, closed cleanly, and had equal document/client
+  width at the narrow desktop breakpoint. A true 390×844 iframe render showed
+  the large media and bottom-pinned navigation. The complete 244-test Deno
+  suite and production Vite build pass. The name write is contract/build
+  verified; no additional account was created solely to repeat OTP. No backend
+  schema/Function or deploy changed.
+
+### 65. Polish the capture guide against the redesigned workspace
+
+- [x] Replace the retired dashboard screenshot with a responsive, UI-native
+  Nest → Collections → Signals outcome preview that follows the current Project
+  and workspace language.
+- [x] Recompose the desktop dialog as a compact media-and-copy layout. Keep
+  landscape recordings at or below their intrinsic size and give the portrait
+  Side Panel recording an explicit contained height.
+- [x] Isolate capture-guide controls from the global full-width, 51px primary
+  button rule. Keep source actions at 40px and Back, Next, and Done at a stable
+  108×40px on desktop and phone.
+- **Files:** `src/onboarding/CaptureGuideDialog.jsx`, `src/index.css`,
+  `tests/onboarding-flow-wiring.test.ts`, `tests/onboarding-media.test.ts`,
+  `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** the first recording is not enlarged beyond
+  its natural dimensions, the final step contains no legacy dashboard image,
+  every guide control has a readable label and consistent hit area, and all
+  four steps fit a 390×844 viewport without horizontal overflow or a hidden
+  footer.
+- **Verified 2026-08-24:** the real component was rendered independently at
+  1280×720 and 390×844. Desktop landscape media rendered at its exact
+  420×271 intrinsic size; phone media scaled down to 329×212. Source actions
+  measured 40px high and Back/Next/Done measured 108×40px. The desktop and
+  phone outcome steps had zero horizontal overflow, and the portrait recording
+  stayed fully contained. The focused 14-test onboarding suite and production
+  Vite build pass; the complete suite also passes 245 tests. No deploy ran.
+
+### 66. Restore Escape cancellation across extension focus boundaries
+
+- [x] Run the content-script keyboard listener in the capture phase so a host
+  page cannot swallow Escape before Magpie removes its picker or snip overlay.
+- [x] Let the persistent Chrome Side Panel remember the exact tab in which it
+  started capture and forward Escape there while the Side Panel owns keyboard
+  focus. Clear that state when the page finishes or cancels the mode.
+- [x] Update the real extension harness to pair through the redesigned desktop
+  account rail and current `Finish later` dialog action, then cover both page-
+  focused and Side-Panel-focused Escape paths in unpacked Chromium.
+- **Files:** `extension/content.js`, `extension/sidepanel.js`,
+  `tests/extension-manifest.test.ts`,
+  `tests-e2e/specs/capture-cancel.spec.ts`,
+  `tests-e2e/helpers/dashboard.ts`, `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** starting Clip Element and pressing Escape
+  removes the highlight and hint without submitting; starting Snip Area from
+  the Side Panel and pressing Escape before returning focus to the webpage
+  removes the snip overlay and reports `Capture cancelled.` in the panel.
+- **Verified 2026-08-24:** the focused six-test extension contract passes,
+  both extension scripts pass syntax checking, and the real unpacked-Chromium
+  test passes both Escape paths against a fixture page that deliberately
+  intercepts bubbling Escape events. The complete 246-test Deno suite and
+  production Vite build also pass. No backend resource or deploy changed.

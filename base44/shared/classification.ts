@@ -55,7 +55,7 @@ const ROUTING_RESPONSE_FORMAT = {
         },
         schema_fields: {
           type: "array",
-          maxItems: 8,
+          maxItems: 12,
           items: {
             type: "object",
             additionalProperties: false,
@@ -69,7 +69,7 @@ const ROUTING_RESPONSE_FORMAT = {
         },
         record_fields: {
           type: "array",
-          maxItems: 8,
+          maxItems: 12,
           items: {
             type: "object",
             additionalProperties: false,
@@ -133,7 +133,7 @@ export async function requestAgentRoutingProposal(
         "For a Project assignment, submit up to three candidate scores. The selected Project needs a very clear lead.",
         "Prefer an eligible existing Collection when its schema fits.",
         "A Project is context, never a Collection type or naming prefix.",
-        "For new Collections use a stable plural object name in the capture's natural language and 2-8 reusable schema fields.",
+        "For new Collections use a stable plural object name in the capture's natural language and 2-12 reusable schema fields.",
         "Extract only visible facts. Use review for mixed content, weak evidence, ambiguity, or an unsupported shape.",
         "Always include summary: one or two plain-language sentences describing what was captured (what it is, and the one or two most useful facts), written for a person reviewing this later. Plain prose, no markdown, no restating the raw text verbatim.",
         "Finish by calling submit_route_proposal exactly once. That tool proposes only; deterministic server code owns validation and writes.",
@@ -240,7 +240,7 @@ export async function requestStructuredRoutingProposal(
             "record_fields is an array shaped {name,value}; every name matches schema_fields and every value is a visible fact represented as a string.",
             "For visual or image captures, the supplied image crop is evidence; extract only facts visible in that crop or the accompanying text.",
             "Never put a schema label in schema_fields, never put field definitions in record_fields, and never swap these keys.",
-            "For new Collections use a stable plural object name in the capture's natural language and 2-8 schema_fields.",
+            "For new Collections use a stable plural object name in the capture's natural language and 2-12 schema_fields.",
             "Do not translate Hebrew Collection names merely to satisfy English plural grammar.",
             "Choose review for mixed content, ambiguity, weak evidence, or an unsupported shape.",
             "Reason codes may only be: existing_schema_match, mission_scope_match, global_scope_match, no_equivalent_collection, ambiguous_candidates, mixed_content.",
@@ -620,12 +620,13 @@ export async function classifyStoredClip(base44: any, clipId: string) {
   }
 
   const ownerCollections = await base44.asServiceRole.entities.Collection.filter({ owner_id: clip.owner_id }, "name", 100);
-  let collection = ownerCollections.find((item: any) => item.name.toLowerCase() === classification.collection_name.toLowerCase());
+  let collection = ownerCollections.find((item: any) => item.collection_type !== "saved_search" && item.name.toLowerCase() === classification.collection_name.toLowerCase());
   if (!collection) {
     collection = await base44.asServiceRole.entities.Collection.create({
       owner_id: clip.owner_id,
       name: classification.collection_name,
       schema_json: JSON.stringify(classification.schema),
+      collection_type: "structured",
       is_shared_readonly: false,
     });
   }

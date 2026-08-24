@@ -1616,3 +1616,193 @@ entirely inside Base44's own hosted infrastructure. Not actionable from
 this codebase; closed as a known local-dev-only limitation, not a product
 bug. Workaround: after local logout lands on `app.base44.com`, manually
 navigate back to `localhost:<port>`.
+
+## 2026-08-24 — Redesign backend boundaries verified against local Base44
+
+The redesign surfaced four interactions that could not honestly be client-only.
+`ExtensionInstall.paired_at` now records the first authenticated
+`extension-context` handshake, keeping `last_used_at` reserved for actual
+ingestion. Saved searches use additive Collection fields and a dedicated
+`create-saved-search` function; `routing.ts`, manual review resolution, and the
+legacy classifier all explicitly reject `collection_type: saved_search` as a
+capture destination. A 30-second `undo-routing-resolution` function restores a
+newly routed Clip to `needs_review` and only removes its new Collection when no
+other Record uses it. `correct-record-field` validates Record ownership,
+Collection ownership/schema, scalar type, and the caller's expected old value
+before updating `fields_json` and writing an Enrichment with
+`agent_id: owner-correction-v1`.
+
+Real local endpoint checks used a throwaway owner and the Base44 dev database:
+a saved-search Collection persisted with the correct type; an extension token's
+context call populated `paired_at`; a mixed-content Clip was manually routed
+and then restored to Nest; and a generated camera Record changed `price_ils`
+from 7200 to 6990 with the matching audit row. One platform constraint appeared
+during that run: Base44 rejects `null` for the optional string
+`Clip.collection_id` on update (`422`), so undo clears it to the empty string;
+`routing_status` remains the authoritative route state. As already documented,
+changing an entity schema made local `base44 dev` clear its in-memory data.
+No remote push or deploy occurred.
+
+## 2026-08-24 — First-run guidance must not become a navigation trap
+
+The initial redesign redirected an empty owner's `library` view to Nest based
+only on entity counts. Because that effect ran after every navigation, clicking
+Library could never show its legitimate empty state. The redirect now applies
+only when the browser enters at the bare `/` route and replaces that history
+entry with `/nest`; an explicit `/library` visit remains accessible regardless
+of Collection count. A source-level onboarding regression contract protects
+both the route condition and history synchronization.
+
+## 2026-08-24 — Mobile Collection reachability and direct Watches were UI wiring gaps
+
+The backend already supported a guarded, idempotent Watch create/update path;
+only the UI was incorrectly funneling every Watch CTA into Agent chat. Item
+details, Signals, contextual guidance, and populated Search now share one
+direct Item/field/frequency/acquisition form and call
+`agent-configure-monitoring`. A real local daily Watch persisted and appeared
+in Signals, so no entity or backend-function change was needed.
+
+The phone Library had a second, independent problem: its prominent switcher
+selected Projects, while the active Collection was effectively fixed. The
+mobile Collection title is now a select over every owner-loaded Collection;
+choosing one also updates its Project scope before loading Records. The first
+render exposed an empty 86px media column for Items without screenshots, so
+the final compact card deliberately renders a source-favicon evidence tile.
+Changed/All counts and sorting remain explicit instead of hiding empty state.
+
+The comparison reference was also absent, despite all required Record data
+already being owner-loaded. A two-to-four Item tray now opens a real-field
+matrix with an Only differences view and actual Watch status. Populated Search
+retains field/captured-text/source scopes plus Watch and Ask actions. These are
+UI-only additions over existing data and contracts. Push notifications remain
+the one reference concept that cannot be made honest without new server
+infrastructure.
+
+## 2026-08-24 — The follow-up mobile audit exposed context, not data, failures
+
+The missing mobile Project switcher, stale Project after creation, hard-coded
+Changed filter, returning-owner first-run Nest, hidden Collection deletion, and
+under-scoped Project confirmation were all frontend state or presentation
+defects. The existing backend already returned the created Project ID, accepted
+an explicit `mission_id` for capture/search destinations, supported owner-safe
+Watch writes, and provided Collection/Project cascade functions. The repair
+therefore required no entity or backend-function change.
+
+Project and Collection remain separate concepts on phones. The compact mobile
+header now exposes Project context while the Collection selector chooses the
+active dataset. Add capture and Search each disclose their destination instead
+of inheriting an invisible stale Project. Changed-first remains a useful mobile
+default only when changed Items exist; an owner's explicit tab choice is then
+remembered per Collection.
+
+The empty Nest now distinguishes a genuinely new owner from an established
+owner with no decisions waiting. Pairing language also derives from real
+ExtensionInstall rows. Long triage content is bounded and the decision area
+reserves bottom-navigation space. Deletion confirmations compute current
+Collection, Item, and Watch counts before naming the permanent wider cascade.
+
+The initial post-fix browser rerun was paused when the disposable session
+returned `401` after a local server restart. Once the owner restored that
+session, the authenticated desktop and true 390×844 pass completed: Project
+creation/entry, mobile selection, capture/Search scope, guide layout, and
+cleanup all matched the repaired contracts. The suite now passes 244 tests and
+the Vite production build passes.
+
+## 2026-08-24 — Issue #61 and Zyte verification boundaries
+
+GitHub Issue #61's discovery deliverable is present in
+`docs/PAIRING_LIFECYCLE_DESIGN.md`, and its design PR #62 is merged. The issue
+is not closure-ready under its own checklist: the approved design has not yet
+been split into the small follow-up implementation issues/PRs, while the hosted
+cross-owner verification gate tracked separately in #20 also remains open.
+
+Zyte's source contracts and rollout guards are intact. The configured Base44
+secret names include `ZYTE_API_KEY`, `ZYTE_POC_ENABLED`, and
+`ZYTE_POC_OWNER_ID`; all Zyte unit and quality tests pass; and current
+`enrich-record`/`sweep-watches` error-log queries were empty. A disposable live
+manual probe against `books.toscrape.com` reached the deployed
+`enrich-record` function and returned `404 Cloud refresh POC is not enabled`.
+Its temporary Record, Clip, and Collection were cleaned up.
+
+This proves the safety gate, not a provider round trip: the production POC flag
+is off, and scheduled Zyte acquisition is deliberately blocked by
+`ZYTE_SCHEDULED_QUOTA_NOT_ENABLED`. A true provider smoke test requires an
+explicit, temporary secret/config rollout for the intended canary owner and
+should be turned off again unless quota and cost policy are approved.
+
+## 2026-08-24 — Email registration needed a post-verification profile write
+
+Base44's `auth.register()` contract accepts email/password plus anti-abuse and
+referral fields; it does not accept a display name. The custom signup form was
+therefore creating a valid owner but never populating `User.full_name`.
+Registration now collects first and last name, keeps them in component state
+through the OTP step, logs in after verification, and calls the documented
+owner-scoped `auth.updateMe({ full_name })`. The returned updated User is passed
+into the first authenticated render, avoiding a stale empty-name frame. This
+uses an existing SDK contract and requires no entity or Function change.
+
+## 2026-08-24 — Nest onboarding works better as progressive disclosure
+
+Three simultaneous GIF tiles made every capture mode too small, particularly
+on phones, while still consuming most of the first-run card. The Nest now shows
+one readable real recording and a deliberate “Open capture guide” action. The
+guide is not forced open: owners can pair or paste immediately, or choose a
+four-step dialog that presents Clip Element, Snip Area, Save Page, and the real
+Collections/Nest/Signals outcome one at a time. Back, Next, progress dots,
+Close, keyboard arrows/Escape, and Done remain available; the phone footer is
+pinned to the bottom.
+
+The same dialog opens from the empty Library CTA, so this did not reintroduce
+parallel onboarding flows. Authenticated browser verification traversed the
+desktop guide forward/back, checked its narrow-width overflow, rendered the
+guide at a true 390×844 iframe viewport, created and automatically entered a
+disposable Project, switched to it on mobile, saw it selected in Add capture,
+confirmed Search scope, and removed the Project. The full suite passes 244
+tests and the Vite production build passes. Nothing was deployed.
+
+## 2026-08-24 — Guide media and controls need local sizing contracts
+
+The first capture-guide pass inherited two unrelated global assumptions:
+`.primary-button` is a full-width, 51px authentication control, and a media
+preview can safely fill both dimensions of its container. In a walkthrough,
+those assumptions produced oversized or clipped controls and enlarged a small
+recording until it looked blurred. The guide now owns its button dimensions and
+lets landscape recordings keep their intrinsic dimensions while scaling down
+when the viewport is narrower.
+
+The final guide image was also a timestamped dashboard screenshot from before
+the workspace redesign. Replacing it with a small semantic React preview of the
+current Nest → Collections → Signals flow removes that drift and lets the same
+teaching graphic reflow on phones. The preview is illustrative UI, clearly
+contained inside the guide; it does not pretend to be the owner's live data.
+
+One browser check exposed a less obvious CSS Grid behavior: `max-height: 100%`
+did not constrain the intrinsically tall Side Panel GIF inside the fixed-height
+grid stage, so the image kept its 640px intrinsic height and was merely clipped
+by overflow. The portrait variant now has an explicit desktop height plus a
+viewport-aware phone height. Measured 1280×720 and 390×844 renders have no
+horizontal overflow, keep the footer visible, and use 40px guide controls.
+
+## 2026-08-24 — Escape cancellation crosses two keyboard-focus boundaries
+
+The content script already checked `event.key === "Escape"`, but its keydown
+listener ran in the normal bubbling phase. A host page could stop propagation
+first, leaving Magpie's element picker or snip overlay active. The listener now
+runs in the capture phase; while Magpie owns an active capture mode it prevents
+the page's unrelated Escape action, removes the overlay/highlight, clears the
+toast, and submits nothing.
+
+The Side Panel migration introduced a second boundary: clicking `Clip element`
+or `Snip area` can leave keyboard focus inside Chrome's persistent Side Panel.
+The webpage's content script cannot observe that Escape at all. The panel now
+remembers the exact tab where it started the mode and sends an explicit
+`magpie:cancel-picker` message there. The content script uses the same cleanup
+function for local and forwarded cancellation and notifies the panel when a
+mode finishes, preventing stale cancellation state.
+
+The unpacked-extension harness had also drifted behind the redesign: it still
+looked for pairing in the retired top bar and expected the removed `I saved the
+token` action. It now drives the persistent desktop account rail and `Finish
+later`. A real Chromium test starts element capture on a fixture whose own
+bubbling handler swallows Escape, then starts a visual snip and presses Escape
+with the Side Panel focused; both overlays are removed without an ingest call.

@@ -203,6 +203,20 @@ Deno.test("redirect to a Collection owned by another user is rejected", async ()
   assertEquals(tables.Record.length, 0, "must not create a Record on a rejected call");
 });
 
+Deno.test("redirect cannot file a review capture into a saved-search Collection", async () => {
+  const { service, tables } = fakeBase44Service({
+    Clip: [reviewClip()],
+    Collection: [collection({ collection_type: "saved_search", saved_query: "under 70k" })],
+    RoutingDecision: [reviewDecision()],
+  });
+  await assertThrowsHttp(
+    () => resolveRouting(service, "owner-1", { action: "redirect", clipId: "clip-1", collectionId: "collection-products" }),
+    409,
+    "saved-search Collections must reject writes",
+  );
+  assertEquals(tables.Record.length, 0, "must not create a Record in a saved search");
+});
+
 Deno.test("resolving a Clip that is not awaiting review is a conflict", async () => {
   const { service, tables } = fakeBase44Service({
     Clip: [reviewClip({ routing_status: "routed_existing", status: "ready" })],
