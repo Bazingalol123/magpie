@@ -7,7 +7,10 @@ Deno.serve(async (req) => {
     if (requirePostOrPut(req)) return new Response(null, { status: 204, headers: corsHeaders });
 
     const base44 = createClientFromRequest(req);
-    const { ownerId } = await requireExtensionPrincipal(base44, req, false);
+    const { ownerId, pairing } = await requireExtensionPrincipal(base44, req, false);
+    if (!pairing.paired_at) {
+      await base44.asServiceRole.entities.ExtensionInstall.update(pairing.id, { paired_at: new Date().toISOString() });
+    }
     const missions = await base44.asServiceRole.entities.Mission.filter(
       { owner_id: ownerId, status: "active" },
       "-created_date",

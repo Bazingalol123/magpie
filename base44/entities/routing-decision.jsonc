@@ -38,7 +38,9 @@
     "classifier_version": { "type": "string", "maxLength": 80, "description": "Routing contract or classifier version that produced the decision" },
     "corrected_collection_id": { "type": "string", "description": "Owner-selected destination after a routing correction" },
     "decided_at": { "type": "string", "format": "date-time", "description": "When the original routing outcome became durable" },
-    "corrected_at": { "type": "string", "format": "date-time", "description": "When the owner resolved or corrected the route" }
+    "corrected_at": { "type": "string", "format": "date-time", "description": "When the owner resolved or corrected the route" },
+    "resolution_state": { "type": "string", "enum": ["resolved", "undone"], "description": "Whether the latest owner resolution still applies" },
+    "undone_at": { "type": "string", "format": "date-time", "description": "When the owner used the short-lived undo affordance" }
   },
   "required": ["owner_id", "clip_id", "outcome", "confidence", "reason_codes_json", "classifier_version", "decided_at"],
   "rls": {

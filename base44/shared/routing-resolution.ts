@@ -103,7 +103,7 @@ export async function resolveRouting(
   let created: boolean;
   if (command.action === "redirect") {
     collection = requireOwned(await getOrNull(service.Collection, command.collectionId), ownerId, "Collection");
-    if (collection.status === "archived") {
+    if (collection.status === "archived" || collection.collection_type === "saved_search") {
       throw new HttpError(409, "The selected Collection is not active");
     }
     created = false;
@@ -140,6 +140,7 @@ export async function resolveRouting(
   const updatedDecision = await service.RoutingDecision.update(decision.id, {
     corrected_collection_id: collection.id,
     corrected_at: new Date().toISOString(),
+    resolution_state: "resolved",
   });
 
   const updatedClip = await service.Clip.update(clip.id, {
@@ -193,6 +194,7 @@ async function createValidatedCollection(
     schema_signature: schemaSignature(schema),
     schema_version: 1,
     routing_profile_json: JSON.stringify({ aliases: [] }),
+    collection_type: "structured",
     status: "active",
     origin: "user",
     is_shared_readonly: false,

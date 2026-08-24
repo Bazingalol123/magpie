@@ -10,6 +10,7 @@ export type RoutingCollection = {
   mission_id?: string | null;
   name: string;
   status?: "active" | "archived";
+  collection_type?: "structured" | "saved_search";
   schema?: unknown;
   schema_json?: unknown;
   normalized_key?: string;
@@ -179,7 +180,7 @@ export function schemaSignature(schema: RoutingField[]) {
     .join("|");
 }
 
-export function normalizeRoutingSchema(value: unknown, minimum = 1, maximum = 8) {
+export function normalizeRoutingSchema(value: unknown, minimum = 1, maximum = 12) {
   return normalizeSchema(value, minimum, maximum);
 }
 
@@ -202,11 +203,14 @@ function routeToExisting(input: RoutingInput, proposal: NormalizedProposal): Rou
   if (selected.status === "archived") {
     return review(proposal.confidence, [...proposal.reason_codes, "inactive_collection"]);
   }
+  if (selected.collection_type === "saved_search") {
+    return review(proposal.confidence, [...proposal.reason_codes, "ineligible_scope"]);
+  }
   if (scopeRank(selected, input.missionId) === Number.POSITIVE_INFINITY) {
     return review(proposal.confidence, [...proposal.reason_codes, "ineligible_scope"]);
   }
 
-  const schema = normalizeSchema(selected.schema ?? selected.schema_json, 1, 8);
+  const schema = normalizeSchema(selected.schema ?? selected.schema_json, 1, 12);
   if (!schema) return review(proposal.confidence, [...proposal.reason_codes, "invalid_schema"]);
 
   const fields = normalizeFields(proposal.fields, schema);
@@ -251,6 +255,7 @@ function routeToNew(input: RoutingInput, proposal: NormalizedProposal): RoutingR
   const eligible = input.collections.filter((collection) =>
     collection.owner_id === input.ownerId &&
     collection.status !== "archived" &&
+    collection.collection_type !== "saved_search" &&
     scopeRank(collection, input.missionId) !== Number.POSITIVE_INFINITY
   );
   const equivalents = eligible.filter((collection) =>
@@ -261,7 +266,7 @@ function routeToNew(input: RoutingInput, proposal: NormalizedProposal): RoutingR
     return review(proposal.confidence, [...proposal.reason_codes, "ambiguous_candidates"]);
   }
   if (equivalent) {
-    const schema = normalizeSchema(equivalent.schema ?? equivalent.schema_json, 1, 8)!;
+    const schema = normalizeSchema(equivalent.schema ?? equivalent.schema_json, 1, 12)!;
     const equivalentFields = normalizeFields(proposal.fields, schema);
     if (!Object.keys(equivalentFields).length) {
       return review(proposal.confidence, [...proposal.reason_codes, "insufficient_supported_fields"]);
@@ -283,6 +288,7 @@ function routeToNew(input: RoutingInput, proposal: NormalizedProposal): RoutingR
   const archivedEquivalent = input.collections.some((collection) =>
     collection.owner_id === input.ownerId &&
     collection.status === "archived" &&
+    collection.collection_type !== "saved_search" &&
     scopeRank(collection, input.missionId) !== Number.POSITIVE_INFINITY &&
     isEquivalentCollection(collection, name, proposal.schema!)
   );
@@ -319,7 +325,7 @@ function normalizeProposal(value: unknown): NormalizedProposal | null {
     existing_collection_id: boundedString(parsed.existing_collection_id, 100),
     collection_name: boundedString(parsed.collection_name, 80),
     collection_description: boundedString(parsed.collection_description, 240),
-    schema: normalizeSchema(parsed.schema, 2, 8),
+    schema: normalizeSchema(parsed.schema, 2, 12),
     fields: parsed.fields && typeof parsed.fields === "object" && !Array.isArray(parsed.fields)
       ? parsed.fields as Record<string, unknown>
       : {},
@@ -383,7 +389,7 @@ function normalizeFields(
 }
 
 function isEquivalentCollection(collection: RoutingCollection, proposedName: string, proposedSchema: RoutingField[]) {
-  const storedSchema = normalizeSchema(collection.schema ?? collection.schema_json, 1, 8);
+  const storedSchema = normalizeSchema(collection.schema ?? collection.schema_json, 1, 12);
   if (!storedSchema) return false;
   const proposedKey = collectionNameKey(proposedName);
   const nameKeys = [

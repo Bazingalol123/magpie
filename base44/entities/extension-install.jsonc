@@ -8,6 +8,7 @@
     "token_hash": { "type": "string", "description": "SHA-256 hash of the token; the raw token is never stored" },
     "active": { "type": "boolean", "default": true, "description": "Whether this pairing may submit clips" },
     "created_at": { "type": "string", "format": "date-time", "description": "When the pairing was created" },
+    "paired_at": { "type": "string", "format": "date-time", "description": "First successful extension-context handshake after the token was saved" },
     "last_used_at": { "type": "string", "format": "date-time", "description": "Last successful ingestion through this pairing" }
   },
   "required": ["owner_id", "label", "token_hash", "active", "created_at"],
