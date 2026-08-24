@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowDown,
   ArrowRightLeft,
+  ArrowUp,
   Book,
   Bug,
   Check,
@@ -16,15 +18,24 @@ import {
   FileText,
   FolderPlus,
   Inbox,
+  LayoutGrid,
   Layers3,
   Linkedin,
+  ListFilter,
   LoaderCircle,
   LockKeyhole,
   LogOut,
   MessageCircle,
+  Pause,
+  Pencil,
+  Play,
+  Radio,
+  Search,
   Target,
+  Table2,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
   ShieldCheck,
   SlidersHorizontal,
@@ -41,10 +52,10 @@ import { AgentIcon, EmptyNestIcon, PairingIcon } from "./components/icons.jsx";
 import Landing from "./Landing.jsx";
 import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
-import OnboardingPanel from "./onboarding/OnboardingPanel.jsx";
-import OnboardingWelcomeFlow from "./onboarding/OnboardingWelcomeFlow.jsx";
-import { OnboardingStage, deriveOnboardingStage, mostRecentClip as deriveMostRecentClip } from "./onboarding/state.js";
+import CaptureGuideDialog from "./onboarding/CaptureGuideDialog.jsx";
+import { OnboardingStage, deriveOnboardingStage } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
+import { searchWorkspace } from "./workspace-search.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
 const markdownComponents = {
@@ -52,7 +63,7 @@ const markdownComponents = {
   a: (props) => <a {...props} target="_blank" rel="noreferrer" />,
 };
 
-const emptyData = { missions: [], collections: [], records: [], clips: [], enrichments: [], routingDecisions: [], watchRules: [], extensionInstalls: [] };
+const emptyData = { missions: [], collections: [], records: [], clips: [], enrichments: [], routingDecisions: [], watchRules: [], refreshAttempts: [], extensionInstalls: [] };
 const emptyPageMeta = { hasMore: false, total: 0 };
 const emptyDataMeta = {
   missions: emptyPageMeta,
@@ -62,6 +73,7 @@ const emptyDataMeta = {
   enrichments: emptyPageMeta,
   routingDecisions: emptyPageMeta,
   watchRules: emptyPageMeta,
+  refreshAttempts: emptyPageMeta,
   extensionInstalls: emptyPageMeta,
 };
 
@@ -97,13 +109,18 @@ function parseJson(value, fallback) {
   }
 }
 
-// Stable per-collection color: derived from the collection's own id, not its
-// position in whichever (possibly filtered/reordered) list is being rendered,
-// so the same Collection always gets the same dot color everywhere.
-function collectionDotIndex(collectionId) {
-  let hash = 0;
-  for (let i = 0; i < collectionId.length; i++) hash = (hash * 31 + collectionId.charCodeAt(i)) | 0;
-  return Math.abs(hash) % 4;
+// Color is status only, never category (docs/DESIGN_SYSTEM.md) -- this
+// replaces an earlier hash-of-id dot color the owner rejected (docs/
+// DECISIONS.md, "Dashboard redesign, R1"). A Collection gets a dot only
+// when something real is currently true of it: a record mid-check right
+// now (live), an unreachable source (error), or a source needing sign-in
+// (review) -- in that priority order. No dot is the normal case.
+function collectionDotStatus(collection, records, refreshingRecordId) {
+  const collectionRecords = records.filter((record) => record.collection_id === collection.id);
+  if (refreshingRecordId && collectionRecords.some((record) => record.id === refreshingRecordId)) return "live";
+  if (collectionRecords.some((record) => record.freshness === "unreachable")) return "error";
+  if (collectionRecords.some((record) => record.freshness === "blocked")) return "review";
+  return null;
 }
 
 // A spinner alone reads as stuck once a wait crosses a few seconds. Cycling
@@ -134,6 +151,40 @@ function formatDate(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function relativeDate(value) {
+  if (!value) return "not yet";
+  const delta = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(delta)) return formatDate(value);
+  const minutes = Math.max(0, Math.round(delta / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days < 14 ? `${days}d ago` : formatDate(value);
+}
+
+const CAPTURE_MODE_LABELS = {
+  element: "Clip Element",
+  selection: "Text Selection",
+  page: "Save Page",
+  link: "Link Capture",
+  visual: "Snip Area",
+  image: "Image Capture",
+};
+
+function recordTitle(record) {
+  const fields = parseJson(record?.fields_json, {});
+  return String(fields.title || fields.name || fields.product || fields.role || Object.values(fields).find(Boolean) || hostFromUrl(record?.source_url));
+}
+
+function clipTitle(clip) {
+  if (!clip) return "Untitled capture";
+  const summary = clip.summary || clip.raw_text || "";
+  const first = summary.split(/[\r\n.!?]/).map((item) => item.trim()).find(Boolean);
+  return first ? truncate(first, 72) : hostFromUrl(clip.source_url);
 }
 
 function hostFromUrl(value) {
@@ -189,13 +240,6 @@ function screenshotUrlFor(clip) {
   return clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url) || "";
 }
 
-function inferCollectionDisplayMode(records, clips) {
-  if (!records.length) return "table";
-  const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
-  const withImageCount = records.filter((record) => screenshotUrlFor(clipsById.get(record.clip_id))).length;
-  return withImageCount / records.length > 0.5 ? "cards" : "table";
-}
-
 function truncate(value, maxLength) {
   return value.length > maxLength ? `${value.slice(0, maxLength).trimEnd()}…` : value;
 }
@@ -208,14 +252,19 @@ function CapturedContext({ clip }) {
   if (!clip?.raw_text) return null;
   const preview = clip.summary || truncate(clip.raw_text, 240);
   const hasMore = clip.summary || clip.raw_text.length > preview.length;
+  const dragEvidence = (event, fallback) => {
+    const selected = window.getSelection?.().toString().trim();
+    event.dataTransfer.setData("text/plain", selected || fallback);
+    event.dataTransfer.effectAllowed = "copy";
+  };
   return (
     <div className="clip-context">
       <div><FileText size={14} /> {clip.summary ? "Summary" : "Captured context"}</div>
-      <p>{preview}</p>
+      <p draggable onDragStart={(event) => dragEvidence(event, preview)} title="Select text, then drag it onto a field">{preview}</p>
       {hasMore && (
         <details className="clip-raw-toggle">
           <summary>View full captured text</summary>
-          <p>{clip.raw_text}</p>
+          <p draggable onDragStart={(event) => dragEvidence(event, clip.raw_text)} title="Select text, then drag it onto a field">{clip.raw_text}</p>
         </details>
       )}
     </div>
@@ -245,12 +294,70 @@ function PairingDialog({ pairing, onClose }) {
           <div><div className="eyebrow"><PairingIcon size={13} /> browser pairing</div><h2>Connect this extension</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
-        <p>Copy both values into the Magpie extension's side panel. The pairing token is shown only now and is stored as a hash on the server.</p>
+        <p>Copy both values into the Magpie extension's side panel. Keep this window open: it closes when the server sees this extension use the pairing.</p>
         <div className="pairing-value"><span>Ingest function URL</span><code>{pairing.ingest_url}</code><button onClick={() => copy(pairing.ingest_url, "URL copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-value token"><span>Paired extension token</span><code>{pairing.token}</code><button onClick={() => copy(pairing.token, "Token copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-note"><ShieldCheck size={16} /> This token can only submit clips to your library. It cannot read anything from Magpie.</div>
-        <div className="pairing-actions"><span>{copied}</span><button className="primary-button" onClick={onClose}>I saved the token</button></div>
+        <div className="pairing-actions"><span>{copied || "Waiting for the extension…"}</span><button className="secondary-button" onClick={onClose}>Finish later</button></div>
       </section>
+    </div>
+  );
+}
+
+function WatchDialog({ records, watchRules, initialRecordId, initialField, onClose, onSave, isSaving, error }) {
+  const firstRecordId = initialRecordId || records[0]?.id || "";
+  const [recordId, setRecordId] = useState(firstRecordId);
+  const selectedRecord = records.find((record) => record.id === recordId) ?? null;
+  const scalarFields = Object.entries(parseJson(selectedRecord?.fields_json, {}))
+    .filter(([, value]) => value === null || ["string", "number", "boolean"].includes(typeof value))
+    .map(([name]) => name);
+  const existingWatch = watchRules.find((watch) => watch.record_id === recordId);
+  const safeInitialField = scalarFields.includes(initialField) ? initialField : scalarFields[0] || "__any__";
+  const [field, setField] = useState(safeInitialField);
+  const [frequency, setFrequency] = useState(existingWatch?.frequency || "daily");
+  const [acquisitionStrategy, setAcquisitionStrategy] = useState(existingWatch?.acquisition_strategy === "owner_browser" ? "owner_browser" : "direct_http");
+
+  useEffect(() => {
+    const nextFields = Object.entries(parseJson(selectedRecord?.fields_json, {}))
+      .filter(([, value]) => value === null || ["string", "number", "boolean"].includes(typeof value))
+      .map(([name]) => name);
+    const nextWatch = watchRules.find((watch) => watch.record_id === selectedRecord?.id);
+    setField((current) => nextFields.includes(current) ? current : nextFields[0] || "__any__");
+    setFrequency(nextWatch?.frequency || "daily");
+    setAcquisitionStrategy(nextWatch?.acquisition_strategy === "owner_browser" ? "owner_browser" : "direct_http");
+  }, [selectedRecord?.id, watchRules]);
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!selectedRecord) return;
+    const readableField = field === "__any__" ? "any trusted field" : field.replace(/_/g, " ");
+    onSave({
+      recordId: selectedRecord.id,
+      field,
+      condition: `Tell me when ${readableField} changes`,
+      frequency,
+      acquisitionStrategy,
+    });
+  };
+
+  return (
+    <div className="detail-overlay watch-dialog-overlay" role="presentation" onMouseDown={onClose}>
+      <form className="watch-dialog" role="dialog" aria-modal="true" aria-label="Create a watch" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-head"><div><div className="eyebrow"><Radio size={13} /> manual watch</div><h2>{existingWatch ? "Edit this watch" : "Watch an Item"}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
+        <p>A watch is a schedule. Magpie checks the source and records trusted changes; blocked or unreachable reads never overwrite fields.</p>
+        <div className="watch-sentence" aria-label="Watch configuration">
+          <span>Tell me when</span>
+          <label><span className="sr-only">Item</span><select value={recordId} onChange={(event) => setRecordId(event.target.value)} required>{records.map((record) => <option value={record.id} key={record.id}>{recordTitle(record)}</option>)}</select></label>
+          <span>has a change to</span>
+          <label><span className="sr-only">Field</span><select value={field} onChange={(event) => setField(event.target.value)}><option value="__any__">any trusted field</option>{scalarFields.map((name) => <option value={name} key={name}>{name.replace(/_/g, " ")}</option>)}</select></label>
+          <span>checked</span>
+          <label><span className="sr-only">Frequency</span><select value={frequency} onChange={(event) => setFrequency(event.target.value)}><option value="hourly">hourly</option><option value="daily">daily</option><option value="weekly">weekly</option></select></label>
+        </div>
+        <label className="watch-source-strategy">Check using<select value={acquisitionStrategy} onChange={(event) => setAcquisitionStrategy(event.target.value)}><option value="direct_http">Magpie's server</option><option value="owner_browser">My browser when I revisit</option></select></label>
+        {error && <div className="review-error">{error}</div>}
+        {!records.length && <div className="review-error">Add an Item before creating a watch.</div>}
+        <div className="pairing-actions"><span>{existingWatch ? "Saving updates the existing Item watch." : "You can pause or edit it later in Signals."}</span><button type="submit" className="primary-button" disabled={isSaving || !selectedRecord}>{isSaving ? <LoaderCircle className="spin" size={14} /> : <Radio size={14} />} {existingWatch ? "Save watch" : "Create watch"}</button></div>
+      </form>
     </div>
   );
 }
@@ -311,7 +418,7 @@ function BugReportDialog({ onClose, onSubmit, isSubmitting, error, result }) {
   );
 }
 
-function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, onDelete, deletingId, collections }) {
+function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, onDelete, deletingId, collections, records, watchRules }) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
   const active = missions.find((mission) => mission.id === activeMissionId);
@@ -374,7 +481,14 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
           {missions.map((mission) => {
             const isConfirming = confirmingId === mission.id;
             const isDeleting = deletingId === mission.id;
-            const count = collections.filter((collection) => collection.mission_id === mission.id).length;
+            const missionCollections = collections.filter((collection) => collection.mission_id === mission.id);
+            const missionCollectionIds = new Set(missionCollections.map((collection) => collection.id));
+            const missionRecords = records.filter((record) => record.mission_id === mission.id || missionCollectionIds.has(record.collection_id));
+            const missionRecordIds = new Set(missionRecords.map((record) => record.id));
+            const missionWatches = watchRules.filter((watch) => missionRecordIds.has(watch.record_id));
+            const collectionCount = missionCollections.length;
+            const itemCount = missionRecords.length;
+            const watchCount = missionWatches.length;
             return (
               <div className="workspace-menu-row" key={mission.id}>
                 <button role="menuitem" className={mission.id === activeMissionId ? "current" : ""} onClick={() => choose(mission.id)}>
@@ -382,7 +496,7 @@ function WorkspaceSwitcher({ missions, activeMissionId, onSelect, onNewProject, 
                 </button>
                 {isConfirming ? (
                   <span className="workspace-menu-confirm">
-                    <span>Delete {count} Collection{count === 1 ? "" : "s"}?</span>
+                    <span><b>Delete {mission.title} permanently?</b> {collectionCount} Collection{collectionCount === 1 ? "" : "s"}, {itemCount} Item{itemCount === 1 ? "" : "s"}, and {watchCount} Watch{watchCount === 1 ? "" : "es"} will be removed with their captures and history. You'll return to Library.</span>
                     <button
                       type="button"
                       className="danger-button danger-button-compact"
@@ -433,7 +547,7 @@ function EmptyCollection({ onSelect }) {
   );
 }
 
-function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRecords, onSelect, onDelete, deletingId }) {
+function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRecords, onSelect, onDelete, deletingId, refreshingRecordId }) {
   const [confirmingId, setConfirmingId] = useState(null);
   return (
     <aside className="collection-sidebar">
@@ -454,10 +568,11 @@ function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRe
           const countLabel = `${count}${hasMoreRecords ? "+" : ""}`;
           const isConfirming = confirmingId === collection.id;
           const isDeleting = deletingId === collection.id;
+          const dotStatus = collectionDotStatus(collection, records, refreshingRecordId);
           return (
             <div className={`collection-item ${isActive ? "active" : ""}`} key={collection.id}>
               <button className="collection-select" onClick={() => onSelect(collection.id)}>
-                <span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />
+                <span className={`collection-dot${dotStatus ? ` is-${dotStatus}` : ""}`} />
                 <span className="collection-name">{collection.name}</span>
                 <span className="collection-count">{countLabel}</span>
               </button>
@@ -497,7 +612,287 @@ function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRe
   );
 }
 
-function RecordTable({ collection, records, clips, displayMode = "table", page, hasMore, onPageChange, onSelect, onOpenOnboardingTour }) {
+const WORKSPACE_VIEWS = [
+  { id: "nest", label: "Nest", icon: Inbox },
+  { id: "library", label: "Library", icon: Layers3 },
+  { id: "signals", label: "Signals", icon: Radio },
+  { id: "search", label: "Search", icon: Search },
+];
+
+function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, isPairing, hasPairedExtension, onOpenDocs, onSignOut }) {
+  return (
+    <aside className="app-navigation">
+      <button type="button" className="nav-brand" onClick={() => onNavigate("nest")}><MagpieMark size={27} /><span>magpie</span><i>beta</i></button>
+      <nav className="primary-nav" aria-label="Workspace">
+        {WORKSPACE_VIEWS.map(({ id, label, icon: Icon }) => {
+          const count = id === "nest" ? needsReviewCount : id === "signals" ? signalCount : 0;
+          return (
+            <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => onNavigate(id)}>
+              <Icon size={16} /><span>{label}</span>{count > 0 && <b>{count}</b>}{id === "search" && <kbd>⌘K</kbd>}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="nav-collections">
+        <div className="nav-section-label"><span>collections</span><span>{collections.length}</span></div>
+        <div className="nav-collection-list">
+          {collections.map((collection) => {
+            const status = collectionDotStatus(collection, records, refreshingRecordId);
+            const count = collection.collection_type === "saved_search"
+              ? searchWorkspace({ query: collection.saved_query, records, clips, collections }).items.length
+              : records.filter((record) => record.collection_id === collection.id).length;
+            return (
+              <button type="button" key={collection.id} className={activeView === "library" && activeCollectionId === collection.id ? "active" : ""} onClick={() => onSelectCollection(collection.id)}>
+                <span className={`collection-dot${status ? ` is-${status}` : ""}`} />
+                <span>{collection.name}</span>
+                <small>{count}</small>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="nav-account">
+        <button type="button" onClick={onPair} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {hasPairedExtension ? "Pair another browser" : "Pair extension"}</button>
+        <button type="button" onClick={onOpenDocs}><Book size={14} /> Docs</button>
+        <div className="nav-user"><span><UserRound size={14} /> {user.full_name || user.email}</span><button type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={14} /></button></div>
+        <p><LockKeyhole size={12} /> Owner-scoped by design</p>
+      </div>
+    </aside>
+  );
+}
+
+function NestCard({ clip, decision, collections, onResolve, onOpenAdvanced, isBusy }) {
+  const [showMove, setShowMove] = useState(false);
+  const [moveTo, setMoveTo] = useState("");
+  const [confirmDismiss, setConfirmDismiss] = useState(false);
+  const touchStart = useRef(null);
+  const reasons = parseJson(decision?.reason_codes_json, []).filter(Boolean);
+  const primaryReason = reasons[0] || clip.routing_reason_code || "low_confidence";
+  const isAgentOutage = primaryReason === "ai_unavailable" || primaryReason === "malformed_ai_response";
+  const confidence = typeof decision?.confidence === "number" ? decision.confidence : clip.routing_confidence;
+  const image = screenshotUrlFor(clip);
+  const suggestion = decision?.suggested_name;
+  const onTouchStart = (event) => {
+    if (event.target.closest("button, select, input")) return;
+    const touch = event.changedTouches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const onTouchEnd = (event) => {
+    if (!touchStart.current || isBusy) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
+    touchStart.current = null;
+    if (Math.abs(dx) < 80 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx > 0 && suggestion) onResolve(clip.id, { action: "accept", clip_id: clip.id });
+    if (dx < 0) setShowMove(true);
+  };
+  return (
+    <article className={`nest-card${isAgentOutage ? " is-error" : ""}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="nest-card-media">{image ? <img src={image} alt="" /> : <SourceFavicon url={clip.source_url} large />}</div>
+      <div className="nest-card-content">
+        <h2>{clipTitle(clip)}</h2>
+        <div className="nest-meta"><span>{hostFromUrl(clip.source_url)}</span><span>·</span><span>{relativeDate(clip.captured_at || clip.created_date)}</span><span>·</span><span>{CAPTURE_MODE_LABELS[clip.capture_mode] || "Capture"}</span></div>
+        <div className="nest-reason">
+          <b>{isAgentOutage ? "The routing agent was unavailable" : reasonLabel(primaryReason)}</b>
+          <p>{isAgentOutage
+            ? "Nothing was created — your capture is safe and can be routed now."
+            : `${reasons.slice(1).map(reasonLabel).join(" · ") || "Magpie kept this out of your Collections instead of guessing."}${typeof confidence === "number" ? ` Confidence ${confidence.toFixed(2)}.` : ""}`}</p>
+        </div>
+        {showMove && (
+          <div className="nest-inline-action">
+            <select value={moveTo} onChange={(event) => setMoveTo(event.target.value)} aria-label="Move capture to Collection">
+              <option value="">Choose a Collection…</option>
+              {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+            </select>
+            <button type="button" className="secondary-button" disabled={!moveTo || isBusy} onClick={() => onResolve(clip.id, { action: "redirect", clip_id: clip.id, collection_id: moveTo })}>Move</button>
+          </div>
+        )}
+        <div className="nest-actions">
+          {suggestion && <button type="button" className="primary-button" disabled={isBusy} onClick={() => onResolve(clip.id, { action: "accept", clip_id: clip.id })}>{isBusy ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />} Accept · {suggestion}</button>}
+          <button type="button" className="secondary-button" onClick={() => setShowMove((current) => !current)}><ArrowRightLeft size={14} /> Move to…</button>
+          <button type="button" className="secondary-button" onClick={() => onOpenAdvanced(clip.id)}><FolderPlus size={14} /> Create a Collection</button>
+          {confirmDismiss ? (
+            <span className="nest-dismiss-confirm"><span>Remove “{clipTitle(clip)}” permanently?</span><button type="button" className="danger-button" disabled={isBusy} onClick={() => onResolve(clip.id, { action: "dismiss", clip_id: clip.id })}>Dismiss</button><button type="button" className="text-button" onClick={() => setConfirmDismiss(false)}>Keep</button></span>
+          ) : <button type="button" className="text-button" onClick={() => setConfirmDismiss(true)}>Dismiss</button>}
+        </div>
+        <small className="nest-swipe-hint">Swipe right to accept · left to choose a Collection</small>
+      </div>
+    </article>
+  );
+}
+
+function CaptureSourceOffer({ isFirstRun, hasPairedExtension, onPair, isPairing, onPaste, onIos, onOpenLibrary, onOpenGuide }) {
+  if (!isFirstRun) {
+    return (
+      <section className="capture-source-offer is-caught-up">
+        <div className="capture-offer-copy">
+          <div className="eyebrow">all caught up</div>
+          <h2>Nothing needs your decision.</h2>
+          <p>Confident captures are already in Collections. Add another page, or browse everything Magpie filed for you.</p>
+          <div className="capture-offer-actions">
+            <button type="button" className="primary-button" onClick={onPaste}><Plus size={14} /> Add capture</button>
+            <button type="button" className="secondary-button" onClick={onOpenLibrary}><Layers3 size={14} /> Browse Collections</button>
+            {!hasPairedExtension && <button type="button" className="text-button" onClick={onPair} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button>}
+          </div>
+        </div>
+        <div className="caught-up-mark" aria-hidden="true"><Check size={28} /></div>
+      </section>
+    );
+  }
+  return (
+    <section className="capture-source-offer">
+      <div className="capture-offer-copy">
+        <div className="eyebrow">start here</div>
+        <h2>Bring in one page. Magpie handles the filing.</h2>
+        <p>Nest only holds captures that need your decision. Confident captures go straight to Collections, whether they come from the extension, your phone, or a pasted link.</p>
+        <div className="capture-offer-actions"><button type="button" className="primary-button" onClick={onPair} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Pair extension</button><button type="button" className="secondary-button" onClick={onPaste}><Plus size={14} /> Paste a link</button><button type="button" className="text-button" onClick={onIos}>Use iPhone / iPad</button></div>
+      </div>
+      <div className="capture-guide-invite">
+        <img src="/onboarding/mode-element.gif" alt="The extension highlighting one listing before capture" />
+        <div><span>60-second walkthrough</span><b>See every capture mode at a useful size.</b><button type="button" className="secondary-button" onClick={onOpenGuide}>Open capture guide <ChevronRight size={14} /></button></div>
+      </div>
+    </section>
+  );
+}
+
+function NestSurface({ clips, decisionsByClip, collections, allClips, isFirstRun, hasPairedExtension, resolvingClipId, resolveError, onResolve, onOpenAdvanced, onPair, isPairing, onPaste, onIos, onOpenLibrary, onOpenGuide }) {
+  const recentAutoFiled = allClips.filter((clip) => clip.routing_status !== "needs_review" && Date.now() - new Date(clip.captured_at || clip.created_date).getTime() < 60 * 60 * 1000).length;
+  return (
+    <section className="workspace-surface nest-surface">
+      <header className="surface-header"><div><div className="eyebrow">needs your decision</div><h1>Nest</h1><p>{clips.length ? `${clips.length} capture${clips.length === 1 ? "" : "s"} Magpie wouldn't guess about. Everything it was sure of is already filed.` : "Nothing is waiting. Confident captures file straight into the Library."}</p></div><span className="surface-count">{clips.length}</span></header>
+      {resolveError && <div className="error-banner">{resolveError}</div>}
+      {clips.length ? <><div className="mobile-triage-progress"><span>1 of {clips.length}</span><span>Swipe right to keep · left to re-route</span></div><div className="nest-list">{clips.map((clip) => <NestCard key={clip.id} clip={clip} decision={decisionsByClip.get(clip.id)} collections={collections} onResolve={onResolve} onOpenAdvanced={onOpenAdvanced} isBusy={resolvingClipId === clip.id} />)}</div></> : <CaptureSourceOffer isFirstRun={isFirstRun} hasPairedExtension={hasPairedExtension} onPair={onPair} isPairing={isPairing} onPaste={onPaste} onIos={onIos} onOpenLibrary={onOpenLibrary} onOpenGuide={onOpenGuide} />}
+      {recentAutoFiled > 0 && <p className="nest-auto-filed"><span className="live-dot" /> {recentAutoFiled} more capture{recentAutoFiled === 1 ? "" : "s"} arrived and filed {recentAutoFiled === 1 ? "itself" : "themselves"}. {recentAutoFiled === 1 ? "It's" : "They're"} in the Library, not here.</p>}
+    </section>
+  );
+}
+
+function signalTypeFor(record, enrichment) {
+  if (enrichment?.agent_id === "extension-refresh-v1") return "revisit";
+  if (enrichment) return "changed";
+  if (record?.freshness === "blocked") return "blocked";
+  if (record?.freshness === "unreachable") return "error";
+  return "changed";
+}
+
+function SignalsSurface({ records, enrichments, watchRules, refreshAttempts, onSelectRecord, onToggleWatch, togglingWatchId, onCreateWatch }) {
+  const [filter, setFilter] = useState("all");
+  const recordById = new Map(records.map((record) => [record.id, record]));
+  const watchByRecord = new Map(watchRules.map((watch) => [watch.record_id, watch]));
+  const entries = [
+    ...enrichments.map((enrichment) => ({ id: `e-${enrichment.id}`, at: enrichment.checked_at, type: signalTypeFor(recordById.get(enrichment.record_id), enrichment), enrichment, record: recordById.get(enrichment.record_id), watch: watchByRecord.get(enrichment.record_id) })),
+    ...records.filter((record) => record.freshness === "blocked" || record.freshness === "unreachable").map((record) => ({ id: `r-${record.id}-${record.freshness}`, at: record.last_check_at || record.updated_date, type: signalTypeFor(record), record, watch: watchByRecord.get(record.id) })),
+  ].filter((entry) => entry.record).sort((a, b) => new Date(b.at) - new Date(a.at));
+  const visible = filter === "all" ? entries : entries.filter((entry) => entry.type === filter);
+  const today = new Date().toDateString();
+  const groups = visible.reduce((acc, entry) => {
+    const label = new Date(entry.at).toDateString() === today ? "Today" : "Earlier";
+    (acc[label] ||= []).push(entry);
+    return acc;
+  }, {});
+  const runningChecks = refreshAttempts.filter((attempt) => ["claimed", "running", "evidence_ready", "compared"].includes(attempt.status)).length;
+  return (
+    <section className="workspace-surface signals-surface">
+      <header className="surface-header"><div><div className="eyebrow">what changed and why</div><h1>Signals</h1><p>Trusted source changes and watch health, grouped by when they happened.</p></div>{runningChecks > 0 && <span className="checking-label"><span className="live-dot" /> checking {runningChecks} source{runningChecks === 1 ? "" : "s"}</span>}</header>
+      <div className="signal-filters" role="group" aria-label="Filter signals">{[["all", "All"], ["changed", "Changed"], ["blocked", "Blocked"], ["error", "Errors"], ["revisit", "Revisited"]].map(([id, label]) => <button type="button" key={id} className={filter === id ? "active" : ""} onClick={() => setFilter(id)}>{label}</button>)}</div>
+      {visible.length ? <div className="signal-groups">{Object.entries(groups).map(([label, items]) => <section key={label}><h2>{label}</h2>{items.map((entry) => {
+        const { record, enrichment, watch, type } = entry;
+        return <button type="button" className={`signal-entry is-${type}`} key={entry.id} onClick={() => onSelectRecord(record)}><span className="signal-icon">{type === "changed" ? <ArrowDown size={15} /> : type === "revisit" ? <RotateCcw size={15} /> : type === "blocked" ? <LockKeyhole size={15} /> : <AlertTriangle size={15} />}</span><span className="signal-copy"><b>{recordTitle(record)}</b><span>{enrichment ? <>{enrichment.field.replace(/_/g, " ")}: <del>{enrichment.old_value || "empty"}</del> <ChevronRight size={12} /> <strong>{enrichment.new_value}</strong></> : type === "blocked" ? <>Source sign-in required. Last good read {relativeDate(record.last_enriched_at)}; {watch?.last_error_code === "AUTO_PAUSED_BLOCKED" ? "watch auto-paused after three blocked checks." : "stored fields were not changed."}</> : <>Source unreachable; fields unchanged.</>}</span><small>rule: {watch?.natural_language_condition || "any trusted field change"} · {relativeDate(entry.at)}</small></span></button>;
+      })}</section>)}</div> : <div className="signals-empty"><Radio size={22} /><h2>No signals in this filter</h2><p>Choose an Item and create a watch to be told when a source-backed field changes.</p><button type="button" className="primary-button" onClick={onCreateWatch}>Create a watch</button></div>}
+      <section className="watch-manager"><div className="watch-manager-head"><div><div className="eyebrow">watch manager</div><h2>Your watches</h2></div><button type="button" className="secondary-button" onClick={onCreateWatch}><Plus size={14} /> New watch</button></div>{watchRules.length ? <div className="watch-list">{watchRules.map((watch) => {
+        const record = recordById.get(watch.record_id);
+        const blocked = watch.last_error_code === "AUTO_PAUSED_BLOCKED";
+        return <div className="watch-item" key={watch.id}><span className={`watch-state ${watch.active ? "is-active" : blocked ? "is-blocked" : "is-paused"}`}>{watch.active ? <Radio size={13} /> : blocked ? <LockKeyhole size={13} /> : <Pause size={13} />}{watch.active ? "active" : blocked ? "blocked" : "paused"}</span><p><b>{watch.natural_language_condition}</b> on <button type="button" onClick={() => record && onSelectRecord(record)}>{record ? recordTitle(record) : "Item"}</button>, checked {watch.frequency}.</p><button type="button" className="watch-toggle" disabled={togglingWatchId === watch.id} onClick={() => onToggleWatch(watch)}>{togglingWatchId === watch.id ? <LoaderCircle className="spin" size={14} /> : watch.active ? <Pause size={14} /> : <Play size={14} />}{watch.active ? "Pause" : "Resume"}</button></div>;
+      })}</div> : <p className="watch-empty">No watches yet. Create one from an Item or ask Magpie.</p>}</section>
+    </section>
+  );
+}
+
+function HighlightedText({ text, query }) {
+  const clean = String(query || "").trim();
+  if (!clean) return <>{text}</>;
+  const terms = clean.split(/\s+/).filter((term) => term.length > 1 && !/^(under|below|over|above|at|least|most|max|min)$/i.test(term));
+  if (!terms.length) return <>{text}</>;
+  const expression = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "ig");
+  return <>{String(text).split(expression).map((part, index) => terms.some((term) => part.toLowerCase() === term.toLowerCase()) ? <mark key={index}>{part}</mark> : part)}</>;
+}
+
+function SearchSurface({ records, clips, collections, missions, onSelectRecord, onSelectCollection, onAddCapture, onCreateProject, onCreateWatch, onAsk, onSaveSearch, onExit, focusVersion }) {
+  const [query, setQuery] = useState("");
+  const [scope, setScope] = useState("all");
+  const [workspaceScope, setWorkspaceScope] = useState("workspace");
+  const [saveName, setSaveName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const inputRef = useRef(null);
+  const scopedRecords = workspaceScope === "workspace" ? records : records.filter((record) => record.mission_id === workspaceScope);
+  const scopedCollections = workspaceScope === "workspace" ? collections : collections.filter((collection) => collection.mission_id === workspaceScope);
+  const results = useMemo(() => searchWorkspace({ query, records: scopedRecords, clips, collections: scopedCollections }), [query, scopedRecords, clips, scopedCollections]);
+  const visibleItems = scope === "all" ? results.items : results.items.filter((result) => result.matchKind === scope);
+  const scopeCounts = results.items.reduce((counts, result) => ({ ...counts, [result.matchKind]: (counts[result.matchKind] || 0) + 1 }), {});
+  const watchCandidate = visibleItems[0] || results.items[0];
+  useEffect(() => { inputRef.current?.focus(); }, [focusVersion]);
+  const saveSearch = async (event) => {
+    event.preventDefault();
+    const name = saveName.trim() || `Search · ${query.trim().slice(0, 52)}`;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      await onSaveSearch(query.trim(), name, workspaceScope === "workspace" ? "" : workspaceScope);
+      setSaveName("");
+    } catch (error) {
+      setSaveError(error.response?.data?.error || error.message || "Could not save this search.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  return (
+    <section className="workspace-surface search-surface">
+      <header className="surface-header"><div><div className="eyebrow">find anything you've saved</div><h1>Search</h1><p>Items, Collections, actions, and Ask Magpie in one command surface.</p></div></header>
+      <div className="search-command-row">
+        <label className="command-search"><Search size={20} /><input ref={inputRef} value={query} onChange={(event) => { setQuery(event.target.value); setScope("all"); }} onKeyDown={(event) => { if (event.key === "Escape") onExit(); }} placeholder="Search fields, captured text, sources — try “under 70k”" /><kbd>Esc</kbd></label>
+        <label className="search-workspace-scope"><span>Search in</span><select value={workspaceScope} onChange={(event) => { setWorkspaceScope(event.target.value); setScope("all"); }}><option value="workspace">Entire workspace</option>{missions.map((mission) => <option value={mission.id} key={mission.id}>{mission.title}</option>)}</select></label>
+      </div>
+      {!query ? <div className="command-groups"><section><h2>Actions</h2><button type="button" onClick={onAddCapture}><Plus size={15} /><span><b>Add from phone</b><small>Paste a page and capture note</small></span></button><button type="button" onClick={onCreateProject}><Target size={15} /><span><b>New Project</b><small>Give related research a purpose</small></span></button><button type="button" onClick={onAsk}><MessageCircle size={15} /><span><b>Ask Magpie</b><small>Compare stored evidence</small></span></button></section><section><h2>Search understands</h2><div className="search-hints"><span>field values</span><span>captured text</span><span>source hosts</span><span>under / over numbers</span></div></section></div> : <div className="search-results">
+        <div className="search-scopes" role="group" aria-label="Search result type"><button type="button" className={scope === "all" ? "active" : ""} onClick={() => setScope("all")}>Everything <span>{results.items.length + results.collections.length}</span></button><button type="button" className={scope === "field" ? "active" : ""} onClick={() => setScope("field")}>Fields <span>{scopeCounts.field || 0}</span></button><button type="button" className={scope === "capture" ? "active" : ""} onClick={() => setScope("capture")}>Captured text <span>{scopeCounts.capture || 0}</span></button><button type="button" className={scope === "source" ? "active" : ""} onClick={() => setScope("source")}>Sources <span>{scopeCounts.source || 0}</span></button></div>
+        {results.constraint && <div className="parsed-query"><ListFilter size={14} /> Numeric constraint: {results.constraint.operator === "lte" ? "at most" : "at least"} {results.constraint.amount.toLocaleString()}</div>}
+        {(results.items.length > 0 || results.collections.length > 0) && <form className="save-search-form" onSubmit={saveSearch}><label><Layers3 size={14} /><input value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder={`Save “${truncate(query, 38)}” as a live Collection`} maxLength={80} /></label><button type="submit" className="secondary-button" disabled={isSaving}>{isSaving ? <LoaderCircle className="spin" size={14} /> : <Plus size={14} />} Save live Collection</button><small className="save-search-scope">Saved in {workspaceScope === "workspace" ? "Entire workspace" : missions.find((mission) => mission.id === workspaceScope)?.title || "this Project"}.</small>{saveError && <small>{saveError}</small>}</form>}
+        <section className="search-query-actions"><h2>Actions</h2>{watchCandidate && <button type="button" onClick={() => onCreateWatch(watchCandidate.record, watchCandidate.matchKind === "field" ? watchCandidate.matchedField : "")}><Radio size={15} /><span><b>Watch {watchCandidate.matchKind === "field" ? watchCandidate.matchedField.replace(/_/g, " ") : "this Item"}</b><small>{watchCandidate.title}</small></span></button>}<button type="button" onClick={() => onAsk(query)}><MessageCircle size={15} /><span><b>Ask Magpie about “{truncate(query, 44)}”</b><small>Use the matching Items and their stored evidence</small></span></button></section>
+        {visibleItems.length > 0 && <section><h2>Items <span>{visibleItems.length}</span></h2>{visibleItems.map((result) => <button type="button" className="search-result" key={result.id} onClick={() => onSelectRecord(result.record)}><SourceFavicon url={result.record.source_url} large /><span><b><HighlightedText text={result.title} query={query} /></b><small>{result.collectionName} · {result.host}</small><em>matched {result.matchedField}: <HighlightedText text={truncate(result.matchedValue, 150)} query={query} /></em></span><ChevronRight size={16} /></button>)}</section>}
+        {scope === "all" && results.collections.length > 0 && <section><h2>Collections <span>{results.collections.length}</span></h2>{results.collections.map((result) => <button type="button" className="search-result collection-result" key={result.id} onClick={() => onSelectCollection(result.id)}><Layers3 size={20} /><span><b><HighlightedText text={result.title} query={query} /></b><small>{result.description}</small></span><ChevronRight size={16} /></button>)}</section>}
+        {!visibleItems.length && !(scope === "all" && results.collections.length) && <div className="search-empty"><Search size={22} /><h2>No matching evidence in this filter</h2><p>Choose Everything or try a field name, source, phrase from the capture, or a constraint such as “under 70k”.</p></div>}
+      </div>}
+    </section>
+  );
+}
+
+function CollectionDeleteControl({ collection, itemCount, watchCount, onDelete, isDeleting, mobile = false }) {
+  const [isConfirming, setIsConfirming] = useState(false);
+  useEffect(() => setIsConfirming(false), [collection?.id]);
+  if (!collection) return null;
+  return (
+    <div className={`collection-delete-control${mobile ? " is-mobile" : ""}`}>
+      <button type="button" className="icon-button collection-delete-trigger" onClick={() => setIsConfirming(true)} aria-label={`Delete ${collection.name}`}><Trash2 size={14} /></button>
+      {isConfirming && <div className="collection-delete-popover" role="alertdialog" aria-label={`Delete ${collection.name} permanently`}>
+        <b>Delete {collection.name} permanently?</b>
+        <span>{itemCount} Item{itemCount === 1 ? "" : "s"} and {watchCount} Watch{watchCount === 1 ? "" : "es"} will be removed with their captures and history.</span>
+        <div><button type="button" className="danger-button" disabled={isDeleting} onClick={async () => { await onDelete(collection.id); setIsConfirming(false); }}>{isDeleting ? <LoaderCircle className="spin" size={13} /> : <Trash2 size={13} />} Delete Collection</button><button type="button" className="text-button" disabled={isDeleting} onClick={() => setIsConfirming(false)}>Cancel</button></div>
+      </div>}
+    </div>
+  );
+}
+
+function RecordTable({ collection, collections, records, totalCount = records.length, clips, enrichments, watchRules, displayMode = "cards", page, hasMore, onPageChange, onSelect, onSelectCollection, onDeleteCollection, isDeletingCollection, collectionDeleteSummary, onOpenOnboardingTour, refreshingRecordId, onDisplayModeChange, onAsk }) {
+  const [mobileFilterByCollection, setMobileFilterByCollection] = useState({});
+  const [mobileSort, setMobileSort] = useState("recent");
+  const [selectedRecordIds, setSelectedRecordIds] = useState([]);
+  const [isComparing, setIsComparing] = useState(false);
+  useEffect(() => {
+    setMobileSort("recent");
+    setSelectedRecordIds([]);
+    setIsComparing(false);
+  }, [collection?.id]);
   const schema = parseJson(collection?.schema_json, []);
   const columns = Array.isArray(schema) ? schema : [];
 
@@ -505,26 +900,49 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
 
   const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
   const showCards = displayMode === "cards";
+  const dotStatus = collectionDotStatus(collection, records, refreshingRecordId);
   const pageStart = page * RECORDS_PAGE_SIZE;
   const pageRecords = records;
+  const changedRecordIds = new Set(enrichments.map((enrichment) => enrichment.record_id));
+  const changedCount = pageRecords.filter((record) => changedRecordIds.has(record.id)).length;
+  const mobileFilter = mobileFilterByCollection[collection.id] ?? (changedCount > 0 ? "changed" : "all");
+  const setMobileFilter = (filter) => setMobileFilterByCollection((current) => ({ ...current, [collection.id]: filter }));
+  const mobileBaseRecords = mobileFilter === "changed" ? pageRecords.filter((record) => changedRecordIds.has(record.id)) : pageRecords;
+  const mobileRecords = [...mobileBaseRecords].sort((a, b) => {
+    if (mobileSort === "title") return recordTitle(a).localeCompare(recordTitle(b));
+    if (mobileSort === "changed") return Number(changedRecordIds.has(b.id)) - Number(changedRecordIds.has(a.id));
+    return new Date(b.updated_date || b.created_date || 0) - new Date(a.updated_date || a.created_date || 0);
+  });
+  const selectedRecords = pageRecords.filter((record) => selectedRecordIds.includes(record.id));
+  const toggleSelectedRecord = (recordId) => setSelectedRecordIds((current) => current.includes(recordId) ? current.filter((id) => id !== recordId) : [...current, recordId].slice(-4));
 
   return (
     <section className="table-panel">
       <div className="panel-header">
         <div>
-          <div className="eyebrow"><CircleDot size={13} /> live collection</div>
-          <h2><span className={`collection-dot dot-${collectionDotIndex(collection.id)}`} />{collection.name}</h2>
+          <div className="eyebrow">{dotStatus === "live" ? <><span className="live-dot" /> checking sources</> : "organized automatically"}</div>
+          <h2 className="desktop-collection-title">{dotStatus && <span className={`collection-dot is-${dotStatus}`} />}{collection.name}</h2>
+          <label className="mobile-collection-select"><span className="sr-only">Choose Collection</span><select value={collection.id} onChange={(event) => onSelectCollection(event.target.value)}>{collections.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><ChevronDown size={18} /></label>
         </div>
-        <div className="live-indicator"><span /> live</div>
+        <div className="panel-header-actions">
+          <div className="view-toggle" role="group" aria-label="Collection layout">
+            <button type="button" className={showCards ? "active" : ""} onClick={() => onDisplayModeChange("cards")} aria-pressed={showCards}><LayoutGrid size={14} /> <span>Cards</span></button>
+            <button type="button" className={!showCards ? "active" : ""} onClick={() => onDisplayModeChange("table")} aria-pressed={!showCards}><Table2 size={14} /> <span>Table</span></button>
+          </div>
+          <span className="panel-count">{totalCount} Item{totalCount === 1 ? "" : "s"}</span>
+          <CollectionDeleteControl collection={collection} itemCount={collectionDeleteSummary.itemCount} watchCount={collectionDeleteSummary.watchCount} onDelete={onDeleteCollection} isDeleting={isDeletingCollection} />
+        </div>
       </div>
+      <div className="mobile-collection-delete-row"><CollectionDeleteControl mobile collection={collection} itemCount={collectionDeleteSummary.itemCount} watchCount={collectionDeleteSummary.watchCount} onDelete={onDeleteCollection} isDeleting={isDeletingCollection} /></div>
       <div className="desktop-record-view">
         {showCards ? (
-          <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+          <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} enrichments={enrichments} watchRules={watchRules} onSelect={onSelect} selectedRecordIds={selectedRecordIds} onToggleSelected={toggleSelectedRecord} />
         ) : (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
+                  <th aria-label="Select for comparison" />
                   <th>Source</th>
                   {columns.map((column) => <th key={column.name}>{column.label}</th>)}
                   <th aria-label="Open record" />
@@ -535,6 +953,7 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
                   const fields = parseJson(record.fields_json, {});
                   return (
                     <tr key={record.id} onClick={() => onSelect(record)}>
+                      <td><input type="checkbox" aria-label={`Compare ${recordTitle(record)}`} checked={selectedRecordIds.includes(record.id)} onChange={() => toggleSelectedRecord(record.id)} onClick={(event) => event.stopPropagation()} /></td>
                       <td>
                         <div className="source-cell"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}{record.freshness === "blocked" && <span className="blocked-badge" title="Source requires sign-in"><LockKeyhole size={10} /></span>}</div>
                       </td>
@@ -543,7 +962,7 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
                     </tr>
                   );
                 }) : (
-                  <tr><td colSpan={columns.length + 2}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
+                  <tr><td colSpan={columns.length + 3}><div className="table-empty">Waiting for a matching clip…</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -551,7 +970,8 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
         )}
       </div>
       <div className="mobile-record-view">
-        <RecordCardGrid records={pageRecords} columns={columns} clipsById={clipsById} onSelect={onSelect} />
+        <div className="mobile-collection-controls"><div className="mobile-record-filter" role="group" aria-label="Filter Collection Items"><button type="button" className={mobileFilter === "changed" ? "active" : ""} onClick={() => setMobileFilter("changed")}>Changed <span>{changedCount}</span></button><button type="button" className={mobileFilter === "all" ? "active" : ""} onClick={() => setMobileFilter("all")}>All <span>{pageRecords.length}</span></button></div><label className="mobile-sort"><SlidersHorizontal size={13} /><span className="sr-only">Sort Items</span><select value={mobileSort} onChange={(event) => setMobileSort(event.target.value)}><option value="recent">Recent</option><option value="changed">Changed first</option><option value="title">Title</option></select></label></div>
+        {mobileRecords.length ? <RecordCardGrid records={mobileRecords} columns={columns} clipsById={clipsById} enrichments={enrichments} watchRules={watchRules} onSelect={onSelect} changedFirst={mobileSort === "changed"} /> : <div className="table-empty mobile-filter-empty"><span>{mobileFilter === "changed" ? "No changed Items." : "No Items in this Collection yet."}</span>{mobileFilter === "changed" && <button type="button" className="text-button" onClick={() => setMobileFilter("all")}>Browse all {pageRecords.length}</button>}</div>}
       </div>
       {(page > 0 || hasMore) && (
         <div className="table-pagination">
@@ -560,24 +980,40 @@ function RecordTable({ collection, records, clips, displayMode = "table", page, 
           <button className="secondary-button" disabled={!hasMore} onClick={() => onPageChange(page + 1)}>Next</button>
         </div>
       )}
+      {selectedRecords.length > 0 && <div className="compare-tray"><span className="eyebrow">compare tray</span><div>{selectedRecords.map((record) => <button type="button" key={record.id} onClick={() => toggleSelectedRecord(record.id)}>{truncate(recordTitle(record), 24)} <X size={12} /></button>)}</div><span>{selectedRecords.length < 2 ? "Choose one more Item" : `${selectedRecords.length} Items selected`}</span><button type="button" className="primary-button" disabled={selectedRecords.length < 2} onClick={() => setIsComparing(true)}>Compare {selectedRecords.length}</button></div>}
+      {isComparing && <ComparisonPanel collection={collection} records={selectedRecords} watchRules={watchRules} onClose={() => setIsComparing(false)} onOpenRecord={onSelect} onAsk={onAsk} />}
     </section>
   );
 }
 
-function RecordCardGrid({ records, columns, clipsById, onSelect }) {
+function RecordCardGrid({ records, columns, clipsById, enrichments = [], watchRules = [], onSelect, changedFirst = false, selectedRecordIds = [], onToggleSelected }) {
   if (!records.length) return <div className="table-empty">Waiting for a matching clip…</div>;
 
   const primaryColumn = columns[0];
   const secondaryColumns = columns.slice(1, 3);
+  const latestChangeByRecord = new Map();
+  for (const enrichment of enrichments) {
+    const current = latestChangeByRecord.get(enrichment.record_id);
+    if (!current || new Date(enrichment.checked_at) > new Date(current.checked_at)) latestChangeByRecord.set(enrichment.record_id, enrichment);
+  }
+  const watchByRecord = new Map(watchRules.map((watch) => [watch.record_id, watch]));
+  const orderedRecords = changedFirst
+    ? [...records].sort((a, b) => Number(latestChangeByRecord.has(b.id)) - Number(latestChangeByRecord.has(a.id)))
+    : records;
 
   return (
     <div className="card-grid">
-      {records.map((record) => {
+      {orderedRecords.map((record) => {
         const fields = parseJson(record.fields_json, {});
         const image = screenshotUrlFor(clipsById.get(record.clip_id));
-        const title = (primaryColumn && fields[primaryColumn.name]) || hostFromUrl(record.source_url);
+        const title = (primaryColumn && fields[primaryColumn.name]) || recordTitle(record);
+        const change = latestChangeByRecord.get(record.id);
+        const watch = watchByRecord.get(record.id);
+        const isAutoPaused = !watch?.active && watch?.last_error_code === "AUTO_PAUSED_BLOCKED";
+        const status = change ? "changed" : record.freshness === "blocked" ? "blocked" : record.freshness === "unreachable" ? "error" : "fresh";
         return (
-          <div key={record.id} className={`record-card ${image ? "has-media" : "no-media"}`} onClick={() => onSelect(record)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(record); } }}>
+          <div key={record.id} className={`record-card ${image ? "has-media" : "no-media"} is-${status}`} onClick={() => onSelect(record)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(record); } }}>
+            {onToggleSelected && <label className="record-card-select" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={selectedRecordIds.includes(record.id)} onChange={() => onToggleSelected(record.id)} aria-label={`Compare ${title}`} /><span><Check size={12} /></span></label>}
             <div className="record-card-media">
               {image ? (
                 <img src={image} alt="" loading="lazy" />
@@ -599,11 +1035,45 @@ function RecordCardGrid({ records, columns, clipsById, onSelect }) {
                   </div>
                 );
               })}
+              <div className={`record-card-status is-${status}`}>
+                {change ? <><span /> {change.field.replace(/_/g, " ")} changed · {relativeDate(change.checked_at)}</>
+                  : record.freshness === "blocked" ? <><LockKeyhole size={11} /> {isAutoPaused ? "paused after 3 blocked checks" : "blocked"}</>
+                  : record.freshness === "unreachable" ? <><AlertTriangle size={11} /> source unreachable · fields unchanged</>
+                  : <>{record.last_check_at ? `checked ${relativeDate(record.last_check_at)}` : "recently captured"}</>}
+              </div>
               <div className="record-card-source"><SourceFavicon url={record.source_url} />{hostFromUrl(record.source_url)}</div>
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ComparisonPanel({ collection, records, watchRules, onClose, onOpenRecord, onAsk }) {
+  const [onlyDifferences, setOnlyDifferences] = useState(true);
+  const schema = parseJson(collection?.schema_json, []);
+  const schemaNames = Array.isArray(schema) ? schema.map((field) => field.name) : [];
+  const recordFields = records.map((record) => parseJson(record.fields_json, {}));
+  const allFieldNames = [...new Set([...schemaNames, ...recordFields.flatMap((fields) => Object.keys(fields))])];
+  const differing = new Set(allFieldNames.filter((name) => new Set(recordFields.map((fields) => JSON.stringify(fields[name] ?? null))).size > 1));
+  const visibleFields = onlyDifferences ? allFieldNames.filter((name) => differing.has(name)) : allFieldNames;
+  const watchByRecord = new Map(watchRules.map((watch) => [watch.record_id, watch]));
+  return (
+    <div className="detail-overlay comparison-overlay" role="presentation" onMouseDown={onClose}>
+      <section className="comparison-panel" role="dialog" aria-modal="true" aria-label={`Compare Items in ${collection.name}`} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="comparison-head"><div><div className="eyebrow">compare · {records.length} Items · {differing.size} fields differ</div><h2>{collection.name}</h2></div><div><button type="button" className={onlyDifferences ? "secondary-button active" : "secondary-button"} onClick={() => setOnlyDifferences((current) => !current)}>Only differences</button><button type="button" className="primary-button" onClick={onAsk}><MessageCircle size={14} /> Ask about these</button><button type="button" className="icon-button" onClick={onClose} aria-label="Close comparison"><X size={19} /></button></div></header>
+        <div className="comparison-scroll">
+          <table className="comparison-table">
+            <thead><tr><th>Field</th>{records.map((record) => <th key={record.id}><button type="button" onClick={() => { onClose(); onOpenRecord(record); }}><SourceFavicon url={record.source_url} /><span>{recordTitle(record)}</span><small>{hostFromUrl(record.source_url)}</small></button></th>)}</tr></thead>
+            <tbody>
+              {visibleFields.map((name) => <tr className={differing.has(name) ? "is-different" : ""} key={name}><th>{name.replace(/_/g, " ")}</th>{recordFields.map((fields, index) => <td key={records[index].id}><FieldValue value={fields[name] ?? "—"} /></td>)}</tr>)}
+              <tr><th>watched</th>{records.map((record) => { const watch = watchByRecord.get(record.id); return <td key={record.id}>{watch ? <span className={`comparison-watch ${watch.active ? "active" : "paused"}`}><Radio size={11} /> {watch.active ? watch.frequency : "paused"}</span> : <span className="comparison-none">none</span>}</td>; })}</tr>
+            </tbody>
+          </table>
+        </div>
+        {!visibleFields.length && <div className="comparison-empty">These Items have the same stored values. Turn off “Only differences” to inspect every field.</div>}
+      </section>
     </div>
   );
 }
@@ -639,11 +1109,17 @@ function ActivityPanel({ enrichments, records, onSelect, onClose }) {
 
 const CHECKING_STAGES = ["Checking…", "Still checking — some sources are slow…", "Almost done…"];
 
-function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, isRefreshing, onStatus, refreshNotice, onDelete, isDeleting, onToggleWatch, isTogglingWatch }) {
+function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, isRefreshing, onStatus, refreshNotice, onDelete, isDeleting, onToggleWatch, onCreateWatch, isTogglingWatch, onCorrectField }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [refreshStrategy, setRefreshStrategy] = useState("direct_http");
+  const [editingField, setEditingField] = useState(null);
+  const [correctionValue, setCorrectionValue] = useState("");
+  const [correctionError, setCorrectionError] = useState("");
+  const [isCorrecting, setIsCorrecting] = useState(false);
   useEffect(() => {
     setIsConfirmingDelete(false);
+    setEditingField(null);
+    setCorrectionError("");
   }, [record?.id]);
   const checkingLabel = useStagedMessage(isRefreshing, CHECKING_STAGES);
 
@@ -659,28 +1135,97 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
     const existing = lastChangeByField.get(item.field);
     if (!existing || new Date(item.checked_at) > new Date(existing.checked_at)) lastChangeByField.set(item.field, item);
   }
+  // Changed field(s) lead the list -- "the changed field at the top" --
+  // rather than sitting wherever they fall in raw schema order.
+  const sortedFieldEntries = Object.entries(fields).sort(
+    (a, b) => (lastChangeByField.has(b[0]) ? 1 : 0) - (lastChangeByField.has(a[0]) ? 1 : 0),
+  );
+  const startCorrection = (name, value, initialValue = value) => {
+    setEditingField(name);
+    if (typeof value === "number" && typeof initialValue === "string") {
+      const numeric = initialValue.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+      setCorrectionValue(numeric?.[0] || String(value));
+    } else {
+      setCorrectionValue(initialValue === null ? "" : String(initialValue));
+    }
+    setCorrectionError("");
+  };
+  const dropEvidence = (event, name, value) => {
+    if (!(value === null || ["string", "number"].includes(typeof value))) return;
+    event.preventDefault();
+    const dropped = event.dataTransfer.getData("text/plain").trim();
+    if (dropped) startCorrection(name, value, dropped);
+  };
+  const submitCorrection = async (event, name, currentValue) => {
+    event.preventDefault();
+    let nextValue = correctionValue;
+    if (typeof currentValue === "number") {
+      nextValue = Number(correctionValue);
+      if (!Number.isFinite(nextValue)) {
+        setCorrectionError("Enter a valid number.");
+        return;
+      }
+    } else if (typeof currentValue === "boolean") {
+      nextValue = correctionValue === "true";
+    }
+    setIsCorrecting(true);
+    setCorrectionError("");
+    try {
+      await onCorrectField(name, currentValue, nextValue);
+      setEditingField(null);
+    } catch (error) {
+      setCorrectionError(error.response?.data?.error || error.message || "Could not save this correction.");
+    } finally {
+      setIsCorrecting(false);
+    }
+  };
   return (
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
-      <aside className="detail-panel" role="dialog" aria-modal="true" aria-label="Item detail" onMouseDown={(event) => event.stopPropagation()}>
+      <aside className="detail-panel detail-panel-split" role="dialog" aria-modal="true" aria-label="Item detail" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head">
           <div><div className="eyebrow">original context + live fields</div><h2>{fields.title || hostFromUrl(record.source_url)}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
-        {isHttpUrl(record.source_url) && <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>}
-        <div className="structured-fields">
-          {Object.entries(fields).map(([name, value]) => {
-            const change = lastChangeByField.get(name);
-            return (
-              <div className={`field-row${change ? " is-changed" : ""}`} key={name} title={change ? `Changed from ${change.old_value || "empty"} · ${formatDate(change.checked_at)}` : undefined}>
-                <span>{name.replace(/_/g, " ")}</span>
-                <b><FieldValue value={value} />{change && <i className="field-changed-dot" aria-hidden="true" />}</b>
-              </div>
-            );
-          })}
+        <div className="detail-split">
+          <section className="detail-evidence-pane" aria-label="Captured evidence">
+            <div className="detail-section-label">Evidence</div>
+            {isHttpUrl(record.source_url) && <a className="source-link" href={record.source_url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {hostFromUrl(record.source_url)}</a>}
+            {screenshotUrl ? <img className="clip-screenshot" src={screenshotUrl} alt="Captured source page" /> : <div className="detail-evidence-empty"><FileText size={18} /> No screenshot was captured for this Item.</div>}
+            <CapturedContext clip={clip} />
+          </section>
+          <section className="detail-fields-pane" aria-label="Structured fields">
+            <div className="detail-section-label">Structured fields <span>Select evidence and drag it onto a field, or use the pencil</span></div>
+            <div className="structured-fields">
+              {sortedFieldEntries.map(([name, value]) => {
+                const change = lastChangeByField.get(name);
+                const canCorrect = value === null || ["string", "number", "boolean"].includes(typeof value);
+                return (
+                  <div className={`field-row${change ? " is-changed" : ""}${editingField === name ? " is-editing" : ""}`} key={name} title={change ? `Changed from ${change.old_value || "empty"} · ${formatDate(change.checked_at)}` : undefined} onDragOver={(event) => { if (value === null || ["string", "number"].includes(typeof value)) event.preventDefault(); }} onDrop={(event) => dropEvidence(event, name, value)}>
+                    <span>{name.replace(/_/g, " ")}</span>
+                    {editingField === name ? (
+                      <form className="field-correction-form" onSubmit={(event) => submitCorrection(event, name, value)}>
+                        {typeof value === "boolean" ? <select value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)}><option value="true">true</option><option value="false">false</option></select> : <input type={typeof value === "number" ? "number" : "text"} value={correctionValue} onChange={(event) => setCorrectionValue(event.target.value)} autoFocus />}
+                        <button type="submit" aria-label={`Save ${name} correction`} disabled={isCorrecting}>{isCorrecting ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}</button>
+                        <button type="button" aria-label="Cancel correction" onClick={() => setEditingField(null)} disabled={isCorrecting}><X size={13} /></button>
+                        {correctionError && <small>{correctionError}</small>}
+                      </form>
+                    ) : (
+                      <div className="field-value-actions"><b><FieldValue value={value} />{change && <i className="field-changed-dot" aria-hidden="true" />}</b>{canCorrect && <button type="button" className="field-correct-button" onClick={() => startCorrection(name, value)} aria-label={`Correct ${name}`}><Pencil size={12} /></button>}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {record.mission_id && <div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
+            <div className="detail-watch-summary">
+              <div><Radio size={14} /><span>{watch ? <><b>{watch.active ? `Monitoring ${watch.frequency || "daily"}` : "Monitoring paused"}</b><small>{watch.natural_language_condition}</small></> : <><b>Watch this Item</b><small>Choose a field and schedule without opening Ask.</small></>}</span></div>
+              {watch ? <><button className="text-button" onClick={() => onToggleWatch(watch)} disabled={isTogglingWatch}>{isTogglingWatch ? <LoaderCircle className="spin" size={13} /> : watch.active ? <Pause size={13} /> : <Play size={13} />}{watch.active ? "Pause" : "Resume"}</button><button className="secondary-button" onClick={() => onCreateWatch(record)}>Edit watch</button></> : <button className="secondary-button" onClick={() => onCreateWatch(record)}><Plus size={13} /> Create watch</button>}
+            </div>
+            <div className="history-section"><h3>Change history</h3>
+              {enrichments.length ? enrichments.map((item) => <div className="history-row" key={item.id}><span>{item.field}</span><del>{item.old_value || "empty"}</del><ChevronRight size={13} /><b>{item.new_value}</b><small>{formatDate(item.checked_at)}</small></div>) : <p>No field changes recorded yet.</p>}
+            </div>
+          </section>
         </div>
-        {record.mission_id &&<div className="candidate-actions"><span>Decision status</span>{["shortlisted", "contacted", "rejected"].map((status) => <button key={status} className={record.decision_status === status ? "active" : ""} onClick={() => onStatus(status)}>{status}</button>)}</div>}
-        {screenshotUrl && <img className="clip-screenshot" src={screenshotUrl} alt="Captured source page" />}
-        <CapturedContext clip={clip} />
         {isBlocked && (
           <div className="blocked-notice">
             <LockKeyhole size={15} />
@@ -691,60 +1236,47 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
             </div>
           </div>
         )}
-        {watch && (
-          <div className="watch-row">
-            <span className={`watch-chip ${watch.active ? "on" : "off"}`}>
-              {watch.acquisition_strategy === "zyte"
-                ? "Cloud monitoring unavailable"
-                : watch.acquisition_strategy === "owner_browser"
-                ? "Browser-assisted monitoring"
-                : watch.active ? "Monitoring daily" : isAutoPaused ? "Monitoring auto-paused" : "Monitoring paused"}
-            </span>
-            <button className="text-button" onClick={() => onToggleWatch(watch)} disabled={isTogglingWatch}>
-              {isTogglingWatch ? <LoaderCircle className="spin" size={13} /> : null}
-              {watch.active ? "Pause" : "Resume"}
-            </button>
-          </div>
-        )}
-        <div className="detail-actions">
-          <button className="secondary-button" onClick={() => onRefresh(refreshStrategy)} disabled={isRefreshing}>
-            <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
-          </button>
-          <details className="refresh-options">
-            <summary aria-label="Refresh options"><SlidersHorizontal size={14} /></summary>
-            <div className="refresh-options-panel">
-              <label className="refresh-strategy-label">Check with
-                <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
-                  <option value="direct_http">Direct HTTP</option>
-                  <option value="zyte">Zyte cloud (manual)</option>
-                  <option value="owner_browser">My browser</option>
-                </select>
-              </label>
-              <span className="refresh-last-checked">Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+        <details className="detail-more">
+          <summary><SlidersHorizontal size={14} /> Source checks, captured text, remove</summary>
+          <div className="detail-more-panel">
+            <div className="detail-actions">
+              <button className="secondary-button" onClick={() => onRefresh(refreshStrategy)} disabled={isRefreshing}>
+                <RefreshCw className={isRefreshing ? "spin" : ""} size={15} /> {isRefreshing ? checkingLabel : "Check source now"}
+              </button>
+              <details className="refresh-options">
+                <summary aria-label="Refresh options"><SlidersHorizontal size={14} /></summary>
+                <div className="refresh-options-panel">
+                  <label className="refresh-strategy-label">Check with
+                    <select value={refreshStrategy} onChange={(event) => setRefreshStrategy(event.target.value)} disabled={isRefreshing}>
+                      <option value="direct_http">Direct HTTP</option>
+                      <option value="zyte">Zyte cloud (manual)</option>
+                      <option value="owner_browser">My browser</option>
+                    </select>
+                  </label>
+                  <span className="refresh-last-checked">Last checked {formatDate(record.last_check_at || record.last_enriched_at)}</span>
+                </div>
+              </details>
             </div>
-          </details>
-        </div>
-        {refreshNotice && <div className={`refresh-notice ${refreshNotice.outcome}`}>{refreshNotice.message}</div>}
-        <div className="danger-zone">
-          {isConfirmingDelete ? (
-            <div className="danger-confirm">
-              <span>This permanently deletes the Item, its capture, watches, and update history.</span>
-              <div>
-                <button className="danger-button" onClick={onDelete} disabled={isDeleting}>
-                  {isDeleting ? <LoaderCircle className="spin" size={13} /> : <Trash2 size={13} />} Delete permanently
+            {refreshNotice && <div className={`refresh-notice ${refreshNotice.outcome}`}>{refreshNotice.message}</div>}
+            <div className="danger-zone">
+              {isConfirmingDelete ? (
+                <div className="danger-confirm">
+                  <span>This permanently deletes the Item, its capture, watches, and update history.</span>
+                  <div>
+                    <button className="danger-button" onClick={onDelete} disabled={isDeleting}>
+                      {isDeleting ? <LoaderCircle className="spin" size={13} /> : <Trash2 size={13} />} Delete permanently
+                    </button>
+                    <button className="text-button" onClick={() => setIsConfirmingDelete(false)} disabled={isDeleting}>Keep it</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="text-button danger-link" onClick={() => setIsConfirmingDelete(true)}>
+                  <Trash2 size={13} /> Remove this item
                 </button>
-                <button className="text-button" onClick={() => setIsConfirmingDelete(false)} disabled={isDeleting}>Keep it</button>
-              </div>
+              )}
             </div>
-          ) : (
-            <button className="text-button danger-link" onClick={() => setIsConfirmingDelete(true)}>
-              <Trash2 size={13} /> Remove this item
-            </button>
-          )}
-        </div>
-        <div className="history-section"><h3>Change history</h3>
-          {enrichments.length ? enrichments.map((item) => <div className="history-row" key={item.id}><span>{item.field}</span><del>{item.old_value || "empty"}</del><ChevronRight size={13} /><b>{item.new_value}</b><small>{formatDate(item.checked_at)}</small></div>) : <p>No field changes recorded yet.</p>}
-        </div>
+          </div>
+        </details>
       </aside>
     </div>
   );
@@ -808,9 +1340,9 @@ function NeedsReviewPanel({ clips, decisionsByClip, collections, missions, selec
   if (!selectedClip) {
     return (
       <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
-        <aside className="detail-panel review-panel" role="dialog" aria-modal="true" aria-label="Needs review" onMouseDown={(event) => event.stopPropagation()}>
+        <aside className="detail-panel review-panel" role="dialog" aria-modal="true" aria-label="Nest" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-head">
-            <div><div className="eyebrow"><Inbox size={13} /> needs review</div><h2>Nothing waiting</h2></div>
+            <div><div className="eyebrow"><Inbox size={13} /> nest</div><h2>Nothing waiting</h2></div>
             <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
           </div>
           <p className="review-empty">Every capture is organized. New ambiguous captures will appear here.</p>
@@ -821,9 +1353,9 @@ function NeedsReviewPanel({ clips, decisionsByClip, collections, missions, selec
 
   return (
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
-      <aside className="detail-panel review-panel" role="dialog" aria-modal="true" aria-label="Needs review" onMouseDown={(event) => event.stopPropagation()}>
+      <aside className="detail-panel review-panel" role="dialog" aria-modal="true" aria-label="Nest" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head">
-          <div><div className="eyebrow"><Inbox size={13} /> needs review · {clips.length}</div><h2>Organize this capture</h2></div>
+          <div><div className="eyebrow"><Inbox size={13} /> nest · {clips.length}</div><h2>Organize this capture</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
 
@@ -1169,6 +1701,11 @@ function readShareDraft() {
   try { return JSON.parse(sessionStorage.getItem("magpie.share.draft") || "null") || direct; } catch { return direct; }
 }
 
+function workspaceViewFromPath(pathname) {
+  const segment = pathname.split("/").filter(Boolean)[0];
+  return WORKSPACE_VIEWS.some((view) => view.id === segment) ? segment : "library";
+}
+
 function ShareCapturePage({ draft, onSubmit, isSubmitting, error, result }) {
   const [note, setNote] = useState(draft.text || draft.title || "");
   const [intent, setIntent] = useState("reference");
@@ -1187,7 +1724,7 @@ function ShareCapturePage({ draft, onSubmit, isSubmitting, error, result }) {
           <label>Why does this matter?<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="What should Magpie remember?" rows="4" required /></label>
           <label>Intent<select value={intent} onChange={(event) => setIntent(event.target.value)}><option value="reference">Keep for reference</option><option value="compare">Compare later</option><option value="watch">Watch for changes</option><option value="act">Act on this</option></select></label>
           {error && <div className="review-error">{error}</div>}
-          {result && <div className="refresh-notice success">{result.duplicate ? "Already saved in your workspace." : result.routing_status === "needs_review" ? "Saved for review." : "Saved. Magpie is organizing it now."}</div>}
+          {result && <div className="refresh-notice success">{result.duplicate ? "Already saved in your workspace." : result.routing_status === "needs_review" ? "Saved to Nest." : "Saved. Magpie is organizing it now."}</div>}
           <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />} {isSubmitting ? "Saving…" : "Save to Magpie"}</button>
         </form>
       </section>
@@ -1195,21 +1732,23 @@ function ShareCapturePage({ draft, onSubmit, isSubmitting, error, result }) {
   );
 }
 
-function MobileCaptureDialog({ onClose, onSubmit, isSubmitting, error, result }) {
+function MobileCaptureDialog({ onClose, onSubmit, isSubmitting, error, result, missions, activeMissionId }) {
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [intent, setIntent] = useState("reference");
+  const [missionId, setMissionId] = useState(activeMissionId || "");
   return (
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
       <aside className="detail-panel mobile-capture-panel" role="dialog" aria-modal="true" aria-label="Add a memory" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head"><div><div className="eyebrow"><Plus size={13} /> mobile capture</div><h2>Add something to Magpie</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button></div>
         <p className="mobile-capture-intro">Save a link and why it matters. Magpie will organize it into your workspace.</p>
-        <form className="mobile-capture-form" onSubmit={(event) => { event.preventDefault(); onSubmit({ source_url: url, raw_text: note, capture_intent: intent }); }}>
+        <form className="mobile-capture-form" onSubmit={(event) => { event.preventDefault(); onSubmit({ source_url: url, raw_text: note, capture_intent: intent, mission_id: missionId }); }}>
           <label>URL<input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://…" required /></label>
           <label>Note<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="What should Magpie remember?" rows="5" required /></label>
           <label>Intent<select value={intent} onChange={(event) => setIntent(event.target.value)}><option value="reference">Keep for reference</option><option value="compare">Compare later</option><option value="watch">Watch for changes</option><option value="act">Act on this</option></select></label>
+          <label>Save to<select value={missionId} onChange={(event) => setMissionId(event.target.value)}><option value="">Library — no Project</option>{missions.map((mission) => <option value={mission.id} key={mission.id}>{mission.title}</option>)}</select></label>
           {error && <div className="review-error">{error}</div>}
-          {result && <div className="refresh-notice success">{result.duplicate ? "This capture was already saved." : result.routing_status === "needs_review" ? "Saved for review. Magpie needs a little more information before filing it." : "Saved. Magpie is organizing this capture now."}</div>}
+          {result && <div className="refresh-notice success">{result.duplicate ? "This capture was already saved." : result.routing_status === "needs_review" ? "Saved to Nest. Magpie needs a little more information before filing it." : "Saved. Magpie is organizing this capture now."}</div>}
           <button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />} {isSubmitting ? "Saving…" : "Save to workspace"}</button>
         </form>
       </aside>
@@ -1229,6 +1768,9 @@ export default function App() {
   const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
   const [data, setData] = useState(emptyData);
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
+  const [activeView, setActiveView] = useState(() => workspaceViewFromPath(window.location.pathname));
+  const [searchFocusVersion, setSearchFocusVersion] = useState(0);
+  const [dismissedGuides, setDismissedGuides] = useState({ routing: false, watch: false, ask: false });
   const [activeCollectionId, setActiveCollectionId] = useState(null);
   const [recordPage, setRecordPage] = useState(0);
   const [collectionDisplayModes, setCollectionDisplayModes] = useState({});
@@ -1239,13 +1781,13 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPairing, setIsPairing] = useState(false);
   const [pairing, setPairing] = useState(null);
+  const [routingUndo, setRoutingUndo] = useState(null);
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [isCaptureGuideOpen, setIsCaptureGuideOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
-  const [onboardingTourStep, setOnboardingTourStep] = useState(null);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const [isWorkspacePreviewOpen, setIsWorkspacePreviewOpen] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [refreshNotice, setRefreshNotice] = useState(null);
   const [isReviewOpen, setIsReviewOpen] = useState(false);
@@ -1254,6 +1796,10 @@ export default function App() {
   const [resolveError, setResolveError] = useState("");
   const [isDeletingRecord, setIsDeletingRecord] = useState(false);
   const [isTogglingWatch, setIsTogglingWatch] = useState(false);
+  const [togglingWatchId, setTogglingWatchId] = useState(null);
+  const [watchDialog, setWatchDialog] = useState(null);
+  const [isSavingWatch, setIsSavingWatch] = useState(false);
+  const [watchDialogError, setWatchDialogError] = useState("");
   const [isMobileCaptureOpen, setIsMobileCaptureOpen] = useState(false);
   const [isMobileCapturing, setIsMobileCapturing] = useState(false);
   const [mobileCaptureError, setMobileCaptureError] = useState("");
@@ -1264,8 +1810,6 @@ export default function App() {
   const [isReportingBug, setIsReportingBug] = useState(false);
   const [bugReportError, setBugReportError] = useState("");
   const [bugReportResult, setBugReportResult] = useState(null);
-  const [isCreatingOnboardingProject, setIsCreatingOnboardingProject] = useState(false);
-  const [onboardingProjectError, setOnboardingProjectError] = useState("");
 
   // One bounded fetch gets every owned Record up front (not just the
   // active Collection's page), so switching Collections/Projects is a pure
@@ -1276,7 +1820,7 @@ export default function App() {
   // silently dropping rows past a single page (G1); it already existed for
   // this exact purpose but was never actually wired into loadDashboard.
   const loadDashboard = useCallback(async () => {
-    const [missions, collections, recordsResult, clips, enrichments, routingDecisions, watchRules, extensionInstalls] = await Promise.all([
+    const [missions, collections, recordsResult, clips, enrichments, routingDecisions, watchRules, refreshAttempts, extensionInstalls] = await Promise.all([
       listDashboardPage(base44.entities.Mission, "-created_date"),
       listDashboardPage(base44.entities.Collection, "name"),
       fetchAllPages((skip, limit) => base44.entities.Record.list("-created_date", limit, skip)),
@@ -1284,6 +1828,7 @@ export default function App() {
       listDashboardPage(base44.entities.Enrichment, "-checked_at"),
       listDashboardPage(base44.entities.RoutingDecision, "-decided_at"),
       listDashboardPage(base44.entities.WatchRule, "-created_date"),
+      listDashboardPage(base44.entities.RefreshAttempt, "-requested_at"),
       listDashboardPage(base44.entities.ExtensionInstall, "-created_at"),
     ]);
     const records = recordsResult.items;
@@ -1293,11 +1838,10 @@ export default function App() {
     activeCollectionIdRef.current = selectedCollectionId;
     setActiveCollectionId(selectedCollectionId);
     setActiveMissionId((current) => current && missions.some((item) => item.id === current) ? current : "");
-    const next = { missions, collections, records, clips, enrichments, routingDecisions, watchRules, extensionInstalls };
+    const next = { missions, collections, records, clips, enrichments, routingDecisions, watchRules, refreshAttempts, extensionInstalls };
     setCollectionDisplayModes((current) => {
       if (!selectedCollectionId || current[selectedCollectionId]) return current;
-      const collectionRecords = records.filter((record) => record.collection_id === selectedCollectionId);
-      return { ...current, [selectedCollectionId]: inferCollectionDisplayMode(collectionRecords, clips) };
+      return { ...current, [selectedCollectionId]: "cards" };
     });
     setData(next);
     setDataMeta({
@@ -1308,6 +1852,7 @@ export default function App() {
       enrichments: { hasMore: enrichments.length >= DASHBOARD_LIST_LIMIT, total: null },
       routingDecisions: { hasMore: routingDecisions.length >= DASHBOARD_LIST_LIMIT, total: null },
       watchRules: { hasMore: watchRules.length >= DASHBOARD_LIST_LIMIT, total: null },
+      refreshAttempts: { hasMore: refreshAttempts.length >= DASHBOARD_LIST_LIMIT, total: null },
       extensionInstalls: { hasMore: extensionInstalls.length >= DASHBOARD_LIST_LIMIT, total: null },
     });
     return next;
@@ -1326,12 +1871,19 @@ export default function App() {
     activeCollectionIdRef.current = collectionId;
     setActiveCollectionId(collectionId);
     setRecordPage(0);
+    setActiveView("library");
+    if (window.location.pathname !== "/library") window.history.pushState({}, "", "/library");
     setCollectionDisplayModes((current) => {
       if (!collectionId || current[collectionId]) return current;
-      const collectionRecords = data.records.filter((record) => record.collection_id === collectionId);
-      return { ...current, [collectionId]: inferCollectionDisplayMode(collectionRecords, data.clips) };
+      return { ...current, [collectionId]: "cards" };
     });
-  }, [data.records, data.clips]);
+  }, []);
+
+  const navigateWorkspace = useCallback((view) => {
+    setActiveView(view);
+    window.history.pushState({}, "", `/${view}`);
+    if (view === "search") setSearchFocusVersion((version) => version + 1);
+  }, []);
 
   const changeRecordPage = useCallback((page) => {
     setRecordPage(page);
@@ -1354,10 +1906,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const onPopState = () => forceRouteRender((version) => version + 1);
+    const onPopState = () => {
+      setActiveView(workspaceViewFromPath(window.location.pathname));
+      forceRouteRender((version) => version + 1);
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const onKeyDown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        navigateWorkspace("search");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigateWorkspace, user]);
 
   useEffect(() => {
     if (window.location.pathname !== "/share") return undefined;
@@ -1413,6 +1980,7 @@ export default function App() {
       base44.entities.Enrichment.subscribe(debouncedLoad),
       base44.entities.RoutingDecision.subscribe(debouncedLoad),
       base44.entities.WatchRule.subscribe(debouncedLoad),
+      base44.entities.RefreshAttempt.subscribe(debouncedLoad),
       base44.entities.ExtensionInstall.subscribe(debouncedLoad),
     ];
     return () => {
@@ -1421,6 +1989,18 @@ export default function App() {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, [loadDashboard, user]);
+
+  useEffect(() => {
+    if (!pairing?.extension_id) return;
+    const install = data.extensionInstalls.find((item) => item.id === pairing.extension_id);
+    if (install?.paired_at || install?.last_used_at) setPairing(null);
+  }, [data.extensionInstalls, pairing]);
+
+  useEffect(() => {
+    if (!routingUndo) return undefined;
+    const timer = setTimeout(() => setRoutingUndo(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [routingUndo]);
 
   useEffect(() => {
     if (!user) return;
@@ -1463,6 +2043,8 @@ export default function App() {
 
   const handleAuthenticated = (authenticatedUser, redirectPath = "/") => {
     window.history.pushState({}, "", redirectPath);
+    setActiveView(workspaceViewFromPath(redirectPath));
+    forceRouteRender((version) => version + 1);
     setUser(authenticatedUser);
   };
 
@@ -1497,9 +2079,11 @@ export default function App() {
     setMobileCaptureError("");
     setMobileCaptureResult(null);
     try {
+      const { mission_id: requestedMissionId, ...capturePayload } = payload;
+      const captureMissionId = requestedMissionId === undefined ? activeMissionId : requestedMissionId;
       const response = await base44.functions.invoke("mobile-capture", {
-        ...payload,
-        ...(activeMissionId ? { mission_id: activeMissionId } : {}),
+        ...capturePayload,
+        ...(captureMissionId ? { mission_id: captureMissionId } : {}),
       });
       setMobileCaptureResult(response.data);
       if (window.location.pathname === "/share") {
@@ -1546,8 +2130,16 @@ export default function App() {
   const createMission = async (form) => {
     setIsCreatingMission(true);
     try {
-      await base44.functions.invoke("create-mission", form);
-      await requestDashboardLoad();
+      const response = await base44.functions.invoke("create-mission", form);
+      const next = await requestDashboardLoad();
+      const missionId = response.data.mission.id;
+      const firstCollection = next.collections.find((collection) => collection.mission_id === missionId) ?? null;
+      setActiveMissionId(missionId);
+      activeCollectionIdRef.current = firstCollection?.id ?? null;
+      setActiveCollectionId(firstCollection?.id ?? null);
+      setRecordPage(0);
+      setActiveView("library");
+      window.history.pushState({}, "", "/library");
       setIsProjectDialogOpen(false);
     } catch (error) {
       setLoadError(error.response?.data?.error || error.message || "Could not start this mission.");
@@ -1600,7 +2192,11 @@ export default function App() {
     setResolvingClipId(clipId);
     setResolveError("");
     try {
-      await base44.functions.invoke("resolve-routing", command);
+      const response = await base44.functions.invoke("resolve-routing", command);
+      if (command.action === "accept" && response.data?.record_id) {
+        const clip = data.clips.find((item) => item.id === clipId);
+        setRoutingUndo({ clipId, title: clipTitle(clip), collectionName: data.routingDecisions.find((item) => item.clip_id === clipId)?.suggested_name || "a new Collection" });
+      }
     } catch (error) {
       if (error.response?.status !== 404) {
         setResolveError(error.response?.data?.error || error.message || "Could not resolve this capture.");
@@ -1674,12 +2270,15 @@ export default function App() {
   };
 
   const toggleSelectedWatch = async (watch) => {
-    if (!selectedRecord || !watch) return;
+    if (!watch) return;
+    const targetRecord = data.records.find((record) => record.id === watch.record_id);
+    if (!targetRecord) return;
     setIsTogglingWatch(true);
+    setTogglingWatchId(watch.id);
     try {
       await base44.functions.invoke("agent-configure-monitoring", {
         action: watch.active ? "pause" : "resume",
-        record_id: selectedRecord.id,
+        record_id: targetRecord.id,
         watch_rule_id: watch.id,
       });
       await requestDashboardLoad();
@@ -1687,7 +2286,59 @@ export default function App() {
       setLoadError(error.response?.data?.error || error.message || "Could not update this watch.");
     } finally {
       setIsTogglingWatch(false);
+      setTogglingWatchId(null);
     }
+  };
+
+  const openWatchDialog = (record = null, field = "") => {
+    setWatchDialog({ recordId: record?.id || "", field });
+    setWatchDialogError("");
+  };
+
+  const saveManualWatch = async ({ recordId, condition, frequency, acquisitionStrategy }) => {
+    setIsSavingWatch(true);
+    setWatchDialogError("");
+    try {
+      await base44.functions.invoke("agent-configure-monitoring", {
+        action: "create",
+        record_id: recordId,
+        condition,
+        frequency,
+        acquisition_strategy: acquisitionStrategy,
+      });
+      await requestDashboardLoad();
+      setWatchDialog(null);
+    } catch (error) {
+      setWatchDialogError(error.response?.data?.error || error.message || "Could not save this watch.");
+    } finally {
+      setIsSavingWatch(false);
+    }
+  };
+
+  const undoRoutingResolution = async () => {
+    if (!routingUndo) return;
+    const pending = routingUndo;
+    setRoutingUndo(null);
+    try {
+      await base44.functions.invoke("undo-routing-resolution", { clip_id: pending.clipId });
+      await requestDashboardLoad();
+      navigateWorkspace("nest");
+    } catch (error) {
+      setLoadError(error.response?.data?.error || error.message || "Could not undo that route.");
+    }
+  };
+
+  const correctSelectedRecordField = async (field, expectedValue, newValue) => {
+    if (!selectedRecord) return;
+    const response = await base44.functions.invoke("correct-record-field", {
+      record_id: selectedRecord.id,
+      field,
+      expected_value: expectedValue,
+      new_value: newValue,
+    });
+    if (response.data.record) setSelectedRecord(response.data.record);
+    await requestDashboardLoad();
+    return response.data;
   };
 
   const createProjectInline = async (title) => {
@@ -1696,27 +2347,24 @@ export default function App() {
     return response.data.mission;
   };
 
-  const createOnboardingProject = async (title) => {
-    setIsCreatingOnboardingProject(true);
-    setOnboardingProjectError("");
-    try {
-      const mission = await createProjectInline(title);
-      setActiveMissionId(mission.id);
-      return true;
-    } catch (error) {
-      setOnboardingProjectError(error.response?.data?.error || error.message || "Could not create this Project.");
-      return false;
-    } finally {
-      setIsCreatingOnboardingProject(false);
-    }
-  };
-
   const openIosShortcutSetup = () => window.open("/?docs=ios-shortcut", "_blank", "noopener");
 
   const openMobileCapture = () => {
     setMobileCaptureError("");
     setMobileCaptureResult(null);
     setIsMobileCaptureOpen(true);
+  };
+
+  const saveWorkspaceSearch = async (query, name, missionId = "") => {
+    const response = await base44.functions.invoke("create-saved-search", {
+      query,
+      name,
+      ...(missionId ? { mission_id: missionId } : {}),
+    });
+    await requestDashboardLoad();
+    setActiveMissionId(missionId);
+    selectCollection(response.data.collection.id);
+    return response.data.collection;
   };
 
   const activeMission = data.missions.find((mission) => mission.id === activeMissionId);
@@ -1730,7 +2378,9 @@ export default function App() {
     ? data.collections.filter((collection) => collection.mission_id === activeMission.id)
     : data.collections;
   const activeCollection = missionCollections.find((collection) => collection.id === activeCollectionId) ?? missionCollections[0];
-  const activeCollectionRecords = missionRecords.filter((record) => record.collection_id === activeCollection?.id);
+  const activeCollectionRecords = activeCollection?.collection_type === "saved_search"
+    ? searchWorkspace({ query: activeCollection.saved_query, records: missionRecords, clips: data.clips, collections: missionCollections }).items.map((item) => item.record)
+    : missionRecords.filter((record) => record.collection_id === activeCollection?.id);
   const recordPageStart = recordPage * RECORDS_PAGE_SIZE;
   const activeRecords = activeCollectionRecords.slice(recordPageStart, recordPageStart + RECORDS_PAGE_SIZE);
   const activeCollectionHasMorePages = activeCollectionRecords.length > recordPageStart + RECORDS_PAGE_SIZE;
@@ -1755,6 +2405,21 @@ export default function App() {
     && data.collections.length === 0
     && data.records.length === 0
     && data.clips.length === 0;
+  const hasPairedExtension = data.extensionInstalls.some((install) => install.active !== false && !!(install.paired_at || install.last_used_at));
+  const activeCollectionRecordIds = new Set(activeCollectionRecords.map((record) => record.id));
+  const collectionDeleteSummary = {
+    itemCount: activeCollectionRecords.length,
+    watchCount: data.watchRules.filter((watch) => activeCollectionRecordIds.has(watch.record_id)).length,
+  };
+  useEffect(() => {
+    // Guide a brand-new account from the bare root into the capture task, but
+    // never trap it there. An explicit /library visit must render Library's
+    // honest empty state even before the first Collection exists.
+    if (user && isFirstRun && activeView === "library" && window.location.pathname === "/") {
+      setActiveView("nest");
+      window.history.replaceState({}, "", "/nest");
+    }
+  }, [activeView, isFirstRun, user]);
   const dismissOnboarding = async () => {
     // Tracked on the User record (base44.auth.updateMe), not localStorage:
     // a browser-local flag leaks across accounts sharing one browser (a
@@ -1783,78 +2448,80 @@ export default function App() {
   if (!user && isLoginRoute) return <LoginPage onBack={closeLogin} onAuthenticated={handleAuthenticated} redirectPath="/" />;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
+  const selectProject = (missionId) => {
+    setActiveMissionId(missionId);
+    const scoped = missionId ? data.collections.filter((collection) => collection.mission_id === missionId) : data.collections;
+    selectCollection(scoped[0]?.id ?? null);
+  };
+  const selectCollectionAnywhere = (collectionId) => {
+    const collection = data.collections.find((item) => item.id === collectionId);
+    setActiveMissionId(collection?.mission_id || "");
+    selectCollection(collectionId);
+  };
+  const recentSignalCount = data.enrichments.filter((entry) => Date.now() - new Date(entry.checked_at).getTime() < 24 * 60 * 60 * 1000).length
+    + data.records.filter((record) => record.freshness === "blocked" || record.freshness === "unreachable").length;
+  const hasUnwatchedComparableItems = activeCollectionRecords.length >= 2 && activeCollectionRecords.some((record) => !data.watchRules.some((watch) => watch.record_id === record.id));
+
   return (
-    <main className={`app-shell ${isFirstRun && !isWorkspacePreviewOpen ? "first-run" : ""}`}>
-      <header className="topbar">
-        <div className="brand-lockup"><MagpieMark /><span>magpie</span><i>beta</i></div>
-        <div className="topbar-center"><span className="status-dot" /> Syncing live</div>
-        <div className="user-menu">
-          {needsReviewClips.length > 0 && <button className="review-launch-button" onClick={() => { setSelectedReviewClipId((current) => needsReviewClips.some((clip) => clip.id === current) ? current : needsReviewClips[0].id); setIsReviewOpen(true); }}><Inbox size={14} /> Needs review <span className="review-badge">{needsReviewClips.length}</span></button>}
-          <button className="agent-launch-button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={14} /> Ask Magpie</button>
-          <button type="button" className="pair-button" onClick={() => setIsActivityOpen(true)}><Activity size={14} /> Activity</button>
-          <div className="account-menu">
-            <button type="button" className="account-menu-trigger icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu" aria-expanded={isAccountMenuOpen}><UserRound size={17} /><ChevronDown size={12} /></button>
-            {isAccountMenuOpen && (
-              <div className="mobile-menu" role="menu">
-                <button role="menuitem" className="account-menu-mobile-only" onClick={() => { setIsActivityOpen(true); setIsAccountMenuOpen(false); }}><Activity size={15} /> Activity</button>
-                <button role="menuitem" onClick={() => { setOnboardingTourStep("pair"); setIsAccountMenuOpen(false); }}><Sparkles size={15} /> How it works</button>
-                <a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a>
-                <a href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer" role="menuitem"><Download size={15} /> Get extension</a>
-                <button role="menuitem" onClick={() => { handleCreatePairing(); setIsAccountMenuOpen(false); }} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={15} /> : <PairingIcon size={15} />} Pair extension</button>
-                <span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span>
-                <button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-      <section className="workspace-heading">
-        <div><div className="eyebrow"><AgentIcon size={14} /> automatically organized, always current</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} activeMissionId={activeMissionId} onSelect={(missionId) => {
-              setActiveMissionId(missionId);
-              // Must mirror missionCollections' own derivation: switching to
-              // "All Collections" (missionId "") has no mission_id to match,
-              // so the old `collection.mission_id === missionId` lookup
-              // always found nothing and fell back to selectCollection(null)
-              // -- a no-op fetch that left data.records empty while the
-              // render still fell back to missionCollections[0], showing
-              // that Collection with a false 0 count until manually clicked.
-              const scoped = missionId ? data.collections.filter((collection) => collection.mission_id === missionId) : data.collections;
-              selectCollection(scoped[0]?.id ?? null);
-            }} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p className="mission-summary">{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-        <div className="heading-actions"><div className="capture-status"><Layers3 size={16} /><span title={dataMeta.records.hasMore ? "You have more Items than currently fit in one load; counts across the board may be undercounts." : undefined}>{activeMission ? missionRecords.length : data.records.length}{dataMeta.records.hasMore ? "+" : ""} Items</span></div><button className="secondary-button" onClick={openMobileCapture}><Plus size={15} /> Add from phone</button><button className="secondary-button mission-button" onClick={() => setIsProjectDialogOpen(true)}><Plus size={15} /> New Project</button></div>
-      </section>
-      {loadError && <div className="error-banner">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
-      <OnboardingPanel
-        stage={onboardingStage}
-        extensionInstalls={data.extensionInstalls}
-        mostRecentClip={deriveMostRecentClip(data.clips)}
-        collections={data.collections}
-        isPairing={isPairing}
+    <main className="app-shell redesign-shell">
+      <AppNavigation
+        activeView={activeView}
+        onNavigate={navigateWorkspace}
+        needsReviewCount={needsReviewClips.length}
+        signalCount={recentSignalCount}
+        collections={missionCollections}
+        activeCollectionId={activeCollection?.id}
+        records={missionRecords}
+        clips={data.clips}
+        refreshingRecordId={isRefreshing ? selectedRecord?.id : null}
+        onSelectCollection={selectCollection}
+        user={user}
         onPair={handleCreatePairing}
-        onDismiss={dismissOnboarding}
-        onViewCollection={selectCollection}
-        onOpenReview={openOnboardingReview}
-        onReportIssue={() => setIsBugReportOpen(true)}
-        onOpenWorkspace={() => setIsWorkspacePreviewOpen(true)}
-        onCreateProject={createOnboardingProject}
-        isCreatingProject={isCreatingOnboardingProject}
-        projectError={onboardingProjectError}
-        onOpenIosSetup={openIosShortcutSetup}
-        onPasteCapture={submitMobileCapture}
-        isMobileCapturing={isMobileCapturing}
-        mobileCaptureError={mobileCaptureError}
-        onSaveAnother={openMobileCapture}
-        onRetryCapture={openMobileCapture}
+        isPairing={isPairing}
+        hasPairedExtension={hasPairedExtension}
+        onOpenDocs={() => { window.location.href = "/?docs=getting-started"; }}
+        onSignOut={handleSignOut}
       />
-      <section className="workspace-grid">
-        <CollectionSidebar collections={missionCollections} activeCollectionId={activeCollection?.id} records={missionRecords} hasMoreRecords={dataMeta.records.hasMore} onSelect={selectCollection} onDelete={deleteCollection} deletingId={deletingCollectionId} />
-        <RecordTable collection={activeCollection} records={activeRecords} clips={data.clips} displayMode={collectionDisplayModes[activeCollection?.id] ?? "cards"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onOpenOnboardingTour={() => setOnboardingTourStep("modes")} />
+      <section className="workspace-main">
+        <header className="mobile-workspace-header">
+          <button type="button" className="nav-brand" onClick={() => navigateWorkspace("nest")}><MagpieMark size={25} /><span>magpie</span></button>
+          <div><button type="button" className="icon-button" onClick={() => navigateWorkspace("search")} aria-label="Search"><Search size={18} /></button><button type="button" className="icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu"><UserRound size={18} /></button></div>
+          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {hasPairedExtension ? "Pair another browser" : "Pair extension"}</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
+        </header>
+        {loadError && <div className="error-banner workspace-error">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
+        {activeView === "nest" && <NestSurface clips={needsReviewClips} decisionsByClip={decisionsByClip} collections={data.collections} allClips={data.clips} isFirstRun={isFirstRun} hasPairedExtension={hasPairedExtension} resolvingClipId={resolvingClipId} resolveError={resolveError} onResolve={resolveReview} onOpenAdvanced={(clipId) => { setSelectedReviewClipId(clipId); setIsReviewOpen(true); }} onPair={handleCreatePairing} isPairing={isPairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} onOpenLibrary={() => navigateWorkspace("library")} onOpenGuide={() => setIsCaptureGuideOpen(true)} />}
+        {activeView === "library" && (
+          <section className="workspace-surface library-surface">
+            <div className="mobile-library-context">
+              <div className="eyebrow">organized automatically</div>
+              <WorkspaceSwitcher missions={data.missions} collections={data.collections} records={data.records} watchRules={data.watchRules} activeMissionId={activeMissionId} onSelect={selectProject} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} />
+              <p>{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p>
+              <div className="mobile-library-actions"><span className="capture-status"><Layers3 size={14} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="secondary-button" onClick={openMobileCapture}><Plus size={14} /> Add capture</button><button type="button" className="icon-button" onClick={() => setIsProjectDialogOpen(true)} aria-label="New Project"><Target size={15} /></button></div>
+            </div>
+            <header className="library-heading">
+              <div><div className="eyebrow">organized automatically</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} records={data.records} watchRules={data.watchRules} activeMissionId={activeMissionId} onSelect={selectProject} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p>{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
+              <div className="heading-actions"><span className="capture-status"><Layers3 size={15} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="secondary-button" onClick={openMobileCapture}><Plus size={14} /> Add capture</button><button type="button" className="secondary-button" onClick={() => setIsProjectDialogOpen(true)}><Target size={14} /> New Project</button></div>
+            </header>
+            <div className="contextual-strips">
+              {onboardingStage === OnboardingStage.FIRST_CAPTURE_RECEIVED && activeCollectionRecords.length > 0 && !dismissedGuides.routing && <div className="context-strip"><ArrowRightLeft size={15} /><span><b>Your first capture filed itself.</b> Magpie used its type and fields to choose this Collection.</span><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, routing: true }))}><X size={14} /></button></div>}
+              {hasUnwatchedComparableItems && !dismissedGuides.watch && <div className="context-strip"><Radio size={15} /><span><b>These Items share fields.</b> Create a watch to hear when one changes.</span><button type="button" className="text-button" onClick={() => openWatchDialog(activeCollectionRecords.find((record) => !data.watchRules.some((watch) => watch.record_id === record.id)))}>Create watch</button><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, watch: true }))}><X size={14} /></button></div>}
+              {activeCollectionRecords.length >= 3 && !dismissedGuides.ask && <div className="context-strip"><MessageCircle size={15} /><span><b>Ask Magpie can compare this Collection.</b> Answers stay grounded in these Items and their fields.</span><button type="button" className="text-button" onClick={() => setIsAgentOpen(true)}>Ask</button><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, ask: true }))}><X size={14} /></button></div>}
+            </div>
+            <RecordTable collection={activeCollection} collections={data.collections} records={activeRecords} totalCount={activeCollectionRecords.length} clips={data.clips} enrichments={data.enrichments} watchRules={data.watchRules} displayMode={collectionDisplayModes[activeCollection?.id] ?? "cards"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onSelectCollection={selectCollectionAnywhere} onDeleteCollection={deleteCollection} isDeletingCollection={deletingCollectionId === activeCollection?.id} collectionDeleteSummary={collectionDeleteSummary} onOpenOnboardingTour={() => { navigateWorkspace("nest"); setIsCaptureGuideOpen(true); }} refreshingRecordId={isRefreshing ? selectedRecord?.id : null} onDisplayModeChange={(mode) => activeCollection && setCollectionDisplayModes((current) => ({ ...current, [activeCollection.id]: mode }))} onAsk={() => setIsAgentOpen(true)} />
+          </section>
+        )}
+        {activeView === "signals" && <SignalsSurface records={data.records} enrichments={data.enrichments} watchRules={data.watchRules} refreshAttempts={data.refreshAttempts} onSelectRecord={selectRecord} onToggleWatch={toggleSelectedWatch} togglingWatchId={togglingWatchId} onCreateWatch={openWatchDialog} />}
+        {activeView === "search" && <SearchSurface records={data.records} clips={data.clips} collections={data.collections} missions={data.missions} onSelectRecord={selectRecord} onSelectCollection={selectCollectionAnywhere} onAddCapture={openMobileCapture} onCreateProject={() => setIsProjectDialogOpen(true)} onCreateWatch={openWatchDialog} onAsk={() => setIsAgentOpen(true)} onSaveSearch={saveWorkspaceSearch} onExit={() => navigateWorkspace("library")} focusVersion={searchFocusVersion} />}
+        <footer className="workspace-footer"><span><span className="status-dot" /> Realtime owner data</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       </section>
+      <nav className="mobile-bottom-nav" aria-label="Workspace">{[["nest", "Nest", Inbox], ["library", "Collections", Layers3], ["signals", "Signals", Radio]].map(([id, label, Icon]) => <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => navigateWorkspace(id)}><Icon size={18} /><span>{label}</span></button>)}<button type="button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={18} /><span>Ask</span></button></nav>
+      {routingUndo && <div className="routing-undo-toast" role="status"><Check size={15} /><span><b>{routingUndo.title}</b> filed in {routingUndo.collectionName}.</span><button type="button" onClick={undoRoutingResolution}>Undo</button></div>}
       {isActivityOpen && <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} onClose={() => setIsActivityOpen(false)} />}
-      <footer className="workspace-footer"><span><span className="status-dot" /> Auto-organization and source checks are live</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> Follow on LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
-      <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} isTogglingWatch={isTogglingWatch} />
-      {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />}
+      <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} onCreateWatch={openWatchDialog} isTogglingWatch={isTogglingWatch} onCorrectField={correctSelectedRecordField} />
+      {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} missions={data.missions} activeMissionId={activeMissionId} />}
+      {isCaptureGuideOpen && <CaptureGuideDialog onClose={() => setIsCaptureGuideOpen(false)} onPair={handleCreatePairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} isPairing={isPairing} hasPairedExtension={hasPairedExtension} />}
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
+      {watchDialog && <WatchDialog records={data.records} watchRules={data.watchRules} initialRecordId={watchDialog.recordId} initialField={watchDialog.field} onClose={() => setWatchDialog(null)} onSave={saveManualWatch} isSaving={isSavingWatch} error={watchDialogError} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}
       {isBugReportOpen && (
         <BugReportDialog
@@ -1866,27 +2533,6 @@ export default function App() {
         />
       )}
       {isAgentOpen && <MagpieAgentPanel project={activeMission} collection={activeCollection} record={selectedRecord} onClose={() => setIsAgentOpen(false)} />}
-      {onboardingTourStep && (
-        <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={() => setOnboardingTourStep(null)}>
-          <div className="onboarding-tour-dialog" onMouseDown={(event) => event.stopPropagation()}>
-            <OnboardingWelcomeFlow
-              extensionInstalls={data.extensionInstalls}
-              isPairing={isPairing}
-              onPair={handleCreatePairing}
-              onSkipToWorkspace={() => setOnboardingTourStep(null)}
-              onCreateProject={createOnboardingProject}
-              isCreatingProject={isCreatingOnboardingProject}
-              projectError={onboardingProjectError}
-              onOpenIosSetup={openIosShortcutSetup}
-              onPasteCapture={submitMobileCapture}
-              isMobileCapturing={isMobileCapturing}
-              mobileCaptureError={mobileCaptureError}
-              initialStep={onboardingTourStep}
-              onClose={() => setOnboardingTourStep(null)}
-            />
-          </div>
-        </div>
-      )}
       {isReviewOpen && (
         <NeedsReviewPanel
           clips={needsReviewClips}

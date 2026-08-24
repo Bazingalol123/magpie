@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, ShieldCheck, TrendingDown } from "lucide-react";
 import { base44 } from "./api/base44Client";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
@@ -32,6 +32,8 @@ function authError(error) {
 
 export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" }) {
   const [mode, setMode] = useState("login");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -60,7 +62,11 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
       } else if (mode === "verify") {
         await base44.auth.verifyOtp({ email: email.trim(), otpCode: otp.trim() });
         const response = await base44.auth.loginViaEmailPassword(email.trim(), password);
-        onAuthenticated(response.user, redirectPath);
+        const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+        const authenticatedUser = fullName
+          ? await base44.auth.updateMe({ full_name: fullName })
+          : response.user;
+        onAuthenticated(authenticatedUser, redirectPath);
       } else {
         const response = await base44.auth.loginViaEmailPassword(email.trim(), password);
         onAuthenticated(response.user, redirectPath);
@@ -100,6 +106,7 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
           )}
 
           <form className="auth-form" onSubmit={handleEmailSubmit}>
+            {mode === "signup" && <div className="auth-name-row"><label>First name<input type="text" autoComplete="given-name" value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="Ada" required /></label><label>Last name<input type="text" autoComplete="family-name" value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Lovelace" required /></label></div>}
             <label>Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" required disabled={mode === "verify"} /></label>
             {mode !== "verify" && <label>Password<div className="auth-password"><input type={showPassword ? "text" : "password"} autoComplete={mode === "signup" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" required minLength={8} /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>}
             {mode === "verify" && <label>Verification code<input inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="123456" required /></label>}
@@ -119,10 +126,11 @@ export default function LoginPage({ onBack, onAuthenticated, redirectPath = "/" 
           <div className="auth-visual-kicker">A calmer way to research</div>
           <h2>Find it once.<br />Keep it useful.</h2>
           <p>Magpie turns scattered pages into living, structured collections, so your next decision starts with what you already found.</p>
-          <div className="auth-flow-card">
-            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Capture</b><small>Save the page, listing, or idea that matters.</small></div><Check size={16} /></div>
-            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Organize</b><small>Magpie understands what it is and files it.</small></div><Check size={16} /></div>
-            <div className="auth-flow-row"><span className="auth-flow-dot" /><div><b>Stay current</b><small>See trusted changes instead of stale bookmarks.</small></div><Check size={16} /></div>
+          <div className="auth-record-card" aria-label="Example of a real Magpie Item update">
+            <div className="auth-record-head"><span><span className="auth-record-dot" /> Cameras</span><small>checked 4 min ago</small></div>
+            <h3>Sony Alpha 6600</h3>
+            <div className="auth-record-fields"><span>Type <b>Mirrorless</b></span><span>Condition <b>Excellent</b></span></div>
+            <div className="auth-record-update"><TrendingDown size={15} /><span>Price changed</span><del>₪6,850</del><ArrowRight size={14} /><strong>₪6,415</strong></div>
           </div>
           <div className="auth-visual-foot"><span className="auth-dot" /> Owner-scoped by design</div>
         </div>

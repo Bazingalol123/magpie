@@ -73,3 +73,32 @@ Deno.test("the Side Panel script never imports @base44/sdk (extension trust boun
   const sidepanelJs = await Deno.readTextFile(new URL("sidepanel.js", extensionDirUrl));
   assert(!sidepanelJs.includes("@base44/sdk"), "extension/sidepanel.js must not import @base44/sdk");
 });
+
+Deno.test("Escape cancels element and snip modes from both the page and the focused Side Panel", async () => {
+  const contentJs = await Deno.readTextFile(new URL("content.js", extensionDirUrl));
+  const sidepanelJs = await Deno.readTextFile(new URL("sidepanel.js", extensionDirUrl));
+  const keydownStart = contentJs.indexOf('document.addEventListener("keydown"');
+  const keydownEnd = contentJs.indexOf("\n\nfunction cancelCaptureMode", keydownStart);
+  const keydownBlock = contentJs.slice(keydownStart, keydownEnd);
+
+  assert(
+    contentJs.includes('event.key === "Escape" && (pickerActive || snipActive)'),
+    "the content script must cancel either interactive capture mode on Escape",
+  );
+  assert(
+    keydownBlock.trimEnd().endsWith("}, true);"),
+    "the page Escape listener must run in the capture phase before host-page handlers can swallow it",
+  );
+  assert(
+    contentJs.includes('message?.type === "magpie:cancel-picker"'),
+    "the page must accept an explicit cancellation from another extension surface",
+  );
+  assert(
+    sidepanelJs.includes('chrome.tabs.sendMessage(tabId, { type: "magpie:cancel-picker" })'),
+    "Escape in the focused Side Panel must be forwarded to the tab where capture started",
+  );
+  assert(
+    sidepanelJs.includes('activeCaptureTabId = tab.id'),
+    "the Side Panel must remember the capture tab instead of cancelling whichever tab is active later",
+  );
+});

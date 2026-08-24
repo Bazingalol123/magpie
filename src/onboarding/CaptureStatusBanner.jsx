@@ -35,7 +35,7 @@ export default function CaptureStatusBanner({ clip, collections, onViewCollectio
     iconVariant = "is-review";
     title = "One capture needs a quick decision";
     body = "Magpie wasn't confident enough to file this automatically — take a look and choose where it goes.";
-    action = <button className="onboarding-cta onboarding-cta-secondary" onClick={() => onOpenReview(clip.id)}>Review now</button>;
+    action = <button className="onboarding-cta onboarding-cta-secondary" onClick={() => onOpenReview(clip.id)}>Open Nest</button>;
   } else if (outcome === CaptureOutcome.FAILED) {
     icon = <AlertTriangle size={16} />;
     iconVariant = "is-error";

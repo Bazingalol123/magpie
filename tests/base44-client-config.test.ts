@@ -28,6 +28,10 @@ Deno.test("a dedicated /login page is wired up, not a direct provider redirect f
   assert(app.includes('window.history.pushState({}, "", "/login");'));
   const login = await Deno.readTextFile(new URL("../src/LoginPage.jsx", import.meta.url));
   assert(login.includes("base44.auth.loginViaEmailPassword"));
+  assert(login.includes('autoComplete="given-name"'));
+  assert(login.includes('autoComplete="family-name"'));
+  assert(login.includes("base44.auth.updateMe({ full_name: fullName })"));
+  assert(login.includes("onAuthenticated(authenticatedUser, redirectPath)"));
   assert(login.includes('handleProvider("google")'));
   assert(login.includes('handleProvider("apple")'));
 });

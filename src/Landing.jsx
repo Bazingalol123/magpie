@@ -92,26 +92,22 @@ export default function Landing({ isSigningIn, onSignIn }) {
           <div className="ld-hero-trust"><ShieldCheck size={14} /> The extension can write clips — it can never read your data.</div>
         </div>
 
-        <div className="ld-scene" aria-hidden="true">
-          <div className="ld-card ld-card-apartment">
-            <div className="ld-card-head"><Home size={13} /> Apartments</div>
-            <b>Altbau 2-Zimmer, Kreuzberg</b>
-            <div className="ld-card-rows"><span>Rent<i>€1,340</i></span><span>Rooms<i>2</i></span><span>Size<i>58 m²</i></span></div>
-            <div className="ld-card-badge"><RefreshCw size={9} /> watching daily</div>
+        <div className="ld-scene ld-mechanism" aria-hidden="true">
+          <div className="ld-source-page">
+            <div className="ld-browser-bar"><i /><i /><i /><span>camera-market.example/listing</span></div>
+            <div className="ld-source-content">
+              <div className="ld-source-image"><Camera size={38} /></div>
+              <div className="ld-source-copy"><small>Used mirrorless camera</small><b>Sony Alpha 6600</b><span>Excellent condition · Tel Aviv</span><strong>₪6,850</strong></div>
+              <div className="ld-source-selection"><MousePointerClick size={12} /> captured</div>
+            </div>
           </div>
-          <div className="ld-card ld-card-camera">
-            <div className="ld-card-head"><Camera size={13} /> Cameras</div>
+          <div className="ld-mechanism-rail"><span>page</span><i /><Sparkles size={16} /><i /><span>fields</span></div>
+          <div className="ld-extracted-card">
+            <div className="ld-card-head"><Camera size={13} /> Cameras <em>live</em></div>
             <b>Sony Alpha 6600</b>
-            <div className="ld-card-rows"><span>Price<i>₪6,415</i></span><span>Type<i>Mirrorless</i></span></div>
-            <div className="ld-card-badge drop"><TrendingDown size={9} /> price dropped</div>
+            <div className="ld-extracted-fields"><span>Type <strong>Mirrorless</strong></span><span>Condition <strong>Excellent</strong></span><span>Location <strong>Tel Aviv</strong></span></div>
+            <div className="ld-moving-price"><span>Price</span><del>₪6,850</del><ArrowRightLeft size={13} /><strong>₪6,415</strong><i><TrendingDown size={10} /> changed</i></div>
           </div>
-          <div className="ld-card ld-card-recipe">
-            <div className="ld-card-head"><ChefHat size={13} /> Recipes</div>
-            <b>Shakshuka, proper heat</b>
-            <div className="ld-card-rows"><span>Time<i>25 min</i></span><span>Serves<i>4</i></span></div>
-          </div>
-          <div className="ld-orbit ld-orbit-a" />
-          <div className="ld-orbit ld-orbit-b" />
         </div>
 
         <div className="ld-scroll-hint"><ArrowDown size={14} /> see how it works</div>
