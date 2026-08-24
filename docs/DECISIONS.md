@@ -1059,3 +1059,20 @@ for both; the second (equal-specificity ties resolving by source order,
 not by which media query "should" win) is a sharp enough gotcha to watch
 for again anywhere a base rule and a media-query override end up with
 matching specificity.
+
+## 2026-08-24 — Push notifications stay outside the redesign refactor
+
+The phone redesign ships real Signals, changed-first Collection browsing, and
+Nest swipe actions against the existing backend. It does not show a fake push
+permission or claim background delivery. Real push requires a
+`PushSubscription` owner-scoped entity, VAPID keys stored as Base44 secrets, a
+sender/retry function, service-worker `push`/`notificationclick` handlers, and
+revocation cleanup. None of those contracts or credentials currently exist.
+They are a separate Critical backend change and require explicit product and
+deploy approval.
+
+The same rule drove three redesign additions that did ship locally: saved
+searches are a distinct `saved_search` Collection type excluded from routing;
+route undo is an owner-only 30-second server workflow; and tablet correction is
+an owner-only function that appends an Enrichment audit row. No production
+entity, function, secret, or site deployment was performed in this refactor.

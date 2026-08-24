@@ -856,3 +856,52 @@ Gate:
 ## Definition of V3.1.0 complete
 
 V3.1.0 is complete when a new user understands Magpie from the landing page, reaches a clear authenticated workspace, clips through V3 automatic organization, reviews uncertainty, finds Collections through Projects or optional two-level folders, and can trust that presentation changes did not weaken evidence, routing, owner isolation, or the extension boundary.
+
+## 2026-08-24 redesign implementation gate
+
+The `design_handoff_magpie_redesign` bundle is an information-architecture and
+visual refactor over the deployed V3.1 contracts, not permission to replace
+those contracts with sample data. The implementation is split into these
+independently releasable changes:
+
+| Change | Backend surface | Data compatibility | L | I | Score | Release authority |
+|---|---|---|---:|---:|---:|---|
+| Nest / Library / Signals / Search shell | Existing owner-scoped Clip, RoutingDecision, Collection, Record, Enrichment, WatchRule, RefreshAttempt, and ExtensionInstall reads/subscriptions | No row changes | 3 | 3 | 9 Moderate | Site only |
+| Card/table override and status hierarchy | Existing loaded records and enrichments | No row changes | 2 | 2 | 4 Low | Site only |
+| One-task onboarding and pairing handshake | `ExtensionInstall.paired_at`, `create-extension-pairing`, and `extension-context` | Additive optional handshake timestamp | 3 | 3 | 9 Moderate | Entity + function + site deploy, explicit deploy approval |
+| Client-side command search | Existing bounded owner reads; field values, captured text, and source hosts are indexed in memory | No row changes | 2 | 2 | 4 Low | Site only |
+| Signals feed and watch manager | Existing typed Record/WatchRule/RefreshAttempt states and `agent-configure-monitoring` | No row changes | 3 | 3 | 9 Moderate | Site only |
+| Login, landing, phone triage, and tablet comparison presentation | Existing auth, capture, routing, and agent contracts | No row changes | 2 | 3 | 6 Moderate | Site only |
+| Persist a search as a live Collection | Implemented as `Collection.collection_type=saved_search` plus versioned saved-query fields and `create-saved-search`; routing explicitly excludes this type | Existing Collections default to structured; no backfill | 4 | 4 | 16 Critical | Entity + function + site deploy, explicit product/deploy approval |
+| Undo an accepted Nest route | Implemented as a 30-second owner-only `undo-routing-resolution` workflow; it refuses Items with watch/change activity and keeps decision audit state | Existing decisions remain valid with optional state fields | 3 | 4 | 12 High | Entity + function + site deploy, explicit deploy approval |
+| Drag captured evidence onto an Item field | Implemented by `correct-record-field`; expected-value concurrency guard, Collection schema validation, and `owner-correction-v1` audit row | No backfill; additive function only | 3 | 4 | 12 High | Function + site deploy, explicit deploy approval |
+| Push notifications | Requires subscription storage, permission UX, a sender, and revocation handling | Additive entity/function work | 4 | 4 | 16 Critical | Entity + function + service-worker + site deploy, explicit product/deploy approval |
+
+The shell, card hierarchy, client search, Signals, and public presentation can
+ship as site-only changes. Pairing handshake, live saved searches, route undo,
+and field correction now have real local server implementations and must ship
+with their listed entity/function changes. Push notifications remain unbuilt
+and must not be represented by a decorative or local-only success state.
+
+### Tablet field-correction contract (High, frozen before implementation)
+
+- **User value:** correct one low-confidence extracted value while the
+  original captured evidence is visible beside the Item.
+- **Frontend:** an explicit edit/drop target in the tablet Item panel; no
+  cross-origin iframe scraping and no claim that Magpie can read an arbitrary
+  live Safari tab.
+- **Backend:** a new signed-in-owner function accepts `record_id`, `field`,
+  `expected_value`, and a bounded scalar `new_value`; loads the Record and Collection through the
+  service role; checks the caller owns both and that `field` exists in the
+  Collection schema; updates only that field in `fields_json`; appends one
+  Enrichment with `agent_id: owner-correction-v1`.
+- **Failure behavior:** `400` malformed/unsupported field/value, `401`
+  unauthenticated, `403` cross-owner, `404` missing row, `409` unchanged
+  value. No audit row may exist without the matching Record update.
+- **Migration:** none. Existing rows remain valid.
+- **Rollback:** remove the tablet control and redeploy the previous function;
+  completed corrections remain ordinary audited field updates.
+- **Verification:** pure validation fixtures, owner/cross-owner fixtures,
+  unchanged-value fixture, and one successful update + Enrichment fixture.
+- **Security:** dashboard identity only. The pairing-token path remains
+  structurally unable to invoke the workflow.

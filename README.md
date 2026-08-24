@@ -79,8 +79,8 @@ the extension.
 
 | Surface | Load-bearing use |
 |---|---|
-| Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `ExtensionInstall` |
-| Backend functions | 17 in `base44/functions/` (verified by directory count 2026-08-16): pairing, extension context, Project creation, ingestion, routing/retry, correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools |
+| Database and entities | `Mission`, `Collection`, `Record`, `Clip`, `RoutingDecision`, `Enrichment`, `WatchRule`, `RefreshAttempt`, `ExtensionInstall` |
+| Backend functions | 21 in `base44/functions/` locally: pairing/handshake, extension context, Project and saved-search creation, ingestion, routing/retry/undo, audited field correction, cascade deletion (Item/Collection/Project), refresh, enrichment, sweeps, bug reporting, and four Agent tools. The three redesign functions are local pending deploy. |
 | AI Gateway | Bounded Project/Collection routing proposals and multimodal extraction (snipped screenshots route visually) |
 | Configured Agent | Workspace understanding, comparison, routing explanation, and watch management with markdown replies |
 | Realtime | Live Collection, Item, Capture, RoutingDecision, Update, and Watch subscriptions |
@@ -117,7 +117,16 @@ had a manual sign-in click-through since their latest change (notably
 Collection/Project deletion and the onboarding checklist). See
 `docs/BETA_LIMITATIONS.md` for the claim-by-claim breakdown.
 
-Release gates (re-run 2026-08-16): 143/143 Deno tests; all 17 backend entry
+The 2026-08-24 redesign is implemented locally and not deployed. It renames
+review to Nest, adds the Library/Signals/Search shell, persists live searches
+as routing-ineligible `saved_search` Collections, records a real pairing
+handshake, adds a short owner-only route undo, and makes tablet field
+correction an audited server write. These require the entity/function/site
+deployment set listed in `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`; push
+notifications remain deliberately unbuilt pending a separate VAPID and
+subscription-lifecycle design.
+
+Release gates (re-run locally 2026-08-24): 237/237 Deno tests; all 21 backend entry
 points type-check; the production build passes; extension scripts parse; no
 extension SDK import; live smoke tests documented in
 `docs/CLAUDE_CODE_HANDOFF.md` cover authentication, typed 404s, the original
@@ -156,11 +165,11 @@ directory.
 
 ```text
 base44/entities/        Owner-scoped Base44 schemas
-base44/functions/       17 backend functions (ingest, routing, review, deletion, refresh, bug reports, Agent tools)
+base44/functions/       21 backend functions (ingest, routing/review/undo, saved search, correction, deletion, refresh, bug reports, Agent tools)
 base44/shared/          Deterministic validation and reusable backend logic
 extension/              MV3 picker, snip tool, worker, and pairing side panel
 src/                    Landing page and realtime dashboard
-tests/                  143 pure Deno fixtures
+tests/                  237 pure Deno fixtures
 docs/                   User docs, API reference, charter, and engineering history
 ```
 
