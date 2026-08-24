@@ -2,8 +2,8 @@
 
 > Began as the discovery deliverable for issues #61 and #27. The owner approved
 > the design on 2026-08-24 and the list/revoke/reconnect lifecycle is now
-> implemented and locally verified on branch
-> `codex/issue-61-pairing-lifecycle`; it is **not deployed**. Sections that
+> implemented, locally verified, and deployed from branch
+> `codex/issue-61-pairing-lifecycle` on 2026-08-24. Sections that
 > describe “current behavior” at discovery time are retained as the audit
 > baseline, with implementation outcomes called out below.
 
@@ -50,7 +50,7 @@ reachable reconnect surface in the redesigned app. Implementation must add a
 real Connected browsers/account surface and a visible reconnect notice when a
 returning owner's pairing history exists but no active pairing remains.
 
-## Implementation outcome (2026-08-24, local pending deploy)
+## Implementation and deployment outcome (2026-08-24)
 
 - Added owner-authenticated `list-extension-pairings`,
   `revoke-extension-pairing`, and `revoke-all-extension-pairings` Functions.
@@ -76,8 +76,14 @@ returning owner's pairing history exists but no active pairing remains.
   Vite production build, and authenticated desktop/390×844 browser checks
   pass. A local two-owner check confirmed A cannot list B's pairing, A gets
   `404` trying to revoke B's ID, and A's revoke-all leaves B active. Hosted
-  two-owner isolation and deployment remain gated by issue #20 and explicit
-  owner approval.
+  two-owner isolation remains gated by issue #20.
+- After explicit owner approval, all ten entity schemas were synced, the four
+  changed pairing Functions and the three redesign Functions required by the
+  site were deployed, and Base44 reported all 24 Functions present remotely.
+  Both hosted domains returned `200`; anonymous calls to the seven deployed
+  endpoints returned the intended `401` boundary. This proves reachability
+  and code presence, not the still-open signed-in hosted lifecycle or
+  two-owner isolation checks.
 
 ## Review round 1 (Hermes, 2026-08-17) — resolved
 
@@ -316,7 +322,7 @@ motivation/likelihood (no incident data exists for this specific entity);
 **`Unknown`** whether Base44's platform applies any rate limiting to
 Functions independent of anything Magpie adds.
 
-## 5. API contract (implemented locally, pending deploy)
+## 5. API contract (deployed 2026-08-24)
 
 All three new functions follow the existing owner-authenticated pattern
 (`requireUser`, `base44.asServiceRole.entities...`, `errorResponse`) used by
@@ -432,7 +438,7 @@ required by #61's acceptance criteria or #27's, and adding it would expand
 scope beyond "list/revoke/rotate." Flagged as a candidate follow-up, not a
 gap in this design.
 
-## 6. UI/UX contract (implemented locally, pending deploy)
+## 6. UI/UX contract (site deployed 2026-08-24)
 
 - **Dashboard: a "Connected browsers" panel** in the existing account rail,
   implemented as `PairingManagementDialog` and reusing the pairing-dialog
@@ -588,9 +594,9 @@ gap in this design.
   same pattern as the existing refresh-memory decision.
 - `docs/BUILD_GUIDE.md`: new checkpoint documenting files/tests/verify
   commands, per this repo's standard checkpoint format.
-- `docs/GETTING_STARTED.md` / `docs/PRODUCT_GUIDE.md` now describe the new
-  lifecycle in this local branch; `README.md` and this note keep it explicitly
-  pending deploy so no document claims production verification early.
+- `docs/GETTING_STARTED.md` / `docs/PRODUCT_GUIDE.md` describe the new
+  lifecycle. `README.md` and this note distinguish deployed code and live
+  anonymous reachability from the still-unverified signed-in hosted journey.
 - Issue #27: recommend closing as superseded by #61's implementation
   follow-ups, or re-scoping to explicitly point at them, to avoid duplicate
   tracking (§2).
@@ -626,7 +632,8 @@ gap in this design.
 - [x] Test and live-verification plan, including old-token-rejected /
       other-owner-unaffected (§8).
 - [x] Owner approved implementation; the backend, dashboard, Extension
-      recovery, tests, and documentation are implemented locally on
+      recovery, tests, and documentation are implemented on
       `codex/issue-61-pairing-lifecycle`.
-- [ ] Hosted two-owner verification, deployment, and production smoke — not
-      attempted without explicit deploy approval; issue #20 remains the gate.
+- [x] Entity, Function, and site deployment plus anonymous production smoke.
+- [ ] Signed-in hosted lifecycle and hosted two-owner verification; issue #20
+      remains the gate.

@@ -1,11 +1,16 @@
 # Magpie API and failure-state map
 
-This document separates deployed state from the local V3 source currently under verification. Expected operational outcomes are returned as structured states. Exceptions are reserved for malformed requests, authorization failures, missing internal records, conflicts, and unexpected server faults.
+This document separates deployed code from locally and hosted-verified behavior.
+Expected operational outcomes are returned as structured states. Exceptions
+are reserved for malformed requests, authorization failures, missing internal
+records, conflicts, and unexpected server faults.
 
 > `docs/PRODUCT_CHARTER.md` is authoritative. V3 auto-organization, V3.1 capture modes,
 > and the bounded Project-aware routing code agent were deployed to the linked app on
 > 2026-07-25. Chrome semantic-Project and multimodal interaction, owner-RLS integration,
-> correction, and concurrency gates remain.
+> correction, and concurrency gates remain. The 2026-08-24 redesign, pairing
+> lifecycle, and their additive entity fields are deployed; their signed-in
+> hosted journeys remain verification gates.
 
 ## Shared response rules
 
@@ -88,7 +93,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Expected cases:** unauthenticated `401`; malformed label is bounded/defaulted.
 - **Security invariant:** raw token is never persisted.
 
-### `list-extension-pairings` — local pending deploy
+### `list-extension-pairings` — deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner only.
 - **Success:** `200`; returns a newest-first list capped at 100 rows with only
@@ -97,7 +102,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Security invariant:** the owner is taken from the authenticated user, not
   the request; neither the raw token nor `token_hash` is selected or returned.
 
-### `revoke-extension-pairing` — local pending deploy
+### `revoke-extension-pairing` — deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner only.
 - **Input:** `{ installation_id }`, bounded to the platform's ID shape.
@@ -106,7 +111,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Expected cases:** malformed ID `400`; unauthenticated `401`; unknown and
   foreign-owner IDs both return the same `404` without confirming existence.
 
-### `revoke-all-extension-pairings` — local pending deploy
+### `revoke-all-extension-pairings` — deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner only.
 - **Success:** `200 { revoked_count }`; deactivates every currently active
@@ -121,7 +126,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 
 - **Caller:** paired extension.
 - **Hosted V3 success:** `200`; returns `auto_organize: true` plus bounded active Project context (`projects`, with `missions` retained for compatibility). An empty selection explicitly means no Mission.
-- **Local redesign addition, pending deploy:** also returns the authenticated
+- **Deployed redesign addition:** also returns the authenticated
   non-secret `extension_id`; the Side Panel stores it beside the token so the
   browser can identify its server row without gaining any read capability.
 - **Expected cases:** missing token `401`; inactive/invalid pairing `403`; no Missions returns an empty list.
@@ -191,8 +196,9 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Caller:** signed-in owner only; the extension pairing principal has no path to
   this workflow.
 - **Scope:** acts only on Clips currently in `needs_review`. Re-routing an
-  already-filed Item and undoing a completed resolution are deliberately excluded
-  (see `docs/DECISIONS.md`).
+  already-filed Item is excluded. The separate `undo-routing-resolution`
+  endpoint supports only the bounded just-created-Collection case documented
+  below; it is not a general undo for every completed resolution.
 - **Actions:** `accept` creates the Collection from the audited
   `suggested_name`/`suggested_schema_json` and fails `400` if no suggestion was
   stored; `redirect` moves into an owner-owned active existing Collection;
@@ -358,7 +364,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 
 ## Entity state map
 
-### `create-saved-search` — redesign, local pending deploy
+### `create-saved-search` — redesign, deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner.
 - **Input:** bounded `{ name, query, mission_id? }`.
@@ -369,7 +375,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Expected cases:** malformed input `400`; unauthenticated `401`; missing
   Project `404`; cross-owner Project `403`.
 
-### `undo-routing-resolution` — redesign, local pending deploy
+### `undo-routing-resolution` — redesign, deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner during the 30-second undo window.
 - **Input:** `{ clip_id }` for a just-created Collection route.
@@ -379,7 +385,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
 - **Refusal:** returns `409` after the window, for a non-created route, or once
   the Item has a watch or Enrichment. Cross-owner access is `403`.
 
-### `correct-record-field` — redesign, local pending deploy
+### `correct-record-field` — redesign, deployed 2026-08-24
 
 - **Caller:** signed-in dashboard owner only; never the pairing-token path.
 - **Input:** `{ record_id, field, expected_value, new_value }`, with bounded
@@ -390,7 +396,7 @@ Unknown AI-provided reason codes are discarded. The initial server allowlist is:
   unauthenticated `401`; cross-owner Record or Collection `403`; missing
   Record/Collection/field `404`; stale or unchanged expected value `409`.
 
-### Extension pairing handshake and management — redesign, local pending deploy
+### Extension pairing handshake and management — redesign, deployed 2026-08-24
 
 The first authenticated `extension-context` call stamps
 `ExtensionInstall.paired_at`. The dashboard watches that owner-scoped row and
