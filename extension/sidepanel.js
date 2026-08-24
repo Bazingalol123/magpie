@@ -14,6 +14,7 @@ const captureButtons = [
   document.getElementById("save-page"),
 ];
 let activeCaptureTabId = null;
+const RECONNECT_MESSAGE = "This browser was disconnected. Open the Magpie dashboard to reconnect.";
 
 function setCaptureButtonsBusy(busy) {
   captureButtons.forEach((button) => { button.disabled = busy; });
@@ -71,10 +72,25 @@ chrome.storage.local.get({ ingestUrl: "", extensionToken: "", activeMissionId: "
   if (config.ingestUrl && config.extensionToken) loadMissionContext(config.activeMissionId);
 });
 
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes.extensionToken) return;
+  extensionToken.value = changes.extensionToken.newValue ?? "";
+  updateConnectionState();
+  if (!changes.extensionToken.newValue && changes.extensionToken.oldValue) {
+    connectionSettings.open = true;
+    status.textContent = RECONNECT_MESSAGE;
+  }
+});
+
 document.getElementById("save-settings").addEventListener("click", async () => {
+  const nextToken = extensionToken.value.trim();
+  const previous = await chrome.storage.local.get({ extensionToken: "" });
+  if (previous.extensionToken !== nextToken) {
+    await chrome.storage.local.remove("extensionId");
+  }
   await chrome.storage.local.set({
     ingestUrl: ingestUrl.value.trim(),
-    extensionToken: extensionToken.value.trim(),
+    extensionToken: nextToken,
     activeMissionId: missionSelect.value,
     captureIntent: captureIntent.value,
   });
@@ -177,7 +193,18 @@ async function loadMissionContext(selectedMissionId = "") {
       body: "{}",
     });
     const body = await response.json().catch(() => ({}));
+    if (response.status === 403) {
+      await chrome.storage.local.remove(["extensionToken", "extensionId"]);
+      extensionToken.value = "";
+      updateConnectionState();
+      connectionSettings.open = true;
+      throw new Error(RECONNECT_MESSAGE);
+    }
     if (!response.ok) throw new Error(body.error || "Could not load Projects");
+
+    if (body.extension_id) {
+      await chrome.storage.local.set({ extensionId: body.extension_id });
+    }
 
     const projects = body.projects ?? body.missions ?? [];
     missionSelect.replaceChildren(new Option("Auto-organize", ""));

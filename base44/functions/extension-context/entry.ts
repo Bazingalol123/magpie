@@ -24,6 +24,7 @@ Deno.serve(async (req) => {
       }));
     return json({
       auto_organize: true,
+      extension_id: pairing.id,
       projects,
       missions: projects,
     });

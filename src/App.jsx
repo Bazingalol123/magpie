@@ -55,6 +55,12 @@ import Docs from "./Docs.jsx";
 import CaptureGuideDialog from "./onboarding/CaptureGuideDialog.jsx";
 import { OnboardingStage, deriveOnboardingStage } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
+import {
+  PairingDisplayStatus,
+  derivePairingDisplayStatus,
+  hasActivePairing,
+  needsPairingReconnect,
+} from "./pairing-lifecycle.js";
 import { searchWorkspace } from "./workspace-search.js";
 import magpieMarkSrc from "./icon/magpie-mark.png";
 
@@ -300,6 +306,102 @@ function PairingDialog({ pairing, onClose }) {
         <div className="pairing-note"><ShieldCheck size={16} /> This token can only submit clips to your library. It cannot read anything from Magpie.</div>
         <div className="pairing-actions"><span>{copied || "Waiting for the extension…"}</span><button className="secondary-button" onClick={onClose}>Finish later</button></div>
       </section>
+    </div>
+  );
+}
+
+const PAIRING_STATUS_COPY = {
+  [PairingDisplayStatus.AWAITING_SETUP]: {
+    label: "Awaiting setup",
+    detail: "The token was created, but no Extension has confirmed it yet.",
+  },
+  [PairingDisplayStatus.CONNECTED_UNUSED]: {
+    label: "Connected",
+    detail: "The Extension connected successfully. No captures yet.",
+  },
+  [PairingDisplayStatus.ACTIVE]: {
+    label: "Active",
+    detail: "This browser has captured successfully.",
+  },
+  [PairingDisplayStatus.REVOKED]: {
+    label: "Revoked",
+    detail: "This token can no longer submit captures.",
+  },
+};
+
+function PairingManagementDialog({ pairings, onClose, onPair, isPairing, onRevoke, onRevokeAll, revokingId, isRevokingAll, error }) {
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const activeCount = pairings.filter((pairing) => pairing.active !== false).length;
+
+  const revokeOne = async (id) => {
+    if (await onRevoke(id)) setConfirmingId(null);
+  };
+  const revokeAll = async () => {
+    if (await onRevokeAll()) setConfirmAll(false);
+  };
+
+  return (
+    <div className="detail-overlay pairing-overlay" role="presentation" onMouseDown={onClose}>
+      <section className="pairing-dialog pairing-management-dialog" role="dialog" aria-modal="true" aria-label="Connected browsers" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-head">
+          <div><div className="eyebrow"><PairingIcon size={13} /> extension access</div><h2>Connected browsers</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
+        </div>
+        <p>Each browser has its own write-only token. Creating a new connection never disconnects another browser.</p>
+        {error && <div className="review-error pairing-management-error">{error}</div>}
+        <div className="pairing-management-list">
+          {pairings.length === 0 && <div className="pairing-empty"><PairingIcon size={22} /><div><b>No browsers paired</b><span>Pair the Chrome Extension to start capturing from the web.</span></div></div>}
+          {pairings.map((install) => {
+            const status = derivePairingDisplayStatus(install);
+            const copy = PAIRING_STATUS_COPY[status];
+            const isConfirming = confirmingId === install.id;
+            const isBusy = revokingId === install.id;
+            return (
+              <article className={`pairing-install is-${status}`} key={install.id}>
+                <div className="pairing-install-main">
+                  <span className="pairing-install-icon"><PairingIcon size={18} /></span>
+                  <div>
+                    <div className="pairing-install-title"><b>{install.label}</b><span>{copy.label}</span></div>
+                    <p>{copy.detail}</p>
+                    <div className="pairing-install-meta"><span>Created {formatDate(install.created_at)}</span><span>Last used {relativeDate(install.last_used_at)}</span></div>
+                  </div>
+                </div>
+                {install.active !== false && !isConfirming && <button type="button" className="text-button danger-text" onClick={() => setConfirmingId(install.id)} disabled={!!revokingId || isRevokingAll}>Revoke</button>}
+                {isConfirming && (
+                  <div className="pairing-inline-confirm">
+                    <span>This browser will stop capturing immediately.</span>
+                    <button type="button" className="secondary-button" onClick={() => setConfirmingId(null)} disabled={isBusy}>Cancel</button>
+                    <button type="button" className="danger-button" onClick={() => revokeOne(install.id)} disabled={isBusy}>{isBusy ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />} Confirm revoke</button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+        <div className="pairing-management-actions">
+          <button type="button" className="primary-button" onClick={onPair} disabled={isPairing || !!revokingId || isRevokingAll}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <Plus size={14} />} Pair another browser</button>
+          {activeCount > 0 && !confirmAll && <button type="button" className="text-button danger-text" onClick={() => setConfirmAll(true)} disabled={!!revokingId || isRevokingAll}>Revoke every browser</button>}
+          {activeCount > 0 && confirmAll && (
+            <div className="pairing-revoke-all-confirm">
+              <span>All {activeCount} active browser{activeCount === 1 ? "" : "s"} will need to reconnect.</span>
+              <button type="button" className="secondary-button" onClick={() => setConfirmAll(false)} disabled={isRevokingAll}>Cancel</button>
+              <button type="button" className="danger-button" onClick={revokeAll} disabled={isRevokingAll}>{isRevokingAll ? <LoaderCircle className="spin" size={14} /> : <Trash2 size={14} />} Revoke all</button>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PairingReconnectNotice({ onManage, onPair, isPairing }) {
+  return (
+    <div className="pairing-reconnect-notice" role="status">
+      <span className="pairing-reconnect-icon"><AlertTriangle size={17} /></span>
+      <div><b>Your browser connection needs attention.</b><span>Every saved Extension token is revoked. Reconnect to capture from Chrome again.</span></div>
+      <button type="button" className="secondary-button" onClick={onManage}>View browsers</button>
+      <button type="button" className="primary-button" onClick={onPair} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} Reconnect</button>
     </div>
   );
 }
@@ -619,7 +721,9 @@ const WORKSPACE_VIEWS = [
   { id: "search", label: "Search", icon: Search },
 ];
 
-function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, isPairing, hasPairedExtension, onOpenDocs, onSignOut }) {
+function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, onManagePairings, isPairing, hasPairingHistory, hasActiveExtension, onOpenDocs, onSignOut }) {
+  const pairingAction = hasPairingHistory ? onManagePairings : onPair;
+  const pairingLabel = !hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser";
   return (
     <aside className="app-navigation">
       <button type="button" className="nav-brand" onClick={() => onNavigate("nest")}><MagpieMark size={27} /><span>magpie</span><i>beta</i></button>
@@ -652,7 +756,7 @@ function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, 
         </div>
       </div>
       <div className="nav-account">
-        <button type="button" onClick={onPair} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {hasPairedExtension ? "Pair another browser" : "Pair extension"}</button>
+        <button type="button" onClick={pairingAction} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {pairingLabel}</button>
         <button type="button" onClick={onOpenDocs}><Book size={14} /> Docs</button>
         <div className="nav-user"><span><UserRound size={14} /> {user.full_name || user.email}</span><button type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={14} /></button></div>
         <p><LockKeyhole size={12} /> Owner-scoped by design</p>
@@ -1781,6 +1885,10 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPairing, setIsPairing] = useState(false);
   const [pairing, setPairing] = useState(null);
+  const [isPairingManagementOpen, setIsPairingManagementOpen] = useState(false);
+  const [pairingManagementError, setPairingManagementError] = useState("");
+  const [revokingInstallationId, setRevokingInstallationId] = useState(null);
+  const [isRevokingAllPairings, setIsRevokingAllPairings] = useState(false);
   const [routingUndo, setRoutingUndo] = useState(null);
   const [isCreatingMission, setIsCreatingMission] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -1820,7 +1928,7 @@ export default function App() {
   // silently dropping rows past a single page (G1); it already existed for
   // this exact purpose but was never actually wired into loadDashboard.
   const loadDashboard = useCallback(async () => {
-    const [missions, collections, recordsResult, clips, enrichments, routingDecisions, watchRules, refreshAttempts, extensionInstalls] = await Promise.all([
+    const [missions, collections, recordsResult, clips, enrichments, routingDecisions, watchRules, refreshAttempts, extensionPairingsResponse] = await Promise.all([
       listDashboardPage(base44.entities.Mission, "-created_date"),
       listDashboardPage(base44.entities.Collection, "name"),
       fetchAllPages((skip, limit) => base44.entities.Record.list("-created_date", limit, skip)),
@@ -1829,9 +1937,12 @@ export default function App() {
       listDashboardPage(base44.entities.RoutingDecision, "-decided_at"),
       listDashboardPage(base44.entities.WatchRule, "-created_date"),
       listDashboardPage(base44.entities.RefreshAttempt, "-requested_at"),
-      listDashboardPage(base44.entities.ExtensionInstall, "-created_at"),
+      base44.functions.invoke("list-extension-pairings", {}),
     ]);
     const records = recordsResult.items;
+    const extensionInstalls = Array.isArray(extensionPairingsResponse.data?.pairings)
+      ? extensionPairingsResponse.data.pairings
+      : [];
     const selectedCollectionId = activeCollectionIdRef.current && collections.some((item) => item.id === activeCollectionIdRef.current)
       ? activeCollectionIdRef.current
       : collections[0]?.id ?? null;
@@ -2071,6 +2182,46 @@ export default function App() {
       setLoadError(error.response?.data?.error || error.message || "Could not create a pairing token.");
     } finally {
       setIsPairing(false);
+    }
+  };
+
+  const openPairingManagement = () => {
+    setPairingManagementError("");
+    setIsPairingManagementOpen(true);
+  };
+
+  const createPairingFromManagement = () => {
+    setIsPairingManagementOpen(false);
+    handleCreatePairing();
+  };
+
+  const revokeExtensionPairing = async (installationId) => {
+    setRevokingInstallationId(installationId);
+    setPairingManagementError("");
+    try {
+      await base44.functions.invoke("revoke-extension-pairing", { installation_id: installationId });
+      await requestDashboardLoad();
+      return true;
+    } catch (error) {
+      setPairingManagementError(error.response?.data?.error || error.message || "Could not revoke this browser.");
+      return false;
+    } finally {
+      setRevokingInstallationId(null);
+    }
+  };
+
+  const revokeAllExtensionPairings = async () => {
+    setIsRevokingAllPairings(true);
+    setPairingManagementError("");
+    try {
+      await base44.functions.invoke("revoke-all-extension-pairings", {});
+      await requestDashboardLoad();
+      return true;
+    } catch (error) {
+      setPairingManagementError(error.response?.data?.error || error.message || "Could not revoke the browser connections.");
+      return false;
+    } finally {
+      setIsRevokingAllPairings(false);
     }
   };
 
@@ -2405,6 +2556,9 @@ export default function App() {
     && data.collections.length === 0
     && data.records.length === 0
     && data.clips.length === 0;
+  const hasPairingHistory = data.extensionInstalls.length > 0;
+  const hasActiveExtension = hasActivePairing(data.extensionInstalls);
+  const showPairingReconnect = needsPairingReconnect(data.extensionInstalls);
   const hasPairedExtension = data.extensionInstalls.some((install) => install.active !== false && !!(install.paired_at || install.last_used_at));
   const activeCollectionRecordIds = new Set(activeCollectionRecords.map((record) => record.id));
   const collectionDeleteSummary = {
@@ -2477,8 +2631,10 @@ export default function App() {
         onSelectCollection={selectCollection}
         user={user}
         onPair={handleCreatePairing}
+        onManagePairings={openPairingManagement}
         isPairing={isPairing}
-        hasPairedExtension={hasPairedExtension}
+        hasPairingHistory={hasPairingHistory}
+        hasActiveExtension={hasActiveExtension}
         onOpenDocs={() => { window.location.href = "/?docs=getting-started"; }}
         onSignOut={handleSignOut}
       />
@@ -2486,9 +2642,10 @@ export default function App() {
         <header className="mobile-workspace-header">
           <button type="button" className="nav-brand" onClick={() => navigateWorkspace("nest")}><MagpieMark size={25} /><span>magpie</span></button>
           <div><button type="button" className="icon-button" onClick={() => navigateWorkspace("search")} aria-label="Search"><Search size={18} /></button><button type="button" className="icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu"><UserRound size={18} /></button></div>
-          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {hasPairedExtension ? "Pair another browser" : "Pair extension"}</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
+          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { if (hasPairingHistory) openPairingManagement(); else handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {!hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser"}</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
         </header>
         {loadError && <div className="error-banner workspace-error">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
+        {showPairingReconnect && <PairingReconnectNotice onManage={openPairingManagement} onPair={handleCreatePairing} isPairing={isPairing} />}
         {activeView === "nest" && <NestSurface clips={needsReviewClips} decisionsByClip={decisionsByClip} collections={data.collections} allClips={data.clips} isFirstRun={isFirstRun} hasPairedExtension={hasPairedExtension} resolvingClipId={resolvingClipId} resolveError={resolveError} onResolve={resolveReview} onOpenAdvanced={(clipId) => { setSelectedReviewClipId(clipId); setIsReviewOpen(true); }} onPair={handleCreatePairing} isPairing={isPairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} onOpenLibrary={() => navigateWorkspace("library")} onOpenGuide={() => setIsCaptureGuideOpen(true)} />}
         {activeView === "library" && (
           <section className="workspace-surface library-surface">
@@ -2521,6 +2678,7 @@ export default function App() {
       {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} missions={data.missions} activeMissionId={activeMissionId} />}
       {isCaptureGuideOpen && <CaptureGuideDialog onClose={() => setIsCaptureGuideOpen(false)} onPair={handleCreatePairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} isPairing={isPairing} hasPairedExtension={hasPairedExtension} />}
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
+      {isPairingManagementOpen && <PairingManagementDialog pairings={data.extensionInstalls} onClose={() => setIsPairingManagementOpen(false)} onPair={createPairingFromManagement} isPairing={isPairing} onRevoke={revokeExtensionPairing} onRevokeAll={revokeAllExtensionPairings} revokingId={revokingInstallationId} isRevokingAll={isRevokingAllPairings} error={pairingManagementError} />}
       {watchDialog && <WatchDialog records={data.records} watchRules={data.watchRules} initialRecordId={watchDialog.recordId} initialField={watchDialog.field} onClose={() => setWatchDialog(null)} onSave={saveManualWatch} isSaving={isSavingWatch} error={watchDialogError} />}
       {isProjectDialogOpen && <ProjectDialog onClose={() => setIsProjectDialogOpen(false)} onCreate={createMission} isCreating={isCreatingMission} />}
       {isBugReportOpen && (

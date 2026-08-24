@@ -136,6 +136,9 @@ into its own owner's account — it reads nothing. The extension's
 refresh-on-revisit memory is a local list of URLs *it* captured, stored next to
 the token; the server never sends your data down to the extension. Deleting
 the extension wipes both together — after re-pairing, refresh coverage rebuilds
-as you capture and re-clip. And Magpie never crawls: the only pages it reads
+as you capture and re-clip. Revoking a browser is different: Magpie removes
+that browser's token and identifier but preserves its dashboard URL and local
+saved-page memory, so reconnecting does not throw away harmless recovery
+context. And Magpie never crawls: the only pages it reads
 server-side are exact source URLs you explicitly saved, and the only pages the
 extension reads are ones you're looking at.

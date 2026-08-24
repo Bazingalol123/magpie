@@ -52,6 +52,14 @@ expected for any unpacked extension.
 The side panel's status pill flips to **● paired** and the capture buttons
 light up.
 
+To manage more than one browser, use **Connected browsers** in the dashboard's
+account rail. Each browser keeps its own write-only token; pairing another one
+does not disconnect the first. You can revoke one browser or use **Revoke every
+browser** as an emergency reset. A revoked Side Panel clears the unusable
+credential, keeps the dashboard address, and tells you to reconnect. Existing
+tokens need no migration: a browser becomes identifiable the next time its Side
+Panel successfully loads Projects.
+
 ## 4. Capture something
 
 Open any page with something worth keeping — a product, an apartment listing,
