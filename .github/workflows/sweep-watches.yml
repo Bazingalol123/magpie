@@ -8,12 +8,16 @@ name: Sweep Watches
 # authenticated client. See docs/DECISIONS.md.
 #
 # Every 15 minutes keeps "hourly" watches meaningfully close to their real
-# interval without being wasteful for daily/weekly ones. GitHub's own
-# schedule can be delayed under load, especially for busy accounts -- this
-# is a best-effort cadence, not a guarantee.
+# interval without being wasteful for daily/weekly ones. GitHub's own docs
+# warn schedule events are delayed most right at the top of every
+# quarter-hour (:00/:15/:30/:45), since that's when every repo's cron fires
+# at once -- offset to :07/:22/:37/:52 instead. This is a best-effort
+# cadence, not a guarantee: GitHub can also take up to ~an hour to start
+# recognizing a schedule trigger the first time it's added to the default
+# branch, independent of the minute offset.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       limit:
