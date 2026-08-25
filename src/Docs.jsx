@@ -28,7 +28,7 @@ export default function Docs({ initialSlug, isSignedIn, onSignIn, isSigningIn })
   const goToSection = (file, hash) => {
     setActiveFile(file);
     const slug = FILE_TO_SLUG[file] || SECTIONS[0].slug;
-    window.history.replaceState(null, "", `?docs=${slug}`);
+    window.history.replaceState(null, "", `/docs/${slug}${hash || ""}`);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const target = hash ? document.getElementById(hash.replace(/^#/, "")) : null;
       (target || document.querySelector(".docs-content"))?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -51,7 +51,7 @@ export default function Docs({ initialSlug, isSignedIn, onSignIn, isSigningIn })
       return (
         <a
           {...props}
-          href={`?docs=${FILE_TO_SLUG[match[1]]}${match[2] || ""}`}
+          href={`/docs/${FILE_TO_SLUG[match[1]]}${match[2] || ""}`}
           onClick={(event) => {
             event.preventDefault();
             goToSection(match[1], match[2]);

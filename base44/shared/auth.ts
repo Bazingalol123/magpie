@@ -56,8 +56,14 @@ export function createPairingToken() {
 // only affects new pairings (issue #59).
 const NEW_PAIRING_INGEST_ORIGIN = "https://magpiecapture.com";
 
+// Base44 routes backend functions at /api/apps/{app_id}/functions/{name} --
+// the bare /functions/ingest-clip path 404s. The app id is stable per
+// deployed app; it matches the frontend's VITE_BASE44_APP_ID default in
+// src/api/base44Client.js and the BASE44_APP_ID deploy secret.
+const BASE44_APP_ID = Deno.env.get("BASE44_APP_ID") || "6a622e254ee5f8740523313e";
+
 export function buildIngestUrl() {
-  return `${NEW_PAIRING_INGEST_ORIGIN}/functions/ingest-clip`;
+  return `${NEW_PAIRING_INGEST_ORIGIN}/api/apps/${BASE44_APP_ID}/functions/ingest-clip`;
 }
 
 export async function sha256(value: string) {

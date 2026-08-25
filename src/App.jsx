@@ -52,6 +52,7 @@ import { AgentIcon, EmptyNestIcon, PairingIcon } from "./components/icons.jsx";
 import Landing from "./Landing.jsx";
 import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
+import { isDocsRoute, parseDocsLocation } from "./docs-navigation.js";
 import CaptureGuideDialog from "./onboarding/CaptureGuideDialog.jsx";
 import { OnboardingStage, deriveOnboardingStage } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
@@ -82,6 +83,8 @@ const emptyDataMeta = {
   refreshAttempts: emptyPageMeta,
   extensionInstalls: emptyPageMeta,
 };
+
+const EXTENSION_RELEASES_URL = "https://github.com/Bazingalol123/magpie/releases/latest";
 
 const DASHBOARD_LIST_LIMIT = 100;
 const RECORDS_PAGE_SIZE = 8;
@@ -304,6 +307,7 @@ function PairingDialog({ pairing, onClose }) {
         <div className="pairing-value"><span>Ingest function URL</span><code>{pairing.ingest_url}</code><button onClick={() => copy(pairing.ingest_url, "URL copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-value token"><span>Paired extension token</span><code>{pairing.token}</code><button onClick={() => copy(pairing.token, "Token copied")}><Copy size={14} /> Copy</button></div>
         <div className="pairing-note"><ShieldCheck size={16} /> This token can only submit clips to your library. It cannot read anything from Magpie.</div>
+        <div className="pairing-note"><Download size={16} /> Don't have the extension yet? <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">Download it</a>, then paste these values into its side panel.</div>
         <div className="pairing-actions"><span>{copied || "Waiting for the extension…"}</span><button className="secondary-button" onClick={onClose}>Finish later</button></div>
       </section>
     </div>
@@ -351,7 +355,7 @@ function PairingManagementDialog({ pairings, onClose, onPair, isPairing, onRevok
         <p>Each browser has its own write-only token. Creating a new connection never disconnects another browser.</p>
         {error && <div className="review-error pairing-management-error">{error}</div>}
         <div className="pairing-management-list">
-          {pairings.length === 0 && <div className="pairing-empty"><PairingIcon size={22} /><div><b>No browsers paired</b><span>Pair the Chrome Extension to start capturing from the web.</span></div></div>}
+          {pairings.length === 0 && <div className="pairing-empty"><PairingIcon size={22} /><div><b>No browsers paired</b><span>Pair the Chrome Extension to start capturing from the web. Don't have it yet? <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">Download the extension</a>.</span></div></div>}
           {pairings.map((install) => {
             const status = derivePairingDisplayStatus(install);
             const copy = PAIRING_STATUS_COPY[status];
@@ -758,6 +762,7 @@ function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, 
       <div className="nav-account">
         <button type="button" onClick={pairingAction} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {pairingLabel}</button>
         <button type="button" onClick={onOpenDocs}><Book size={14} /> Docs</button>
+        <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer"><Download size={14} /> Download extension</a>
         <div className="nav-user"><span><UserRound size={14} /> {user.full_name || user.email}</span><button type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={14} /></button></div>
         <p><LockKeyhole size={12} /> Owner-scoped by design</p>
       </div>
@@ -2591,9 +2596,8 @@ export default function App() {
     setIsReviewOpen(true);
   };
 
-  const docsParams = new URLSearchParams(window.location.search);
-  if (docsParams.has("docs")) {
-    return <Docs initialSlug={docsParams.get("docs")} isSignedIn={!!user} isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
+  if (isDocsRoute(window.location.href)) {
+    return <Docs initialSlug={parseDocsLocation(window.location.href).slug} isSignedIn={!!user} isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
   }
 
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
@@ -2635,14 +2639,14 @@ export default function App() {
         isPairing={isPairing}
         hasPairingHistory={hasPairingHistory}
         hasActiveExtension={hasActiveExtension}
-        onOpenDocs={() => { window.location.href = "/?docs=getting-started"; }}
+        onOpenDocs={() => { window.open("/docs/getting-started", "_blank", "noopener"); }}
         onSignOut={handleSignOut}
       />
       <section className="workspace-main">
         <header className="mobile-workspace-header">
           <button type="button" className="nav-brand" onClick={() => navigateWorkspace("nest")}><MagpieMark size={25} /><span>magpie</span></button>
           <div><button type="button" className="icon-button" onClick={() => navigateWorkspace("search")} aria-label="Search"><Search size={18} /></button><button type="button" className="icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu"><UserRound size={18} /></button></div>
-          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { if (hasPairingHistory) openPairingManagement(); else handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {!hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser"}</button><a href="/?docs=getting-started" role="menuitem"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
+          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { if (hasPairingHistory) openPairingManagement(); else handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {!hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser"}</button><a href="/docs/getting-started" role="menuitem" target="_blank" rel="noopener"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
         </header>
         {loadError && <div className="error-banner workspace-error">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
         {showPairingReconnect && <PairingReconnectNotice onManage={openPairingManagement} onPair={handleCreatePairing} isPairing={isPairing} />}
