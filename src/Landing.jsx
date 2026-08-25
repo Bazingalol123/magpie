@@ -86,7 +86,7 @@ export default function Landing({ isSigningIn, onSignIn }) {
             Sign in to start
           </button>
           <div className="ld-hero-links">
-            <a className="ld-docs-link" href="/?docs=getting-started">How it works, and how to install the extension →</a>
+            <a className="ld-docs-link" href="/docs/getting-started" target="_blank" rel="noopener">How it works, and how to install the extension →</a>
             <a className="ld-docs-link" href="https://github.com/Bazingalol123/magpie/releases/latest" target="_blank" rel="noreferrer"><Download size={13} /> Download extension</a>
           </div>
           <div className="ld-hero-trust"><ShieldCheck size={14} /> The extension can write clips — it can never read your data.</div>

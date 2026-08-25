@@ -9,9 +9,16 @@ function assertEquals(actual: unknown, expected: unknown, message: string) {
 Deno.test("new pairings receive the custom-domain ingest URL (issue #59)", () => {
   assertEquals(
     buildIngestUrl(),
-    "https://magpiecapture.com/functions/ingest-clip",
-    "create-extension-pairing must return the public custom-domain ingest URL for new pairings",
+    "https://magpiecapture.com/api/apps/6a622e254ee5f8740523313e/functions/ingest-clip",
+    "create-extension-pairing must return the public custom-domain ingest URL, routed through /api/apps/{app_id}, for new pairings",
   );
+});
+
+Deno.test("the ingest URL is routed through Base44's /api/apps/{app_id}/functions prefix", () => {
+  const url = buildIngestUrl();
+  if (!/^https:\/\/magpiecapture\.com\/api\/apps\/[^/]+\/functions\/ingest-clip$/.test(url)) {
+    throw new Error("buildIngestUrl must emit the /api/apps/{app_id}/functions/ingest-clip shape Base44 actually routes -- a bare /functions/ingest-clip path 404s, and the extension's appHeaders() regex (/\\/api\\/apps\\/([^/]+)\\/functions\\//) depends on this prefix to derive the X-App-Id/Base44-App-Id headers");
+  }
 });
 
 Deno.test("the ingest URL never points at the retired Base44 hostname", () => {
