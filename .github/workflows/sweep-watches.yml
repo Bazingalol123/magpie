@@ -1,0 +1,44 @@
+name: Sweep Watches
+
+# Base44's own scheduling ("Workflow") builder requires attaching the
+# schedule to an Agent; this project has no Agent for pure backend
+# maintenance work (CLAUDE.md: "AI proposes; deterministic code decides" --
+# sweep-watches has no AI/agent involvement at all), so the schedule lives
+# here instead, calling the deployed function over plain HTTP like any other
+# authenticated client. See docs/DECISIONS.md.
+#
+# Every 15 minutes keeps "hourly" watches meaningfully close to their real
+# interval without being wasteful for daily/weekly ones. GitHub's own
+# schedule can be delayed under load, especially for busy accounts -- this
+# is a best-effort cadence, not a guarantee.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max watches to process this run (default 20, capped at 50 by the function itself)"
+        required: false
+        type: string
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Run sweep-watches
+        env:
+          BASE44_APP_ID: ${{ secrets.BASE44_APP_ID }}
+          SWEEP_ADMIN_EMAIL: ${{ secrets.SWEEP_ADMIN_EMAIL }}
+          SWEEP_ADMIN_PASSWORD: ${{ secrets.SWEEP_ADMIN_PASSWORD }}
+          SWEEP_WATCH_LIMIT: ${{ inputs.limit }}
+        run: node scripts/run-sweep-watches.mjs

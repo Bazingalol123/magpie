@@ -1098,3 +1098,64 @@ editing, undo/reactivation, and automatic rotation remain deferred. Existing
 tokens require no migration: `last_used_at` proves legacy use, while the next
 successful context load stamps `paired_at` and stores the non-secret
 `extensionId` in that browser.
+
+## 2026-08-25 — sweep-watches scheduling: GitHub Actions cron, not Kafka or Base44 Workflow
+
+Watch frequency (`hourly`/`daily`/`weekly`) was never a live timer — it is
+only the interval baked into each `WatchRule.next_check_at`, recomputed after
+every check. `sweep-watches` is a plain admin-authenticated HTTP endpoint
+that processes whatever is due when *something* calls it; nothing in this
+repo or on Base44 called it on any cadence, and `docs/BETA_LIMITATIONS.md`
+already flagged this as an unverified gap.
+
+Two options were considered for the missing trigger and rejected:
+
+- **Base44's own "Workflow" scheduler** — its UI requires binding the
+  schedule to an Agent. `sweep-watches` has zero AI/LLM involvement (pure
+  backoff/diffing logic), so forcing it through an Agent just to satisfy the
+  scheduler's binding model would be backwards, not just awkward — see
+  CLAUDE.md's "AI proposes; deterministic code decides."
+- **An event broker (e.g. Kafka)** — this is a low-throughput, high-latency-
+  tolerant polling problem (tens to low hundreds of watches, hourly at the
+  fastest), not a fan-out/streaming one: there is exactly one producer
+  decision ("is this watch due") and one consumer (`sweep-watches` itself).
+  Introducing a broker would add a whole standalone stateful service (and its
+  own ops/security/deploy surface, well outside this repo's Base44 + static
+  extension architecture) to solve a problem a single scheduled HTTP call
+  already solves, without removing the need for consumer-side dedup logic —
+  Kafka consumer-group partitioning would still have to be built to get the
+  same exclusivity a claim step gives for free.
+
+Chosen instead: a GitHub Actions `schedule` workflow (`sweep-watches.yml`,
+every 15 minutes) calling the deployed function via the `@base44/sdk`, the
+same way any authenticated client would — logging in fresh each run as a
+dedicated admin-role account rather than managing long-lived token refresh.
+This reuses infrastructure already in this repo (`ci.yml`,
+`deploy-base44.yml`) instead of adding a new one.
+
+Base44's `BASE44_API_KEY` secret (already used by `deploy-base44.yml`) was
+considered as the credential for this call and rejected: it is a `b44k_`-
+prefixed *workspace* API key scoped to the CLI's management-plane operations
+(`entities push`, `functions deploy`, ...), not a per-app-user token that
+`sweep-watches`'s `caller.role === "admin"` check can evaluate. The workflow
+therefore needs its own `SWEEP_ADMIN_EMAIL` / `SWEEP_ADMIN_PASSWORD` secrets
+for a real admin-role user — ideally a dedicated automation account rather
+than the owner's personal login, so the credential can be rotated or revoked
+independently. That account still needs to be created and its secrets added
+by the owner; this was not done as part of this change (see
+`docs/CLAUDE_CODE_HANDOFF.md`).
+
+`sweep-watches` also had no protection against two overlapping invocations
+double-processing the same watch (a real risk once something calls it on a
+schedule): it read due watches, then only rescheduled them *after* the real
+check finished, leaving the whole processing window open to a second run
+reading the same "due" rows. Fixed by claiming the entire selected batch
+(pushing `next_check_at` to a 15-minute claim horizon) immediately after
+selection and before any of the (potentially slow) real checks run — see
+`base44/shared/watch-sweep.ts`. This is not a true atomic compare-and-swap
+(Base44's `updateMany` is documented elsewhere in this codebase,
+`base44/shared/pairing-management.ts`, as unreliable for service-role calls,
+so per-row `filter` + `update` is used, same as that existing workaround);
+it shrinks the double-processing window from "the whole batch's real
+processing time" to "the claim loop's time", which is proportionate given a
+single external scheduler and batches capped at 50.

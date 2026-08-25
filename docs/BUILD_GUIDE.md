@@ -2406,3 +2406,47 @@ both places it appears in the dashboard, not one isolated spot.
   signed-in hosted lifecycle and hosted two-owner verification remain gated
   by issue #20. The Extension source was pushed, but no new Chrome extension
   artifact was published by this Base44 release.
+
+### 68. Give sweep-watches an actual schedule and close its double-processing gap
+
+`sweep-watches` was deployed with no caller on any cadence at all --
+`docs/BETA_LIMITATIONS.md` had already flagged this as unverified. Watch
+`frequency` (hourly/daily/weekly) was never a live timer; it only sets how
+far `next_check_at` moves forward each time a check happens. See
+`docs/DECISIONS.md` (2026-08-25) for why this is a GitHub Actions cron
+calling the function directly rather than Base44's Agent-bound Workflow
+builder or an event broker.
+
+- [x] Extract `sweep-watches`'s inline logic into `base44/shared/watch-sweep.ts`
+  (`selectDueWatches`, `claimWatches`, `processWatch`, `calculateNextCheck`,
+  `sweepDueWatches`) so it is unit-testable the way every other Function's
+  logic in this repo already is; `entry.ts` is now a thin auth + dispatch
+  wrapper, behavior unchanged.
+- [x] Close the concurrency gap: claim the whole selected batch (push
+  `next_check_at` to a 15-minute claim horizon) immediately after selection,
+  before any real check runs -- not after, as before. A second overlapping
+  invocation now sees nothing left to claim instead of re-selecting the same
+  due watches.
+- [x] Add `scripts/run-sweep-watches.mjs` (logs in via
+  `base44.auth.loginViaEmailPassword` each run, then
+  `base44.functions.invoke("sweep-watches", ...)`) and
+  `.github/workflows/sweep-watches.yml` (`schedule: */15 * * * *` plus
+  `workflow_dispatch`).
+- **Files:** `base44/functions/sweep-watches/entry.ts`,
+  `base44/shared/watch-sweep.ts`, `tests/watch-sweep.test.ts`,
+  `scripts/run-sweep-watches.mjs`, `.github/workflows/sweep-watches.yml`.
+- **You'll know this works when:** a manual `workflow_dispatch` run reports
+  `processed` watches and their outcomes; running it twice back-to-back
+  processes zero watches the second time (everything just got claimed); and
+  a due watch's `next_check_at` moves to a real future value even when its
+  check throws.
+- **Verified locally (2026-08-25):** `tests/watch-sweep.test.ts` (8 new
+  tests, including a direct assertion that a concurrent `selectDueWatches`
+  call returns nothing right after a sweep claims its batch) plus the full
+  local Deno suite pass 160/160 of the tests runnable without network access
+  to `jsr.io` in this environment; `deno check` on every Function entry point
+  is clean. **Not yet deployed or exercised against production** --
+  `sweep-watches` still needs a normal `functions deploy`, and the workflow
+  needs `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets for a real
+  admin-role Base44 user, which the owner still needs to create/add (see
+  `docs/CLAUDE_CODE_HANDOFF.md`). No entities changed; no migration needed.

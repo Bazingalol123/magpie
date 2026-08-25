@@ -542,3 +542,48 @@ three new functions plus modified `extension-context`/routing functions, and
 the site together. Push notifications remain a separate Critical change
 requiring VAPID secrets, subscription storage, delivery/retry, and permission
 UX; do not add a decorative control in the meantime.
+
+## 2026-08-25 — sweep-watches now has a schedule and a concurrency fix, not yet deployed or enabled
+
+The owner found that Base44's dashboard "Workflow" scheduler can't target
+`sweep-watches` at all (it requires binding to an Agent, and this is pure
+deterministic backend logic with no Agent involved). Investigating turned up
+that `sweep-watches` had never been called on any cadence — see
+`docs/BETA_LIMITATIONS.md`'s existing note and `docs/DECISIONS.md`'s
+2026-08-25 entry for the full reasoning (including why an event broker like
+Kafka was considered and rejected as the wrong tool for a low-volume polling
+problem).
+
+Built this round, all local-only so far:
+
+- `base44/shared/watch-sweep.ts` — `sweep-watches`'s logic extracted out of
+  `entry.ts` and made unit-testable, plus a real concurrency fix: the whole
+  due batch is now claimed (`next_check_at` pushed to a 15-minute horizon)
+  immediately after selection, before any of the (possibly slow) real checks
+  run, so two overlapping invocations can no longer double-process the same
+  watch. `tests/watch-sweep.test.ts` (8 tests, including a direct check that
+  a concurrent selection sees nothing left after a claim) — full local Deno
+  suite (everything runnable without `jsr.io` access in that session) is
+  160/160.
+- `.github/workflows/sweep-watches.yml` (`schedule: */15 * * * *` +
+  `workflow_dispatch`) and `scripts/run-sweep-watches.mjs`, which logs in
+  fresh each run via `base44.auth.loginViaEmailPassword` and calls
+  `base44.functions.invoke("sweep-watches", ...)` — the existing
+  `BASE44_API_KEY` secret is a CLI workspace key, not a per-user token, so it
+  cannot authenticate this call.
+
+**Owner action still needed before this does anything:**
+
+1. Create (or designate) a dedicated admin-role Base44 user for this
+   automation — reusing a personal owner login works but isn't recommended
+   long-term (can't rotate/revoke independently).
+2. Add three repository secrets: `SWEEP_ADMIN_EMAIL`, `SWEEP_ADMIN_PASSWORD`
+   (that account's credentials), and confirm the existing `BASE44_APP_ID`
+   secret is present (it already is, from the deploy workflow).
+3. Approve a normal `functions deploy` for `sweep-watches` (no entity/schema
+   changes — `entry.ts`'s behavior is unchanged, only its internal structure
+   moved to `base44/shared/watch-sweep.ts`, plus the new claim step).
+4. The `sweep-watches.yml` workflow runs on its own schedule once merged to
+   `main` — no separate "enable" step, but it will fail loudly (missing env
+   vars, script `process.exit(2)`) until step 2 is done, and will 403 from
+   `sweep-watches` itself until step 1's account actually has `role: admin`.
