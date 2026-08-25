@@ -1870,3 +1870,40 @@ reachability and trust-boundary evidence, but it is not a substitute for a
 signed-in production walkthrough or the open hosted two-owner isolation gate.
 The repository commit was pushed; publishing a new Chrome extension artifact
 remains a separate release operation.
+
+## 2026-08-25 — sweep-watches had no caller, and two Base44 credential/scheduling findings
+
+Investigating why watches weren't checking on their `hourly`/`daily`/`weekly`
+cadence turned up that nothing ever called `sweep-watches` at all -- no
+in-repo cron, no documented Base44-side schedule. `docs/BETA_LIMITATIONS.md`
+already said as much ("no hosted run log reviewed"); this confirms it by
+reading every `.jsonc`/workflow file in the repo for a schedule and finding
+none, and by the owner independently hitting the same wall from the Base44
+dashboard side.
+
+Two platform findings, both read from the owner's report plus this repo's
+existing code/comments, not verified against Base44's own docs (no access to
+those from this environment):
+
+- Base44's "Workflow" scheduler in the dashboard UI requires binding the
+  schedule to an Agent. This project's only Agent (`magpie_organizer`) is
+  scoped to signed-in chat tool-calling, not backend maintenance, and
+  `sweep-watches` has no AI involvement to begin with -- there is nothing
+  correct to bind it to.
+- The `BASE44_API_KEY` secret already used by `deploy-base44.yml` is a
+  `b44k_`-prefixed *workspace* API key (confirmed by reading
+  `node_modules/base44/dist/cli/index.js`, which gates its own error
+  messages on `value.startsWith("b44k_")`). It authenticates the CLI's
+  management-plane calls (`entities push`, `functions deploy`, ...), not a
+  per-app-user session. `sweep-watches` checks `caller.role === "admin"` via
+  `base44.auth.me()` on whatever token the caller presents, so a scheduled
+  external caller needs a real admin-role user's credentials
+  (`base44.auth.loginViaEmailPassword`), not the workspace API key.
+
+Also confirmed while adding a claim step to `sweep-watches`: `updateMany` is
+already documented elsewhere in this repo
+(`base44/shared/pairing-management.ts`, `revokeAllOwnedPairings`) as
+returning `{ updated: 0 }` on the local Base44 runtime for a service-role
+call even when the filter matches rows. The claim step therefore uses the
+same per-row `filter` + `update` workaround already established there,
+rather than reaching for `updateMany` again.
