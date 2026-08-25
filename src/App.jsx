@@ -236,7 +236,7 @@ function isHttpUrl(value) {
 }
 
 function FieldValue({ value }) {
-  if (!isHttpUrl(value)) return <>{String(value)}</>;
+  if (!isHttpUrl(value)) return <span dir="auto">{String(value)}</span>;
   const url = String(value).trim();
   return (
     <a className="field-link" href={url} target="_blank" rel="noreferrer" title={url} onClick={(event) => event.stopPropagation()}>
@@ -247,6 +247,14 @@ function FieldValue({ value }) {
 
 function screenshotUrlFor(clip) {
   return clip?.screenshot_id || (typeof clip?.screenshot === "string" ? clip.screenshot : clip?.screenshot?.url) || "";
+}
+
+// Cards need a captured screenshot to earn their extra visual weight over a
+// dense Table row; a favicon (rendered separately by SourceFavicon) doesn't
+// count, only a real clip screenshot does.
+function collectionHasCapturedImages(records, clips) {
+  const clipsById = new Map(clips.map((clip) => [clip.id, clip]));
+  return records.some((record) => !!screenshotUrlFor(clipsById.get(record.clip_id)));
 }
 
 function truncate(value, maxLength) {
@@ -1099,7 +1107,7 @@ function RecordCardGrid({ records, columns, clipsById, enrichments = [], watchRu
   if (!records.length) return <div className="table-empty">Waiting for a matching clip…</div>;
 
   const primaryColumn = columns[0];
-  const secondaryColumns = columns.slice(1, 3);
+  const secondaryColumns = columns.slice(1);
   const latestChangeByRecord = new Map();
   for (const enrichment of enrichments) {
     const current = latestChangeByRecord.get(enrichment.record_id);
@@ -1134,7 +1142,7 @@ function RecordCardGrid({ records, columns, clipsById, enrichments = [], watchRu
               )}
             </div>
             <div className="record-card-body">
-              <div className="record-card-title">{String(title)}</div>
+              <div className="record-card-title" dir="auto">{String(title)}</div>
               {secondaryColumns.map((column) => {
                 const value = fields[column.name];
                 if (value === undefined || value === null || value === "") return null;
@@ -1292,7 +1300,7 @@ function RecordDetail({ record, clip, enrichments, watch, onClose, onRefresh, is
     <div className="detail-overlay" role="presentation" onMouseDown={onClose}>
       <aside className="detail-panel detail-panel-split" role="dialog" aria-modal="true" aria-label="Item detail" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-head">
-          <div><div className="eyebrow">original context + live fields</div><h2>{fields.title || hostFromUrl(record.source_url)}</h2></div>
+          <div><div className="eyebrow">original context + live fields</div><h2 dir="auto">{fields.title || hostFromUrl(record.source_url)}</h2></div>
           <button className="icon-button" onClick={onClose} aria-label="Close"><X size={19} /></button>
         </div>
         <div className="detail-split">
@@ -1955,10 +1963,6 @@ export default function App() {
     setActiveCollectionId(selectedCollectionId);
     setActiveMissionId((current) => current && missions.some((item) => item.id === current) ? current : "");
     const next = { missions, collections, records, clips, enrichments, routingDecisions, watchRules, refreshAttempts, extensionInstalls };
-    setCollectionDisplayModes((current) => {
-      if (!selectedCollectionId || current[selectedCollectionId]) return current;
-      return { ...current, [selectedCollectionId]: "cards" };
-    });
     setData(next);
     setDataMeta({
       missions: { hasMore: missions.length >= DASHBOARD_LIST_LIMIT, total: null },
@@ -1989,10 +1993,6 @@ export default function App() {
     setRecordPage(0);
     setActiveView("library");
     if (window.location.pathname !== "/library") window.history.pushState({}, "", "/library");
-    setCollectionDisplayModes((current) => {
-      if (!collectionId || current[collectionId]) return current;
-      return { ...current, [collectionId]: "cards" };
-    });
   }, []);
 
   const navigateWorkspace = useCallback((view) => {
@@ -2540,6 +2540,7 @@ export default function App() {
   const recordPageStart = recordPage * RECORDS_PAGE_SIZE;
   const activeRecords = activeCollectionRecords.slice(recordPageStart, recordPageStart + RECORDS_PAGE_SIZE);
   const activeCollectionHasMorePages = activeCollectionRecords.length > recordPageStart + RECORDS_PAGE_SIZE;
+  const activeCollectionDefaultDisplayMode = collectionHasCapturedImages(activeCollectionRecords, data.clips) ? "cards" : "table";
   const selectedClip = data.clips.find((clip) => clip.id === selectedRecord?.clip_id);
   const selectedEnrichments = data.enrichments.filter((item) => item.record_id === selectedRecord?.id);
   const selectedWatch = data.watchRules.find((watch) => watch.record_id === selectedRecord?.id);
@@ -2668,7 +2669,7 @@ export default function App() {
               {hasUnwatchedComparableItems && !dismissedGuides.watch && <div className="context-strip"><Radio size={15} /><span><b>These Items share fields.</b> Create a watch to hear when one changes.</span><button type="button" className="text-button" onClick={() => openWatchDialog(activeCollectionRecords.find((record) => !data.watchRules.some((watch) => watch.record_id === record.id)))}>Create watch</button><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, watch: true }))}><X size={14} /></button></div>}
               {activeCollectionRecords.length >= 3 && !dismissedGuides.ask && <div className="context-strip"><MessageCircle size={15} /><span><b>Ask Magpie can compare this Collection.</b> Answers stay grounded in these Items and their fields.</span><button type="button" className="text-button" onClick={() => setIsAgentOpen(true)}>Ask</button><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, ask: true }))}><X size={14} /></button></div>}
             </div>
-            <RecordTable collection={activeCollection} collections={data.collections} records={activeRecords} totalCount={activeCollectionRecords.length} clips={data.clips} enrichments={data.enrichments} watchRules={data.watchRules} displayMode={collectionDisplayModes[activeCollection?.id] ?? "cards"} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onSelectCollection={selectCollectionAnywhere} onDeleteCollection={deleteCollection} isDeletingCollection={deletingCollectionId === activeCollection?.id} collectionDeleteSummary={collectionDeleteSummary} onOpenOnboardingTour={() => { navigateWorkspace("nest"); setIsCaptureGuideOpen(true); }} refreshingRecordId={isRefreshing ? selectedRecord?.id : null} onDisplayModeChange={(mode) => activeCollection && setCollectionDisplayModes((current) => ({ ...current, [activeCollection.id]: mode }))} onAsk={() => setIsAgentOpen(true)} />
+            <RecordTable collection={activeCollection} collections={data.collections} records={activeRecords} totalCount={activeCollectionRecords.length} clips={data.clips} enrichments={data.enrichments} watchRules={data.watchRules} displayMode={collectionDisplayModes[activeCollection?.id] ?? activeCollectionDefaultDisplayMode} page={recordPage} hasMore={activeCollectionHasMorePages} onPageChange={changeRecordPage} onSelect={selectRecord} onSelectCollection={selectCollectionAnywhere} onDeleteCollection={deleteCollection} isDeletingCollection={deletingCollectionId === activeCollection?.id} collectionDeleteSummary={collectionDeleteSummary} onOpenOnboardingTour={() => { navigateWorkspace("nest"); setIsCaptureGuideOpen(true); }} refreshingRecordId={isRefreshing ? selectedRecord?.id : null} onDisplayModeChange={(mode) => activeCollection && setCollectionDisplayModes((current) => ({ ...current, [activeCollection.id]: mode }))} onAsk={() => setIsAgentOpen(true)} />
           </section>
         )}
         {activeView === "signals" && <SignalsSurface records={data.records} enrichments={data.enrichments} watchRules={data.watchRules} refreshAttempts={data.refreshAttempts} onSelectRecord={selectRecord} onToggleWatch={toggleSelectedWatch} togglingWatchId={togglingWatchId} onCreateWatch={openWatchDialog} />}

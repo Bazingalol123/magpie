@@ -565,8 +565,8 @@ button:disabled { cursor: wait; opacity: .7; }
   .detail-overlay { align-items: stretch; }
   .detail-panel { width: 100%; border-left: 0; padding: 20px 16px 28px; }
   .detail-head h2 { font-size: 24px; }
-  .detail-actions { align-items: stretch; flex-direction: column; gap: 8px; }
-  .detail-actions .secondary-button { min-height: 44px; justify-content: center; }
+  .detail-actions { align-items: center; gap: 8px; }
+  .detail-actions .secondary-button { min-height: 44px; flex: 1 1 auto; justify-content: center; }
   .secondary-button, .text-button, .danger-button, .candidate-actions button { min-height: 44px; }
 }
 
