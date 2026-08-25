@@ -1177,3 +1177,17 @@ Also hardened `entry.ts` to tolerate a bodyless request (`readJson(req)`
 previously 400'd on an empty body, which a scheduled trigger might well
 send) so that question can actually be tested without a body-parsing error
 masking the real answer.
+
+**Second follow-up, same day — the native path is closed, not just unverified:**
+deploying `function.jsonc` failed outright: `functions deploy` returned
+`409 "This app uses Workflows — legacy automations are disabled for it"`.
+This app has Base44's newer "Workflows" system enabled, which permanently
+disables the legacy `automations` field this CLI mechanism relies on — this
+isn't a transient error or a config mistake, it's Base44's own policy for
+any app that has Workflows on. Worse, since a function's code and its
+`automations` deploy together as one unit, the 409 blocked
+`sweep-watches`'s *code* update too (the deploy log shows `23 unchanged, 1
+error` — every other function deployed fine, only `sweep-watches` failed
+entirely). `function.jsonc` was removed and `sweep-watches` redeployed on
+its own. The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
+now the only scheduling path for this function, not a fallback.

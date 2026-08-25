@@ -592,10 +592,15 @@ Built this round, all local-only so far:
    or opening a PR is not enough for the cron to actually fire; it needs to
    land on `main`.
 
-**Prefer trying the native path first:** `base44/functions/sweep-watches/function.jsonc`
-now defines the same 15-minute schedule as a Base44 automation, with no
-Agent, no GitHub Actions, and no extra secrets — deploy it with a normal
-`functions deploy` and see whether it actually fires and whether it gets
-past the `role: admin` check (unverified from this environment — see
-`docs/DECISIONS.md`, 2026-08-25 follow-up). If it works, the GitHub Actions
-workflow and its three owner-setup steps above become unnecessary.
+**The native path is closed, not just unverified:** the `function.jsonc`
+attempt was tried and rejected outright — `functions deploy` returned
+`409 "This app uses Workflows — legacy automations are disabled for it"`
+(this app has Base44's Workflows system on, which permanently disables the
+older `automations` mechanism). Worse, that 409 blocked `sweep-watches`'s
+code deploy too, since a function's code and its automations ship as one
+unit — the concurrency fix did not go live on that attempt.
+`function.jsonc` has been removed and `sweep-watches` redeployed on its
+own. **The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
+now the only path** — the three owner-setup steps above (dedicated
+admin account, `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets, approve
+the deploy) are required, not optional.
