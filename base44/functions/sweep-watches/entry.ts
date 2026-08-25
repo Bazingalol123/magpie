@@ -10,7 +10,10 @@ Deno.serve(async (req) => {
     const caller = await base44.auth.me();
     if (!caller || caller.role !== "admin") return json({ error: "Admin authorization is required" }, 403);
 
-    const { limit } = await readJson(req);
+    // A scheduled trigger (Base44 automation or the GitHub Actions fallback)
+    // may not send a body at all; readJson() 400s on an empty body, which
+    // would silently break every scheduled run before it even starts.
+    const { limit } = await readJson(req).catch(() => ({}));
     const watchLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
     const result = await sweepDueWatches(base44, watchLimit);
 

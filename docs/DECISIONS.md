@@ -1159,3 +1159,21 @@ so per-row `filter` + `update` is used, same as that existing workaround);
 it shrinks the double-processing window from "the whole batch's real
 processing time" to "the claim loop's time", which is proportionate given a
 single external scheduler and batches capped at 50.
+
+**Follow-up, same day:** reading the Base44 CLI's own bundled source
+(`node_modules/base44/dist/cli/index.js`) turned up a native scheduling
+mechanism this repo hadn't used yet: a `function.jsonc` config file (parsed
+as JSON5, so comments are fine) sitting next to a function's `entry.ts`,
+with an `automations` array supporting a plain "repeat every N minutes"
+schedule with no Agent binding at all — a different mechanism from the
+dashboard's Agent-bound "Workflow" builder. Added
+`base44/functions/sweep-watches/function.jsonc` (every 15 minutes,
+`function_args: { limit: 20 }`) as the preferred path; the GitHub Actions
+cron (`.github/workflows/sweep-watches.yml`) stays as a working fallback
+since one thing about the native path is genuinely unverified from here:
+whether Base44's automation trigger presents the call with an admin-role
+caller, which `sweep-watches`'s `caller.role === "admin"` check requires.
+Also hardened `entry.ts` to tolerate a bodyless request (`readJson(req)`
+previously 400'd on an empty body, which a scheduled trigger might well
+send) so that question can actually be tested without a body-parsing error
+masking the real answer.

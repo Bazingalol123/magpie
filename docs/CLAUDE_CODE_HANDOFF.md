@@ -587,3 +587,15 @@ Built this round, all local-only so far:
    `main` — no separate "enable" step, but it will fail loudly (missing env
    vars, script `process.exit(2)`) until step 2 is done, and will 403 from
    `sweep-watches` itself until step 1's account actually has `role: admin`.
+   Note: GitHub only evaluates `schedule:` triggers from workflow files on
+   the repository's **default branch** — pushing this to a feature branch
+   or opening a PR is not enough for the cron to actually fire; it needs to
+   land on `main`.
+
+**Prefer trying the native path first:** `base44/functions/sweep-watches/function.jsonc`
+now defines the same 15-minute schedule as a Base44 automation, with no
+Agent, no GitHub Actions, and no extra secrets — deploy it with a normal
+`functions deploy` and see whether it actually fires and whether it gets
+past the `role: admin` check (unverified from this environment — see
+`docs/DECISIONS.md`, 2026-08-25 follow-up). If it works, the GitHub Actions
+workflow and its three owner-setup steps above become unnecessary.
