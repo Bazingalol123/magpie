@@ -18,9 +18,24 @@ if (!appId || !email || !password) {
 
 const base44 = createClient({ appId, serverUrl: APP_ORIGIN, appBaseUrl: APP_ORIGIN });
 
-await base44.auth.loginViaEmailPassword(email, password);
+// A run hung on one of these two calls for 33+ minutes with no error
+// (2026-08-25) -- neither the SDK nor a bare `fetch` times out on its own,
+// so a stalled request just runs forever otherwise. This gives a clear,
+// attributable error instead of relying on the workflow's outer
+// timeout-minutes to eventually kill it with no diagnostic.
+function withTimeout(promise, label, ms = 60_000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+  ]);
+}
 
-const result = await base44.functions.invoke("sweep-watches", limit ? { limit: Number(limit) } : {});
+await withTimeout(base44.auth.loginViaEmailPassword(email, password), "loginViaEmailPassword");
+
+const result = await withTimeout(
+  base44.functions.invoke("sweep-watches", limit ? { limit: Number(limit) } : {}),
+  "functions.invoke(sweep-watches)",
+);
 
 console.log(`sweep-watches processed ${result.processed} watch(es)`);
 for (const entry of result.results ?? []) {
