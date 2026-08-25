@@ -2445,8 +2445,16 @@ builder or an event broker.
   call returns nothing right after a sweep claims its batch) plus the full
   local Deno suite pass 160/160 of the tests runnable without network access
   to `jsr.io` in this environment; `deno check` on every Function entry point
-  is clean. **Not yet deployed or exercised against production** --
-  `sweep-watches` still needs a normal `functions deploy`, and the workflow
-  needs `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets for a real
-  admin-role Base44 user, which the owner still needs to create/add (see
-  `docs/CLAUDE_CODE_HANDOFF.md`). No entities changed; no migration needed.
+  is clean. No entities changed; no migration needed.
+- **First deploy attempt failed (2026-08-25):** the `function.jsonc` native
+  automation (see BUILD_GUIDE 68 history / `docs/DECISIONS.md`) was rejected
+  by `functions deploy` with `409 "This app uses Workflows — legacy
+  automations are disabled for it"` -- a permanent policy for this app, not
+  a transient error. Because a function's code and its automations deploy
+  as one unit, this also blocked `sweep-watches`'s code update (deploy log:
+  `23 unchanged, 1 error`). `function.jsonc` removed; `sweep-watches`
+  redeployed on its own. The GitHub Actions cron
+  (`.github/workflows/sweep-watches.yml`) is the only scheduling path for
+  this function now. It still needs `SWEEP_ADMIN_EMAIL`/
+  `SWEEP_ADMIN_PASSWORD` secrets for a real admin-role Base44 user, which
+  the owner still needs to create/add (see `docs/CLAUDE_CODE_HANDOFF.md`).
