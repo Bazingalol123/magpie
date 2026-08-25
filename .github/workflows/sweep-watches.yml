@@ -28,6 +28,12 @@ on:
 jobs:
   sweep:
     runs-on: ubuntu-latest
+    # A run got stuck on "Run sweep-watches" for 33+ minutes with no
+    # visible error (2026-08-25) -- the script has no timeout on its own
+    # network calls (login, then invoking the function), so a hung request
+    # just runs forever, bounded only by GitHub's ~6-hour default job
+    # timeout. This caps the whole job tightly instead.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
