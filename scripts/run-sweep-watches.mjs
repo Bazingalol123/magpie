@@ -32,10 +32,15 @@ function withTimeout(promise, label, ms = 60_000) {
 
 await withTimeout(base44.auth.loginViaEmailPassword(email, password), "loginViaEmailPassword");
 
-const result = await withTimeout(
+const response = await withTimeout(
   base44.functions.invoke("sweep-watches", limit ? { limit: Number(limit) } : {}),
   "functions.invoke(sweep-watches)",
 );
+const result = response?.data;
+
+if (!result || typeof result.processed !== "number" || !Array.isArray(result.results)) {
+  throw new Error("sweep-watches returned an invalid response");
+}
 
 console.log(`sweep-watches processed ${result.processed} watch(es)`);
 for (const entry of result.results ?? []) {

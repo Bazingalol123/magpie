@@ -2455,6 +2455,19 @@ builder or an event broker.
   `23 unchanged, 1 error`). `function.jsonc` removed; `sweep-watches`
   redeployed on its own. The GitHub Actions cron
   (`.github/workflows/sweep-watches.yml`) is the only scheduling path for
-  this function now. It still needs `SWEEP_ADMIN_EMAIL`/
-  `SWEEP_ADMIN_PASSWORD` secrets for a real admin-role Base44 user, which
-  the owner still needs to create/add (see `docs/CLAUDE_CODE_HANDOFF.md`).
+  this function now. The required admin credentials were subsequently added;
+  their first authenticated dispatch exposed the response-wrapper issue in
+  checkpoint 69.
+
+### 69. Correct the scheduled runner's Base44 response handling
+
+- [x] Unwrap the `response.data` payload returned by
+  `base44.functions.invoke("sweep-watches")` before reading the sweep summary.
+- [x] Reject malformed responses instead of printing an undefined processed
+  count and silently discarding per-watch failures.
+- [x] Add a regression check for the SDK response boundary.
+- **Files:** `scripts/run-sweep-watches.mjs`,
+  `tests/sweep-watches-runner.test.ts`, `docs/ENGINEERING_NOTES.md`.
+- **You'll know this works when:** `deno test
+  tests/sweep-watches-runner.test.ts` passes, and a dispatched Sweep Watches
+  run prints a numeric `sweep-watches processed N watch(es)` summary.
