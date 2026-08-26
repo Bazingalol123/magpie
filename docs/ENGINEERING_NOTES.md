@@ -1907,3 +1907,14 @@ returning `{ updated: 0 }` on the local Base44 runtime for a service-role
 call even when the filter matches rows. The claim step therefore uses the
 same per-row `filter` + `update` workaround already established there,
 rather than reaching for `updateMany` again.
+
+## 2026-08-26 — the scheduled runner must unwrap Function response data
+
+The first authenticated GitHub Actions invocation printed
+`sweep-watches processed undefined watch(es)` even though login and the
+Function call both completed. Base44's `functions.invoke()` returns a response
+wrapper, while the runner incorrectly read `processed` and `results` from the
+wrapper instead of its `data` payload. This also meant per-watch failures were
+silently treated as an empty result list. The runner now unwraps `response.data`
+and validates the complete `{ processed, results }` contract before reporting
+success, with a static regression test covering the integration boundary.
