@@ -1191,3 +1191,33 @@ error` — every other function deployed fine, only `sweep-watches` failed
 entirely). `function.jsonc` was removed and `sweep-watches` redeployed on
 its own. The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only scheduling path for this function, not a fallback.
+
+## 2026-08-27 — Ask Magpie conversation history ships without delete/rename (issue #90 scope cut)
+
+Issue #90 asks for "Chat Conversation History with CRUD options and RLS so
+users can't see other's conversations." This checkpoint (BUILD_GUIDE 70)
+ships List (browse past conversations) + Read (resume one) + the Create that
+already existed ("New chat"). Update and Delete were deliberately left out.
+
+- **RLS is not a new requirement.** `base44.agents.listConversations` /
+  `getConversations` are documented (`.claude/skills/base44-sdk/references/
+  base44-agents.md`) as scoped to "all **user's** conversations" — the
+  platform already isolates conversations per authenticated user the same
+  way it isolates entities. The panel's pre-existing single-conversation
+  load already trusted this. Nothing about listing more of the same
+  already-scoped data changes that trust boundary.
+- **Delete/rename are not implemented because the SDK does not expose
+  them.** The `agents` module's documented method set is `createConversation`,
+  `getConversations`, `getConversation`, `listConversations`,
+  `subscribeToConversation`, `addMessage`, `getWhatsAppConnectURL` — no
+  delete or update. Per CLAUDE.md's Base44 workflow rule ("do not guess SDK
+  method names"), building a delete/rename control without a documented
+  backing call would mean guessing at an undocumented Base44 REST path from
+  a UI component, which is out of bounds without checking with Base44
+  directly first.
+
+Follow-up for whoever picks this back up: if conversation deletion/rename is
+still wanted, first confirm with Base44 (support/docs) whether a supported
+path exists before adding backend code against it. Until then, issue #90
+should be reopened/relabeled to reflect List+Resume as done and
+Delete/Rename as a separate, blocked follow-up rather than closed outright.
