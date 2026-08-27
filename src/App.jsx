@@ -1621,26 +1621,50 @@ function messageText(content) {
 
 const THINKING_STAGES = ["Reading your Magpie evidence…", "Still thinking — checking a few things…", "Almost there…"];
 
+const SEND_TIMEOUT_MS = 45_000;
+
 function MagpieAgentPanel({ project, collection, record, onClose }) {
   const [conversation, setConversation] = useState(null);
   const [input, setInput] = useState("");
   const [isLoadingConversation, setIsLoadingConversation] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState(null);
   const [error, setError] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [history, setHistory] = useState([]);
   const thinkingLabel = useStagedMessage(isSending, THINKING_STAGES);
+  const sendTimeoutRef = useRef(null);
+
+  const clearSendTimeout = () => {
+    if (sendTimeoutRef.current) {
+      clearTimeout(sendTimeoutRef.current);
+      sendTimeoutRef.current = null;
+    }
+  };
+  // Stops the waiting UI without discarding the user's own message bubble --
+  // the request may already have gone through server-side, just slowly, so
+  // pulling the message back would make it look lost when it might not be.
+  const stopWaiting = (message) => {
+    clearSendTimeout();
+    setIsSending(false);
+    if (message) setError(message);
+  };
+
+  useEffect(() => () => clearSendTimeout(), []);
 
   useEffect(() => {
     let active = true;
-    base44.agents.listConversations({
-      q: { agent_name: "magpie_organizer" },
-      sort: "-updated_date",
-      limit: 1,
-    })
+    // No `q` filter here: this local environment's listConversations
+    // silently returns zero results whenever a `q: { agent_name: ... }`
+    // filter is passed, even though matching conversations exist (verified
+    // directly against a live conversation with getConversations()). Since
+    // this app only ever creates conversations for magpie_organizer, fetch
+    // unfiltered and filter client-side instead of trusting the server-side
+    // filter.
+    base44.agents.listConversations({ sort: "-updated_date", limit: 5 })
       .then((conversations) => {
-        if (active) setConversation(conversations[0] ?? null);
+        if (active) setConversation(conversations.find((item) => item.agent_name === "magpie_organizer") ?? null);
       })
       .catch((loadError) => {
         if (active) setError(loadError.message || "Could not load Magpie Agent conversations.");
@@ -1659,7 +1683,18 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
       const runningTool = latest?.tool_calls?.some((tool) =>
         tool.status === "running" || tool.status === "waiting_for_user_input"
       );
-      if (latest?.role === "assistant" && !runningTool) setIsSending(false);
+      if (latest?.role === "assistant" && !runningTool) {
+        clearSendTimeout();
+        setIsSending(false);
+        setPendingUserMessage(null);
+      } else if (latest?.role === "user") {
+        // The realtime push already carries our own message back to us --
+        // drop the optimistic echo (if it's the one that just landed) so it
+        // isn't shown twice while we keep waiting on the assistant's reply.
+        // Uses the functional form since this callback's closure is fixed
+        // at subscribe time and won't see later `pendingUserMessage` updates.
+        setPendingUserMessage((current) => (current && messageText(latest.content) === current.content ? null : current));
+      }
     });
   }, [conversation?.id]);
 
@@ -1680,6 +1715,8 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
   const startNewConversation = async () => {
     setError("");
     setIsHistoryOpen(false);
+    stopWaiting();
+    setPendingUserMessage(null);
     setIsLoadingConversation(true);
     try {
       await createConversation();
@@ -1695,12 +1732,10 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
     setIsLoadingHistory(true);
     setError("");
     try {
-      const list = await base44.agents.listConversations({
-        q: { agent_name: "magpie_organizer" },
-        sort: "-updated_date",
-        limit: 25,
-      });
-      setHistory(list);
+      // See the mount-time load above: the `q` filter unreliably returns
+      // zero results here, so fetch unfiltered and filter client-side.
+      const list = await base44.agents.listConversations({ sort: "-updated_date", limit: 25 });
+      setHistory(list.filter((item) => item.agent_name === "magpie_organizer"));
     } catch (historyError) {
       setError(historyError.message || "Could not load conversation history.");
     } finally {
@@ -1715,6 +1750,8 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
     }
     setError("");
     setIsHistoryOpen(false);
+    stopWaiting();
+    setPendingUserMessage(null);
     setIsLoadingConversation(true);
     try {
       const full = await base44.agents.getConversation(conversationId);
@@ -1733,9 +1770,26 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
     setError("");
     setIsSending(true);
     setInput("");
+    const pendingId = `pending-${Date.now()}`;
+    setPendingUserMessage({ id: pendingId, role: "user", content });
+    clearSendTimeout();
+    sendTimeoutRef.current = setTimeout(() => {
+      stopWaiting("Magpie is taking longer than expected to reply. Your message was sent — wait a moment or try again.");
+    }, SEND_TIMEOUT_MS);
+    // Clears the optimistic bubble only if it's still the one this call
+    // created -- if the send timed out and a later message was already
+    // sent, a slow/late resolution here must not clobber that newer bubble.
+    const clearOwnPending = () => setPendingUserMessage((current) => (current?.id === pendingId ? null : current));
     try {
       const activeConversation = conversation ?? await createConversation();
-      const message = await base44.agents.addMessage(activeConversation, {
+      // addMessage()'s resolved value is not reliably the user's own echoed
+      // message (it can be the assistant's reply once the turn completes) --
+      // don't guess its shape. Once it resolves, the turn is done either
+      // way, so re-fetch the authoritative full conversation via
+      // getConversation() (documented as the complete stored conversation,
+      // unlike the realtime subscription's truncated shape) rather than
+      // hand-merging a value of uncertain identity into local state.
+      await base44.agents.addMessage(activeConversation, {
         role: "user",
         content,
         custom_context: [{
@@ -1750,24 +1804,27 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
           },
         }],
       });
-      setConversation((current) => {
-        const base = current?.id === activeConversation.id ? current : activeConversation;
-        const messages = base.messages ?? [];
-        return messages.some((item) => item.id === message.id)
-          ? base
-          : { ...base, messages: [...messages, message] };
-      });
-    } catch (sendError) {
+      const full = await base44.agents.getConversation(activeConversation.id);
+      setConversation(full ?? activeConversation);
+      clearSendTimeout();
       setIsSending(false);
+      clearOwnPending();
+    } catch (sendError) {
+      clearSendTimeout();
+      setIsSending(false);
+      clearOwnPending();
       setInput(content);
       setError(sendError.message || "Magpie could not answer right now.");
     }
   };
 
-  const messages = (conversation?.messages ?? []).filter((message) =>
+  const realMessages = (conversation?.messages ?? []).filter((message) =>
     !message.hidden && (message.role === "user" || message.role === "assistant") &&
     messageText(message.content)
   );
+  const lastReal = realMessages.at(-1);
+  const pendingAlreadyLanded = pendingUserMessage && lastReal?.role === "user" && messageText(lastReal.content) === pendingUserMessage.content;
+  const messages = pendingUserMessage && !pendingAlreadyLanded ? [...realMessages, pendingUserMessage] : realMessages;
   const contextLabel = record
     ? "Current Item"
     : collection
@@ -1825,7 +1882,7 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
           {isLoadingConversation ? (
             <div className="agent-loading"><LoaderCircle className="spin" size={19} /> Loading conversation…</div>
           ) : messages.length ? messages.map((message) => (
-            <div className={`agent-message ${message.role}`} key={message.id}>
+            <div className={`agent-message ${message.role}${message === pendingUserMessage ? " is-pending" : ""}`} key={message.id}>
               <span>{message.role === "assistant" ? "Magpie" : "You"}</span>
               {message.role === "assistant" ? (
                 <div className="agent-md">
@@ -1849,7 +1906,12 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
               </div>
             </div>
           )}
-          {isSending && <div className="agent-thinking"><LoaderCircle className="spin" size={14} /> {thinkingLabel}</div>}
+          {isSending && (
+            <div className="agent-thinking">
+              <LoaderCircle className="spin" size={14} /> {thinkingLabel}
+              <button type="button" className="text-button" onClick={() => stopWaiting()}>Cancel</button>
+            </div>
+          )}
         </section>
         )}
 

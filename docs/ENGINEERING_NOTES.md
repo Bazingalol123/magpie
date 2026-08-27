@@ -1951,3 +1951,20 @@ things were observed, both local-dev-only:
 Net effect: Ask Magpie's list/resume UI could be verified locally (button,
 empty state, toggle), but a real end-to-end conversation-history round trip
 currently requires the deployed app.
+
+## 2026-08-27 — `agents.listConversations`'s `q: { agent_name }` filter silently returns zero rows; `window.__magpieBase44` is the fast way to check
+
+While debugging the BUILD_GUIDE 71 owner bug report, `base44.agents.listConversations({ q: { agent_name: "magpie_organizer" }, sort: "-updated_date", limit: N })` returned `[]` against the owner's real local `npx base44 dev` session, every time, regardless of `limit` or whether `sort` was present — even though `base44.agents.getConversations()` (no filter) returned 26 real conversations in the same session, all with `agent_name: "magpie_organizer"`. Both the pre-existing mount-time "resume latest conversation" effect and the BUILD_GUIDE 70 history panel used the filtered form and were silently getting zero results back — the mount-time case just never looked broken, because "always start fresh" reads the same as "successfully found nothing to resume."
+
+Not yet confirmed whether this is local-dev-only (matching the already-documented "Local AI-routing calls proxy to real production, and can be slow or 401" pattern) or also broken against the deployed app — this app only has one agent, so the filter was never load-bearing for correctness and the fix (drop the filter, filter `agent_name` client-side) sidesteps the question rather than answering it. Worth confirming directly if a second agent is ever added to this app.
+
+The fastest way to check any of this directly against a real session, rather than guessing from reading `src/App.jsx`, is the dev-only `window.__magpieBase44` hook (`src/api/base44Client.js`, same one `tests-e2e/helpers/dashboard.ts`'s `loginDashboard()` uses) via Playwright's `browser_evaluate`:
+
+```js
+await page.evaluate(async () => {
+  const base44 = window.__magpieBase44;
+  return JSON.stringify(await base44.agents.getConversations());
+});
+```
+
+This is how the `q` filter bug and the `addMessage()` return-shape bug (same BUILD_GUIDE entry) were both confirmed as real rather than inferred — reading a live conversation's actual `messages` array (via `getConversation(id)`) directly out of the owner's own authenticated browser session, no throwaway account or guessed reproduction needed.
