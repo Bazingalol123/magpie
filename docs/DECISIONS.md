@@ -1191,3 +1191,38 @@ error` — every other function deployed fine, only `sweep-watches` failed
 entirely). `function.jsonc` was removed and `sweep-watches` redeployed on
 its own. The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only scheduling path for this function, not a fallback.
+
+## 2026-08-27 — Agent memory stays disabled; a conversation-history list ships instead
+
+The owner asked why enabling Base44 Agent memory was refused when Base44
+scopes memory per authenticated user — i.e. it never leaks across owners.
+That's true and was never the objection. The existing "no cross-conversation
+memory" decision (see "Use one broad configured Agent with narrow authority"
+above, and `docs/ENGINEERING_NOTES.md`, 2026-07-24) is about auditability and
+this product's full-delete guarantee, not tenant isolation: every other thing
+the Agent can act on is an inspectable, ownable entity, and enabling memory
+would add a second, opaque store of "facts" the dashboard has no UI to view,
+correct, or purge when the Item it's about is deleted. That reasoning is
+unchanged and memory stays off. What the owner actually needed — the ability
+to return to a conversation instead of losing it — was already available as
+data; only a list view was missing. See `docs/BUILD_GUIDE.md` #70.
+
+Two scope limits in that list view were deliberate, not oversights:
+
+- **No automated owner-isolation fixture for `listConversations`.** The four
+  `agent-*` Functions get Deno fixtures proving one owner's ID never leaks
+  another's data because this repo owns that code. `listConversations` is a
+  Base44-platform SDK call with no `entry.ts` behind it in this repo, so
+  there is nothing here to unit-test; its scoping is trusted at the same
+  level as every other `base44.agents.*`/`base44.entities.*` call already
+  made from the authenticated dashboard SDK. This should be manually
+  confirmed with two owner accounts during the already-queued browser QA
+  pass, not treated as covered by the automated suite.
+- **No new fetch to resolve a past conversation's Project/Collection/Record
+  name.** Labeling only matches a past conversation's stored metadata IDs
+  against whatever the panel's current props already loaded, falling back to
+  the conversation's own first message. This avoids adding a new backend
+  call or a new way to query entities by arbitrary ID from the dashboard,
+  and it means a conversation about a since-deleted Item degrades to its
+  message preview instead of erroring — without any special-case code for
+  "the referenced Item is gone."

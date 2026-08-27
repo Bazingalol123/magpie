@@ -604,3 +604,42 @@ own. **The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only path** — the three owner-setup steps above (dedicated
 admin account, `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets, approve
 the deploy) are required, not optional.
+
+## 2026-08-27 — Agent memory request declined; conversation-history list added instead, local only
+
+The owner asked to enable Base44 Agent memory (`magpie_organizer`), then
+separately asked why past "Ask Magpie" conversations disappear on leaving
+the dashboard. `base44/agents/magpie_organizer.jsonc` still has
+`memory_config: { enabled: false }`, enforced by
+`tests/agent-config.test.ts` — memory was not enabled. The documented
+reason (`docs/DECISIONS.md`, 2026-07-24 entry and its 2026-08-27 follow-up)
+is auditability and this product's full-delete guarantee, not per-user
+isolation, which Base44 already provides regardless of the memory setting.
+If the live Base44 console has memory toggled on for this Agent outside
+this repo, that is drift against the checked-in config and the CI test —
+worth confirming next time the dashboard is opened.
+
+What shipped instead, all local only:
+
+- A past-conversations list in the "Ask Magpie" panel. Conversations were
+  already durable server-side (`createConversation`/`addMessage`/
+  `subscribeToConversation`); the panel just never fetched more than the
+  single most recent one. A history toggle now lists up to 20, labeled from
+  already-loaded context or the conversation's own first message (no new
+  entity fetch), and selecting one resumes it through the existing live
+  subscription. See `docs/BUILD_GUIDE.md` #70 for the full breakdown and
+  `docs/DECISIONS.md` (2026-08-27) for what was deliberately left out (an
+  automated owner-isolation fixture for the platform-managed
+  `listConversations` call — there's no `entry.ts` in this repo to test
+  against it, so that needs manual two-owner verification instead).
+- **Verified locally:** `npm run build` succeeds; `rg -n "@base44/sdk"
+  extension` is clean. This session's sandbox has no `deno` binary, so the
+  Deno suite could not be re-run here — nothing in `base44/functions`,
+  `base44/shared`, or `tests/` changed, so it isn't expected to move, but
+  `ci.yml` should still confirm it on push. No entities, Functions, or Agent
+  config changed; nothing here needs a deploy approval beyond the normal
+  frontend release gate.
+- **Not done yet:** manually verifying `listConversations` owner-isolation
+  with two real accounts, and folding this into the manual browser QA pass
+  this handoff already had queued next (review, deletion, onboarding,
+  blocked-source recovery, Side Panel migration — see "Known gaps" above).

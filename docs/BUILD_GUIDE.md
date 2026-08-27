@@ -2471,3 +2471,47 @@ builder or an event broker.
 - **You'll know this works when:** `deno test
   tests/sweep-watches-runner.test.ts` passes, and a dispatched Sweep Watches
   run prints a numeric `sweep-watches processed N watch(es)` summary.
+
+### 70. Add a past-conversations list to the Magpie Agent panel
+
+The owner asked why "Ask Magpie" conversations disappear when a user leaves
+the dashboard, and separately asked to enable Base44 Agent memory. Memory
+stayed off: `docs/DECISIONS.md`'s "Use one broad configured Agent with
+narrow authority" entry and `docs/ENGINEERING_NOTES.md` (2026-07-24) tie
+memory-disabled to keeping durable context inside auditable entities and
+conversation history, not to per-user data isolation (which Base44 already
+gives regardless of the memory setting) — enabling it would reopen that
+Critical-scored (L4×I5, `docs/V3_1_PRODUCT_AND_RISK_PLAN.md:195`) contract
+without a plan for how memory content is exposed to the owner or purged on
+Item deletion. Conversations were already durable server-side the whole
+time (`base44.agents.createConversation`/`addMessage`/
+`subscribeToConversation`); the panel just never listed more than the
+single most recent one (`limit: 1`). This step only adds that list.
+
+- [x] Add a bounded `listConversations` call (`limit: 20`, sorted
+  `-updated_date`) triggered lazily when the user opens a new history
+  toggle, not on every panel mount.
+- [x] Label each past conversation without any new fetch: match its stored
+  `metadata.project_id`/`collection_id`/`record_id` against the panel's
+  already-loaded `project`/`collection`/`record` props first, else fall back
+  to a preview of its own first user message, else "General conversation".
+  This deliberately never resolves an arbitrary past conversation's IDs
+  against entities the current dashboard context hasn't already loaded —
+  see `docs/DECISIONS.md`.
+- [x] Selecting a past conversation swaps it into the existing
+  `subscribeToConversation` effect (keyed on `conversation?.id`), so it
+  resumes live updates the same way the active conversation already does.
+- **Files:** `src/App.jsx` (`MagpieAgentPanel`, `conversationLabel`),
+  `src/index.css` (`.agent-history-*`).
+- **You'll know this works when:** opening "Ask Magpie", sending a message,
+  clicking "New chat", then opening the history toggle shows the prior
+  conversation and reselecting it restores its messages and keeps
+  streaming updates.
+- **Verified locally (2026-08-27):** `npm run build` succeeds and
+  `rg -n "@base44/sdk" extension` is clean (this change touches only
+  `src/`, not `extension/` or `base44/functions/`, so it does not affect
+  Function type-checking or the Deno suite). The Deno runtime is not
+  available in this session's sandbox, so `deno test tests` could not be
+  re-run locally this round; `ci.yml` covers it on push. No entities,
+  Functions, or Agent config changed; nothing here requires a deploy
+  approval beyond the existing frontend release gate.

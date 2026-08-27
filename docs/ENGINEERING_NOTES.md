@@ -1918,3 +1918,34 @@ wrapper instead of its `data` payload. This also meant per-watch failures were
 silently treated as an empty result list. The runner now unwraps `response.data`
 and validates the complete `{ processed, results }` contract before reporting
 success, with a static regression test covering the integration boundary.
+
+## 2026-08-27 — conversations were already durable; only the list view was missing
+
+The owner separately asked to enable Base44 Agent memory, then asked why
+past "Ask Magpie" conversations disappear on leaving the dashboard. Those
+turned out not to be the same problem. `base44.agents.createConversation` /
+`addMessage` / `subscribeToConversation` (`src/App.jsx`) already persist
+conversations server-side — the panel's only load call
+(`base44.agents.listConversations({ ..., limit: 1 })`) just fetched the
+single most-recent one and never offered a way to see or pick an older one.
+Memory (`memory_config.enabled`) is a different platform feature entirely:
+it would let the Agent recall facts across conversations on its own,
+whereas conversation history is already the auditable transcript this repo's
+docs call out as the intended place for durable context
+(`docs/ENGINEERING_NOTES.md`, 2026-07-24: "Agent memory is explicitly
+disabled because Projects, Collections, Records, RoutingDecisions,
+WatchRules, and conversation history are the auditable sources of truth").
+Base44 scoping conversations/memory per authenticated user (no cross-owner
+leakage) was never in question; the reason memory stayed off is auditability
+and delete-guarantee interaction (does an Item's full-delete purge whatever
+memory referenced it?), not tenant isolation.
+
+One honest gap: `listConversations` is a Base44-platform-managed SDK call,
+not custom backend code in this repo, so there is no `entry.ts` to write a
+Deno owner-isolation fixture against (unlike the four `agent-*` functions,
+which do get exactly that kind of fixture). Its per-user scoping is trusted
+the same way every other `base44.agents.*`/`base44.entities.*` call already
+is when made from the authenticated dashboard SDK context, but it has not
+been independently verified with two real owner accounts. That check
+belongs in the manual browser QA pass `docs/CLAUDE_CODE_HANDOFF.md` already
+has queued next, not in an automated suite this repo can write.
