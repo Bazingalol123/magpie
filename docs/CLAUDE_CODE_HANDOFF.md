@@ -626,14 +626,20 @@ checkpoint 70 and the matching `docs/DECISIONS.md` entry.
   `agents` SDK module has no such method (see the DECISIONS.md entry) —
   ships as List + Read + the pre-existing Create only. Reopen/relabel #90
   rather than treating it as fully closed by this PR.
-- **Verification status:** `npm run build` is clean. Manually driven
-  against `npx base44 dev` with a fresh signed-up test owner via
-  Playwright: the history button, its empty state, and the toggle back to
-  the chat view all confirmed working. Actually populating history with a
-  real conversation could not be verified locally — `agents/conversations`
-  401s against local dev the same way AI-Gateway calls already do (see
-  `docs/ENGINEERING_NOTES.md` 2026-08-27 entry). **Needs a pass against the
-  deployed app to confirm the list/resume path end-to-end before this is
-  considered done**, and before any merge/deploy approval.
+- **Verification status:** `npm run build` is clean, 265/265 Deno tests.
+  First manual pass (throwaway account) couldn't get past
+  `agents/conversations` 401ing against local dev's AI-Gateway proxy. A
+  second pass **against the owner's own real, working local session**
+  surfaced three real bugs — own message not showing, "Almost there" stuck
+  forever with no way to send again, new conversations not appearing in
+  History — all now root-caused and fixed; see BUILD_GUIDE checkpoint 71
+  and the matching `docs/ENGINEERING_NOTES.md` entry (`listConversations`'s
+  `q: { agent_name }` filter silently drops all results; `addMessage()`'s
+  resolved value isn't reliably the user's own message). Re-verified live
+  against that same real session afterward: message send, History list and
+  resume, and New chat all confirmed working end to end.
 - Not merged, not deployed. No entity/function/agent push needed for this
-  change even once verified — it is dashboard-only.
+  change even once verified — it is dashboard-only. Still recommend one
+  more pass against the *deployed* app (not just local dev) before treating
+  issue #90 as fully closed, since the `q`-filter bug's local-dev-vs-prod
+  scope is unconfirmed (see ENGINEERING_NOTES).

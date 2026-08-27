@@ -2533,3 +2533,84 @@ Collection comparison view, or a 3+ Item context strip.
   are the same call shape the panel already made for the single-conversation
   load before this checkpoint. Owner follow-up: confirm the full list/resume
   path against the deployed app before considering issue #90 closed.
+
+### 71. Fix Ask Magpie send flow: message never showed, "Almost there" hung forever, history stayed empty (owner bug report)
+
+Owner tested checkpoint 70 against their real local `npx base44 dev` session
+(a working AI backend, unlike the throwaway account used to verify checkpoint
+70, which flatly 401'd on conversation creation) and hit three symptoms in
+one send: their own message never appeared, the "Almost there…" thinking
+indicator never cleared and blocked sending anything else, and the new
+conversation never showed up in History. All three traced to real bugs,
+confirmed live against the owner's own session via `window.__magpieBase44`
+(the dev-only hook already used by `tests-e2e/helpers/dashboard.ts`) rather
+than guessed from reading the code.
+
+- **Root cause 1 (History empty): `listConversations`'s `q: { agent_name:
+  ... }` filter silently returns zero rows.** Confirmed directly: calling
+  `listConversations({ q: { agent_name: "magpie_organizer" }, ... })`
+  against the owner's real session returned `[]`, while the unfiltered
+  `getConversations()` returned all 26 of the owner's real conversations,
+  every one of them `agent_name: "magpie_organizer"`. This is the exact call
+  shape checkpoint 70's history panel used, and the exact shape the
+  pre-existing mount-time "resume the latest conversation" effect already
+  used before checkpoint 70 touched it — so the mount-time resume was
+  silently broken the same way, just never noticed because "always start a
+  fresh conversation" doesn't look broken by itself.
+  - [x] Fix: drop the `q` filter from both call sites
+    (`base44.agents.listConversations`) and filter `agent_name ===
+    "magpie_organizer"` client-side instead. This app only ever creates
+    conversations for that one agent, so the filter was never load-bearing
+    for correctness, only (unreliably) for the query itself.
+- **Root cause 2 (own message missing, send stuck forever): `sendMessage`
+  assumed `addMessage()`'s resolved value was always the user's own echoed
+  message, and relied entirely on the realtime `subscribeToConversation`
+  push to ever clear `isSending`.** Neither held up: fetching the real
+  conversation via `getConversation()` right after a live send showed
+  `addMessage()`'s turn had actually completed (a 3-message conversation:
+  user text, an intermediate empty-content assistant tool-call message, the
+  final assistant reply) by the time the panel was still showing "Almost
+  there…" — meaning the subscription callback that was supposed to clear
+  `isSending` on seeing an assistant message either never fired for this
+  session or fired on a shape that didn't satisfy the check, and the local
+  merge that only appended `addMessage()`'s return value never actually
+  added the user's own message to render.
+  - [x] Fix: stop trying to hand-merge `addMessage()`'s return value at all.
+    Once `addMessage()` resolves the turn is over either way, so
+    immediately re-fetch with `getConversation(activeConversation.id)` --
+    documented as "the complete stored conversation" -- and use that as the
+    new state, clearing `isSending` right there instead of waiting on the
+    subscription.
+  - [x] Add a client-visible optimistic echo (`pendingUserMessage`) set
+    synchronously before either network call, so the user's own message is
+    visible immediately regardless of round-trip latency; guarded by a
+    per-send id so a late/stale resolution from an abandoned send can't
+    clobber a newer one, and cleared on conversation switch
+    (`startNewConversation`/`resumeConversation`) so it can't leak into a
+    different conversation's view.
+  - [x] Add a 45s client-side timeout (`SEND_TIMEOUT_MS`) plus a manual
+    "Cancel" affordance next to the thinking indicator, both of which stop
+    the waiting UI without discarding the pending message bubble (the send
+    may still complete server-side) -- so a slow or genuinely wedged backend
+    can no longer leave the composer permanently disabled with no way out.
+  - Kept the realtime subscription in place (harmless, and still useful for
+    picking up updates from another tab/session), but it's no longer the
+    only path that can clear `isSending`.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **You'll know this works when:** sending a message shows it immediately
+  (even before the network round-trip finishes); the reply arrives and the
+  composer re-enables without needing the subscription; opening History
+  afterward shows the new conversation; and if a send genuinely hangs, both
+  the 45s timeout and the manual Cancel button return control without
+  losing the sent message.
+- **Verified locally (2026-08-27), against the owner's own working local
+  session (not a throwaway account):** `npm run build` clean, 265/265 Deno
+  tests. Live in-browser (Playwright, driving the owner's real
+  authenticated `npx base44 dev` session): sent two real messages end to
+  end -- own message visible immediately, reply arrived, composer
+  re-enabled, no stuck spinner; opened History and confirmed the real
+  conversation list (26 real conversations, correct previews/dates) where
+  it previously always showed "No past conversations with Magpie yet.";
+  clicked a history row and confirmed it resumed with full message history;
+  confirmed "New chat" resets to the welcome screen; confirmed the Send
+  button is disabled only for empty input, not stuck by a prior send.
