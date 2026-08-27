@@ -733,7 +733,7 @@ const WORKSPACE_VIEWS = [
   { id: "search", label: "Search", icon: Search },
 ];
 
-function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, onManagePairings, isPairing, hasPairingHistory, hasActiveExtension, onOpenDocs, onSignOut }) {
+function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, onManagePairings, isPairing, hasPairingHistory, hasActiveExtension, onOpenDocs, onSignOut, onAsk, isAskOpen }) {
   const pairingAction = hasPairingHistory ? onManagePairings : onPair;
   const pairingLabel = !hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser";
   return (
@@ -748,6 +748,9 @@ function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, 
             </button>
           );
         })}
+        <button type="button" className={isAskOpen ? "active" : ""} onClick={onAsk}>
+          <MessageCircle size={16} /><span>Ask Magpie</span>
+        </button>
       </nav>
       <div className="nav-collections">
         <div className="nav-section-label"><span>collections</span><span>{collections.length}</span></div>
@@ -2711,6 +2714,8 @@ export default function App() {
         isPairing={isPairing}
         hasPairingHistory={hasPairingHistory}
         hasActiveExtension={hasActiveExtension}
+        onAsk={() => setIsAgentOpen(true)}
+        isAskOpen={isAgentOpen}
         onOpenDocs={() => { window.open("/docs/getting-started", "_blank", "noopener"); }}
         onSignOut={handleSignOut}
       />
