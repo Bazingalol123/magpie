@@ -604,3 +604,34 @@ own. **The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only path** — the three owner-setup steps above (dedicated
 admin account, `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets, approve
 the deploy) are required, not optional.
+
+## 2026-08-27 — Ask Magpie conversation history (issue #90), local-only, not merged or deployed
+
+Owner reported two things in the same session: couldn't find "Ask Magpie"
+(it turned out to exist, just tucked into the command palette/mobile
+nav/comparison view with no persistent desktop entry point), and wanted
+conversation history browsing instead of the panel silently loading only
+the most recent conversation. Branch `feat/chat-conversation-history-90`,
+built off a fresh `main` pull. Full detail in `docs/BUILD_GUIDE.md`
+checkpoint 70 and the matching `docs/DECISIONS.md` entry.
+
+- Dashboard-only change (`src/App.jsx`, `src/index.css`): a history button
+  in the Ask Magpie header lists past conversations
+  (`agents.listConversations`) and resumes one on click
+  (`agents.getConversation`). No entity, RLS, or backend change — Low risk
+  per the V3.1 risk matrix's "No-backend UI changes" row.
+- **Scope cut, not a gap:** issue #90 also asks for delete/rename. The
+  `agents` SDK module has no such method (see the DECISIONS.md entry) —
+  ships as List + Read + the pre-existing Create only. Reopen/relabel #90
+  rather than treating it as fully closed by this PR.
+- **Verification status:** `npm run build` is clean. Manually driven
+  against `npx base44 dev` with a fresh signed-up test owner via
+  Playwright: the history button, its empty state, and the toggle back to
+  the chat view all confirmed working. Actually populating history with a
+  real conversation could not be verified locally — `agents/conversations`
+  401s against local dev the same way AI-Gateway calls already do (see
+  `docs/ENGINEERING_NOTES.md` 2026-08-27 entry). **Needs a pass against the
+  deployed app to confirm the list/resume path end-to-end before this is
+  considered done**, and before any merge/deploy approval.
+- Not merged, not deployed. No entity/function/agent push needed for this
+  change even once verified — it is dashboard-only.

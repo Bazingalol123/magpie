@@ -1624,6 +1624,9 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
   const [isLoadingConversation, setIsLoadingConversation] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [history, setHistory] = useState([]);
   const thinkingLabel = useStagedMessage(isSending, THINKING_STAGES);
 
   useEffect(() => {
@@ -1673,11 +1676,48 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
 
   const startNewConversation = async () => {
     setError("");
+    setIsHistoryOpen(false);
     setIsLoadingConversation(true);
     try {
       await createConversation();
     } catch (createError) {
       setError(createError.message || "The Magpie Agent is not available in this environment yet.");
+    } finally {
+      setIsLoadingConversation(false);
+    }
+  };
+
+  const openHistory = async () => {
+    setIsHistoryOpen(true);
+    setIsLoadingHistory(true);
+    setError("");
+    try {
+      const list = await base44.agents.listConversations({
+        q: { agent_name: "magpie_organizer" },
+        sort: "-updated_date",
+        limit: 25,
+      });
+      setHistory(list);
+    } catch (historyError) {
+      setError(historyError.message || "Could not load conversation history.");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const resumeConversation = async (conversationId) => {
+    if (conversationId === conversation?.id) {
+      setIsHistoryOpen(false);
+      return;
+    }
+    setError("");
+    setIsHistoryOpen(false);
+    setIsLoadingConversation(true);
+    try {
+      const full = await base44.agents.getConversation(conversationId);
+      setConversation(full ?? null);
+    } catch (resumeError) {
+      setError(resumeError.message || "Could not load that conversation.");
     } finally {
       setIsLoadingConversation(false);
     }
@@ -1742,12 +1782,42 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
             <div><div className="eyebrow"><AgentIcon size={12} /> evidence-grounded agent</div><h2>Ask Magpie</h2></div>
           </div>
           <div className="agent-head-actions">
+            <button
+              className={`icon-button${isHistoryOpen ? " active" : ""}`}
+              onClick={() => (isHistoryOpen ? setIsHistoryOpen(false) : openHistory())}
+              aria-label="Conversation history"
+              title="Conversation history"
+            >
+              <Clock3 size={16} />
+            </button>
             <button className="agent-new-button" onClick={startNewConversation} disabled={isLoadingConversation}>New chat</button>
             <button className="icon-button" onClick={onClose} aria-label="Close Magpie Agent"><X size={19} /></button>
           </div>
         </header>
         <div className="agent-context"><CircleDot size={12} /><span>Context: {contextLabel}</span></div>
 
+        {isHistoryOpen ? (
+          <section className="agent-history" aria-label="Conversation history">
+            {isLoadingHistory ? (
+              <div className="agent-loading"><LoaderCircle className="spin" size={19} /> Loading history…</div>
+            ) : history.length ? history.map((item) => {
+              const last = (item.messages ?? []).filter((message) => !message.hidden && messageText(message.content)).at(-1);
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={`agent-history-row${item.id === conversation?.id ? " active" : ""}`}
+                  onClick={() => resumeConversation(item.id)}
+                >
+                  <span className="agent-history-preview">{last ? messageText(last.content) : "New conversation"}</span>
+                  <span className="agent-history-date">{relativeDate(item.updated_date)}</span>
+                </button>
+              );
+            }) : (
+              <div className="agent-history-empty">No past conversations with Magpie yet.</div>
+            )}
+          </section>
+        ) : (
         <section className="agent-messages" aria-live="polite">
           {isLoadingConversation ? (
             <div className="agent-loading"><LoaderCircle className="spin" size={19} /> Loading conversation…</div>
@@ -1778,9 +1848,10 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
           )}
           {isSending && <div className="agent-thinking"><LoaderCircle className="spin" size={14} /> {thinkingLabel}</div>}
         </section>
+        )}
 
         {error && <div className="agent-error">{error}</div>}
-        <form className="agent-composer" onSubmit={sendMessage}>
+        {!isHistoryOpen && <form className="agent-composer" onSubmit={sendMessage}>
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -1792,7 +1863,7 @@ function MagpieAgentPanel({ project, collection, record, onClose }) {
             aria-label="Message Magpie Agent"
           />
           <button type="submit" disabled={!input.trim() || isSending} aria-label="Send message"><Send size={17} /></button>
-        </form>
+        </form>}
         <footer className="agent-foot"><ShieldCheck size={12} /> Owner-scoped tools. No direct database authority.</footer>
       </aside>
     </div>

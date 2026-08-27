@@ -2471,3 +2471,54 @@ builder or an event broker.
 - **You'll know this works when:** `deno test
   tests/sweep-watches-runner.test.ts` passes, and a dispatched Sweep Watches
   run prints a numeric `sweep-watches processed N watch(es)` summary.
+
+### 70. Ask Magpie conversation history (issue #90)
+
+Ask Magpie (`MagpieAgentPanel` in `src/App.jsx`) silently loaded only the
+single most-recently-updated conversation on open, with no way to browse or
+resume an older one -- the owner's own report driving this checkpoint. It was
+also hard to find on desktop: the panel has no persistent chrome and is only
+reachable via the command palette (search bar), the mobile bottom nav, the
+Collection comparison view, or a 3+ Item context strip.
+
+- [x] Add a "Conversation history" icon button to the panel header
+  (`Clock3`) that toggles a list view fetched via
+  `base44.agents.listConversations({ q: { agent_name: "magpie_organizer" },
+  sort: "-updated_date", limit: 25 })`, each row showing the last message
+  preview and `relativeDate(item.updated_date)`.
+- [x] Clicking a row calls `base44.agents.getConversation(id)` (full stored
+  conversation, not the truncated realtime shape) and sets it as the active
+  conversation; clicking the currently-open conversation just closes the
+  list. "New chat" continues to work unchanged and closes the list too.
+- [x] No backend change: `agents.listConversations`/`getConversation` are
+  already scoped to the authenticated user by the platform (per
+  `.claude/skills/base44-sdk/references/base44-agents.md`, `getConversations`
+  is documented as "all **user's** conversations"), the same trust the
+  existing single-conversation load already relied on. No new entity, no RLS
+  change, no schema migration -- a "No-backend UI changes" row on the V3.1
+  risk matrix (Low).
+- **Scope cut (see `docs/DECISIONS.md`):** issue #90 asks for "CRUD options"
+  over conversation history. The `agents` module has no delete/rename method
+  in the SDK reference; this checkpoint ships List + Read + Create (already
+  existed) only.
+- **Files:** `src/App.jsx`, `src/index.css`.
+- **You'll know this works when:** opening Ask Magpie with zero prior
+  conversations and clicking the history button shows "No past conversations
+  with Magpie yet."; after conversations exist, they list newest-first with
+  a preview and date, and clicking one loads its full message history.
+- **Verified locally (2026-08-27):** `npm run build` is clean. Manually
+  driven end-to-end against `npx base44 dev` with a fresh signed-up owner
+  (Playwright): the history button renders in the header, opens to the
+  correct empty state, and toggles back to the chat/welcome view cleanly.
+  Actually sending a message (and therefore populating history with a real
+  conversation) could not be verified against local dev -- `base44 dev`
+  proxies `agents/conversations` calls toward production the same way it
+  already does for AI Gateway routing calls (BUILD_GUIDE finding, see
+  `docs/ENGINEERING_NOTES.md` "Local AI-routing calls proxy to real
+  production, and can be slow or 401") and returned `401 User must be
+  authenticated to create a conversation` both from a brand-new signup and
+  after a full page reload. This is a pre-existing local-dev limitation, not
+  something this change introduced -- `listConversations`/`getConversation`
+  are the same call shape the panel already made for the single-conversation
+  load before this checkpoint. Owner follow-up: confirm the full list/resume
+  path against the deployed app before considering issue #90 closed.

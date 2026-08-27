@@ -1918,3 +1918,36 @@ wrapper instead of its `data` payload. This also meant per-watch failures were
 silently treated as an empty result list. The runner now unwraps `response.data`
 and validates the complete `{ processed, results }` contract before reporting
 success, with a static regression test covering the integration boundary.
+
+## 2026-08-27 — `agents/conversations` also 401s against local `base44 dev`, and needs a hard reload after signup
+
+Extending the "Local AI-routing calls proxy to real production, and can be
+slow or 401" finding above: `base44.agents.createConversation()` hit the
+exact same failure mode while manually verifying the Ask Magpie conversation
+history feature (BUILD_GUIDE 70) against `npx base44 dev`. Two distinct
+things were observed, both local-dev-only:
+
+- Immediately after signing up a brand-new owner through the real `/login`
+  UI (not the `/auth/register` + `/verify-otp` fetch calls
+  `tests-e2e/global-setup.ts` uses) and being routed to `/nest` via
+  client-side navigation, `base44.entities.User.me()` 404'd with `"Unable to
+  read data for the current user"` and `agents/conversations` 401'd with
+  `"User must be authenticated to create a conversation"`. A full page
+  reload (`page.goto` to the same URL, not just React re-render) made both
+  errors disappear — the session token apparently needs a fresh page load
+  to fully attach for the local dev backend, matching why
+  `tests-e2e/helpers/dashboard.ts`'s `loginDashboard()` already does
+  `page.reload()` after its own login call.
+- Even after that reload, actually sending a message (which calls
+  `createConversation` then `addMessage`) still 401'd with the same "User
+  must be authenticated to create a conversation" error. This matches the
+  documented AI-Gateway proxy-to-production behavior above — conversation
+  creation is very likely proxied the same way — but unlike the AI-routing
+  case, this was not confirmed by reading `base44 dev`'s own backend log
+  output for an explicit "not supported in local development" line, so
+  treat it as a probable match to the same root cause, not a fully verified
+  one.
+
+Net effect: Ask Magpie's list/resume UI could be verified locally (button,
+empty state, toggle), but a real end-to-end conversation-history round trip
+currently requires the deployed app.
