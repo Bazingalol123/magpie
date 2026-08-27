@@ -1918,3 +1918,34 @@ wrapper instead of its `data` payload. This also meant per-watch failures were
 silently treated as an empty result list. The runner now unwraps `response.data`
 and validates the complete `{ processed, results }` contract before reporting
 success, with a static regression test covering the integration boundary.
+
+## 2026-08-27 — this remote environment cannot run `deno test`/`deno check` at all
+
+Building Build Guide checkpoint 70 (usage instrumentation) surfaced a
+sandbox limitation worth recording since it will recur for any future
+change made from this same kind of session: this environment's egress
+policy returns a 403 `host_not_allowed` for both `deno.land` and `jsr.io`,
+confirmed via `curl -sSI https://jsr.io/@std/assert/meta.json` and the agent
+proxy's own status endpoint (`recentRelayFailures` showing a `connect_rejected`
+for `deno.land:443`). That blocks two independent things: installing a Deno
+binary recent enough for this repo's lockfile format (the only Deno build
+reachable via `npm install deno-bin` is 2.2.7, which errors on lockfile
+version 5 with `--no-lock` required, and even then every test file's
+`jsr:@std/assert` import still 403s), and this repo doesn't vendor `@std`
+locally. `.github/workflows/ci.yml` also only triggers on push to
+`main`/`feature/**` or a PR into `main` — a `claude/**`-named branch gets no
+automatic CI run at all, so pushing here doesn't self-verify either.
+
+Worked around it for this one change with a throwaway esbuild+Node harness
+(shim `jsr:@std/assert`'s handful of used exports and `npm:@base44/sdk` to
+local stub modules, bundle each test file, run it under Node with a minimal
+`Deno.test` collector) — good enough to get real pass/fail execution of the
+new/changed test files and a bundle-only syntax/reference check of every
+function `entry.ts`, but it is not a substitute for the real `deno check`
+type-check or the full suite (several existing tests need `Deno.env` or
+`Deno.readTextFile`/`readFile`, which the throwaway harness didn't stub, and
+a few need `@std/assert` exports beyond `assertEquals`/`assertMatch`/`assert`).
+Any future session hitting this should either work on a `feature/**` branch
+so CI's own pinned Deno 2.9.4 runs the real gates, or open a PR into `main`
+before claiming the release gates pass — don't take a from-scratch harness's
+green result as equivalent to the real one.

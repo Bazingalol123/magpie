@@ -1,0 +1,36 @@
+{
+  "name": "UsageEvent",
+  "description": "Service-written ledger of billable-shaped product usage (captures, watch checks, cloud checks, ask turns). Records normalized cost units for future plan/quota decisions; never raw URLs, prompts, or page content.",
+  "type": "object",
+  "properties": {
+    "owner_id": { "type": "string", "description": "Dashboard user this usage belongs to" },
+    "operation": {
+      "type": "string",
+      "enum": ["capture", "watch_check", "cloud_check", "ask"],
+      "description": "Product-facing usage category, matching docs/USAGE_AND_MONETIZATION_PROPOSAL.md"
+    },
+    "provider": {
+      "type": "string",
+      "enum": ["base44", "zyte", "none"],
+      "default": "base44",
+      "description": "Backing provider that actually incurred cost for this event, if any"
+    },
+    "units": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "description": "Normalized internal cost unit; not a customer-facing credit count and may be reweighted later"
+    },
+    "provider_request_id": { "type": "string", "maxLength": 200, "description": "Optional upstream request/correlation id for provider-dashboard reconciliation" },
+    "idempotency_key": { "type": "string", "maxLength": 200, "description": "Caller-stable key preventing duplicate counting when the triggering operation retries" },
+    "outcome": { "type": "string", "enum": ["success", "error"], "description": "Whether the underlying operation succeeded" },
+    "occurred_at": { "type": "string", "format": "date-time", "description": "When the usage was incurred" }
+  },
+  "required": ["owner_id", "operation", "units", "outcome", "occurred_at"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "data.owner_id": "{{user.id}}" },
+    "update": false,
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

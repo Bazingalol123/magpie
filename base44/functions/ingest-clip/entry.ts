@@ -12,6 +12,7 @@ import {
   setDiagnosticStage,
 } from "../../shared/observability.ts";
 import { markRoutingFailed, processStoredClip } from "../../shared/routing-persistence.ts";
+import { recordUsageEvent } from "../../shared/usage.ts";
 
 Deno.serve(async (req) => {
   const diagnostic = createDiagnosticContext(req, "ingest-clip", "capture");
@@ -95,6 +96,12 @@ Deno.serve(async (req) => {
       setDiagnosticStage(diagnostic, "routing");
       const result = await processStoredClip(base44, clip.id);
       await recordCaptureSuccess(diagnostic, 202);
+      await recordUsageEvent(base44, {
+        owner_id: ownerId,
+        operation: "capture",
+        outcome: "success",
+        idempotency_key: `clip:${clip.id}`,
+      });
       return json({
         accepted: true,
         capture_status: "new",
@@ -106,6 +113,12 @@ Deno.serve(async (req) => {
       console.error("Clip organization failed", routingError);
       const classified = classifyError(routingError);
       await recordCaptureError(diagnostic, classified);
+      await recordUsageEvent(base44, {
+        owner_id: ownerId,
+        operation: "capture",
+        outcome: "error",
+        idempotency_key: `clip:${clip.id}`,
+      });
       let failed;
       try {
         failed = await markRoutingFailed(base44, clip.id, routingError);

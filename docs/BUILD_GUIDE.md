@@ -2471,3 +2471,59 @@ builder or an event broker.
 - **You'll know this works when:** `deno test
   tests/sweep-watches-runner.test.ts` passes, and a dispatched Sweep Watches
   run prints a numeric `sweep-watches processed N watch(es)` summary.
+
+### 70. Usage instrumentation (non-blocking), step 1 of the monetization decision order
+
+- [x] **Build:** Add a service-write-only `UsageEvent` ledger and a shared
+  `recordUsageEvent()` helper (best-effort, never throws, mirrors
+  `persistDiagnosticEvent`'s try/catch-and-return-boolean shape) that records
+  normalized usage for the three product-facing categories
+  `docs/USAGE_AND_MONETIZATION_PROPOSAL.md` already named: `capture`,
+  `watch_check`, and `ask` (`cloud_check` is defined but unused until a real
+  Zyte call exists — see below).
+- [x] Wire it into the three call sites that currently incur real cost:
+  `ingest-clip` (one `capture` event per newly routed Clip, never for a
+  duplicate — a duplicate re-runs no classification); `watch-sweep.ts`'s
+  `processWatch` direct-check branch (one `watch_check` event per real
+  source fetch, keyed by `watch:<id>:<checkedAt>` so a retry never
+  double-counts); `agent-workspace-context` (one `ask` event per call, as a
+  proxy for an Ask Magpie turn, since the managed Agent's own conversation
+  loop isn't code this repo can instrument directly).
+- [x] Deliberately did **not** record usage for the `zyte` and
+  `owner_browser` strategy stubs in `processWatch` — both return synthetic
+  blocked results without ever making a network request, so recording them
+  would fabricate cost data before any cost exists.
+- **Files:** `base44/entities/usage-event.jsonc`, `base44/shared/usage.ts`,
+  `base44/shared/watch-sweep.ts`, `base44/functions/ingest-clip/entry.ts`,
+  `base44/functions/agent-workspace-context/entry.ts`, `tests/usage.test.ts`,
+  `tests/watch-sweep.test.ts`.
+- **You'll know this works when:** `tests/usage.test.ts` (6 tests: valid
+  write, idempotent retry, invalid operation, missing owner, entity
+  unavailable, out-of-range input) and the new `tests/watch-sweep.test.ts`
+  assertions (a real direct check writes exactly one `watch_check` row per
+  watch; the zyte and owner_browser stub paths write zero) all pass.
+- **Verified locally (2026-08-27):** this environment's egress policy
+  blocks both `deno.land` (a newer Deno binary) and `jsr.io` (the `@std/assert`
+  import every existing test file uses) with a 403 `host_not_allowed`, and
+  CI (`.github/workflows/ci.yml`) only triggers on `main`/`feature/**`, not
+  this branch name — so `deno test`/`deno check` could not be run directly
+  here. Verified instead with an npm-installed Deno 2.2.7 binary (too old
+  for this repo's lockfile format, `--no-lock` still hits the `jsr.io` block)
+  plus an esbuild+Node harness that shims `jsr:@std/assert` and
+  `npm:@base44/sdk`: every `base44/functions/*/entry.ts` (24) bundles
+  cleanly; `tests/usage.test.ts` (6/6) and `tests/watch-sweep.test.ts` (8/8)
+  pass under real execution, including the idempotency and no-fake-cost
+  assertions; every other existing test file that doesn't need
+  `Deno.env`/`Deno.readTextFile` or a few unshimmed `@std/assert` exports
+  (the harness's own gap, not a code issue) still passes at its original
+  count, showing no regression from the `watch-sweep.ts` import change.
+  `node --check` on every extension script, the `@base44/sdk` grep, and
+  `npm run build` all pass unchanged. **Still owed before merge:** a real
+  `deno test`/`deno check` run (locally or via a `feature/**` branch or PR
+  into `main` so CI's own Deno 2.9.4 runs it) has not happened yet.
+- **Deliberately out of scope this round** (recorded in `docs/DECISIONS.md`):
+  `classify-clip`'s manual dashboard reclassify path is not instrumented;
+  no enforcement/blocking exists yet — this is step 1
+  ("instrument without blocking anyone") of the decision order in
+  `docs/USAGE_AND_MONETIZATION_PROPOSAL.md`, not a quota system. No entity
+  push or function deployment has happened; nothing here is live.

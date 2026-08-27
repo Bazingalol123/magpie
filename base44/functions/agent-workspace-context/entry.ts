@@ -11,6 +11,7 @@ import {
 } from "../../shared/agent-tools.ts";
 import { corsHeaders, errorResponse, json, readJson, requirePost } from "../../shared/http.ts";
 import { getOrNull } from "../../shared/service-entities.ts";
+import { recordUsageEvent } from "../../shared/usage.ts";
 
 Deno.serve(async (req) => {
   try {
@@ -86,6 +87,11 @@ Deno.serve(async (req) => {
       if (collection) collectionRows.push(requireOwned(collection, user.id, "Collection"));
     }
     const collectionById = new Map(collectionRows.map((collection: any) => [collection.id, collection]));
+
+    // Proxy for an Ask turn: this tool is the Agent's first call on nearly
+    // every conversation turn. No idempotency key -- the managed Agent
+    // runtime, not this function, decides whether/when to retry a tool call.
+    await recordUsageEvent(base44, { owner_id: user.id, operation: "ask", outcome: "success" });
 
     return json({
       scope: {

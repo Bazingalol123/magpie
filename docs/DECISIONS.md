@@ -1191,3 +1191,34 @@ error` — every other function deployed fine, only `sweep-watches` failed
 entirely). `function.jsonc` was removed and `sweep-watches` redeployed on
 its own. The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only scheduling path for this function, not a fallback.
+
+## 2026-08-27 — usage instrumentation scope: what step 1 deliberately does not cover
+
+`docs/USAGE_AND_MONETIZATION_PROPOSAL.md`'s decision order starts with
+"instrument without blocking anyone." Implementing that (Build Guide
+checkpoint 70) deliberately left the following out rather than silently
+expanding scope:
+
+- **`classify-clip`'s manual dashboard reclassify path is not instrumented.**
+  It re-runs the same AI classification `ingest-clip` already charges for on
+  first capture, so it is a real (if rarer) cost point. Left out of this
+  first slice to keep the change reviewable; a follow-up should add the same
+  `recordUsageEvent` call there before any quota is calculated from this
+  data, or the resulting allowance would undercount actual AI Gateway usage.
+- **No enforcement, quota, or blocking exists yet.** `UsageEvent` rows are
+  written for visibility only; nothing reads them to allow/deny an
+  operation. That is decision-order steps 3–5 in the proposal, gated on
+  first observing real cost distributions.
+- **The `zyte`/`owner_browser` watch-check stub paths never write a usage
+  event.** Both are synthetic blocked results that never make a network
+  call (`ZYTE_SCHEDULED_QUOTA_NOT_ENABLED`, `OWNER_BROWSER_REQUIRED`);
+  recording them would fabricate cost data before the underlying feature
+  (scheduled Zyte checks, owner-browser refresh) exists.
+- **`ask` usage is a proxy, not a real Ask-turn counter.** `agent-workspace-context`
+  is instrumented because it is the one custom backend function this repo
+  controls in the Ask Magpie path, but the managed Agent's own conversation
+  loop (turn count, token usage) is not code this repo can hook into
+  directly. If a real per-turn count is needed later, it likely has to come
+  from Base44's own Agent/usage APIs rather than this ledger.
+- **No entity or function deployment happened.** `UsageEvent` exists only in
+  this branch's local files; nothing is live in the deployed app.

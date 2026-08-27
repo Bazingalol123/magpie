@@ -1,4 +1,5 @@
 import { enrichRecord, shouldAutoPauseWatch } from "./enrichment-v2.ts";
+import { recordUsageEvent } from "./usage.ts";
 
 // Kept short relative to the shortest supported frequency ("hourly"): long
 // enough to cover one batch's sequential processing time, short enough that
@@ -90,6 +91,15 @@ export async function processWatch(base44: any, service: any, watch: any, fetchI
       failure_count: failureCount,
       next_check_at: nextCheckAt,
       ...(autoPaused ? { active: false } : {}),
+    });
+    // A real direct-source fetch was attempted here, unlike the zyte/owner_browser
+    // stubs above which never touch a source and so incur no cost to record.
+    await recordUsageEvent(base44, {
+      owner_id: watch.owner_id,
+      operation: "watch_check",
+      provider: "base44",
+      outcome: successful ? "success" : "error",
+      idempotency_key: `watch:${watch.id}:${result.checkedAt}`,
     });
     return {
       watch_id: watch.id,

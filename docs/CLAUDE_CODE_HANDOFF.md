@@ -604,3 +604,39 @@ own. **The GitHub Actions cron (`.github/workflows/sweep-watches.yml`) is
 now the only path** — the three owner-setup steps above (dedicated
 admin account, `SWEEP_ADMIN_EMAIL`/`SWEEP_ADMIN_PASSWORD` secrets, approve
 the deploy) are required, not optional.
+
+## Usage instrumentation, step 1 of monetization (2026-08-27, not deployed)
+
+The owner decided to follow `docs/USAGE_AND_MONETIZATION_PROPOSAL.md`'s
+existing recommendation (measure real usage before pricing anything, no
+lifetime-price plan) rather than a lifetime-unlock alternative discussed and
+rejected in the same conversation. Build Guide checkpoint 70 implements that
+proposal's decision-order step 1, "instrument without blocking anyone":
+
+- New `UsageEvent` entity (service-write-only, owner-scoped read) and
+  `base44/shared/usage.ts`'s `recordUsageEvent()` — best-effort, never
+  throws, idempotent on retry.
+- Wired into `ingest-clip` (`capture`), `watch-sweep.ts`'s real direct-check
+  path (`watch_check`), and `agent-workspace-context` (`ask` proxy). The
+  `zyte`/`owner_browser` stub paths in `processWatch` deliberately record
+  nothing since they make no real request.
+- No enforcement/quota/blocking exists yet, and nothing has been deployed —
+  this is pure, additive instrumentation on top of the existing product.
+
+**Verification gap to close before merge:** this session's sandbox blocks
+both `deno.land` and `jsr.io` at the network-policy level (see
+`docs/ENGINEERING_NOTES.md`, 2026-08-27), and this branch name doesn't match
+CI's trigger (`main`/`feature/**`), so the real `deno test`/`deno check`
+gates have not actually run. Verification here used a throwaway esbuild+Node
+harness instead (real execution of the new/changed tests, bundle-only checks
+of every `entry.ts`) — solid evidence of no regression, but not the same
+guarantee as the pinned CI toolchain. **Next action:** run the real Deno
+gates (locally with network access, on a `feature/**` branch, or via a PR
+into `main`) before treating checkpoint 70 as done.
+
+**Next, per the proposal's decision order:** run this instrumentation
+against real usage for about two weeks, measure p50/p95 cost per capture/ask
+turn/watch check, then (only after that) decide Free/Plus allowances and add
+enforcement — steps 2 onward in
+`docs/USAGE_AND_MONETIZATION_PROPOSAL.md`. Do not add quota
+blocking, checkout, or a payment provider before that measurement exists.

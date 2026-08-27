@@ -19,6 +19,7 @@ type FakeState = {
   watches: Map<string, any>;
   records: Map<string, any>;
   enrichments: any[];
+  usageEvents: any[];
 };
 
 function fakeBase44(watches: any[], records: any[] = []) {
@@ -26,6 +27,7 @@ function fakeBase44(watches: any[], records: any[] = []) {
     watches: new Map(watches.map((watch) => [watch.id, { ...watch }])),
     records: new Map(records.map((record) => [record.id, { ...record }])),
     enrichments: [],
+    usageEvents: [],
   };
   const WatchRule = {
     filter: async (query: Record<string, unknown>, sort: string, limit: number) => {
@@ -51,7 +53,15 @@ function fakeBase44(watches: any[], records: any[] = []) {
   const Enrichment = {
     bulkCreate: async (items: any[]) => state.enrichments.push(...items),
   };
-  const base44 = { asServiceRole: { entities: { WatchRule, Record, Enrichment } } };
+  const UsageEvent = {
+    filter: async (query: Record<string, unknown>) =>
+      state.usageEvents.filter((row) => Object.entries(query).every(([key, value]) => row[key] === value)),
+    create: async (row: any) => {
+      state.usageEvents.push(row);
+      return row;
+    },
+  };
+  const base44 = { asServiceRole: { entities: { WatchRule, Record, Enrichment, UsageEvent } } };
   return { base44, state };
 }
 
@@ -102,10 +112,10 @@ Deno.test("claimWatches pushes next_check_at into the claim window for exactly t
 
 Deno.test("sweepDueWatches claims the whole batch before a concurrent sweep could re-select any of it", async () => {
   const now = Date.parse("2026-01-01T12:00:00.000Z");
-  const { base44 } = fakeBase44(
+  const { base44, state } = fakeBase44(
     [
-      { id: "w1", active: true, next_check_at: "2026-01-01T11:00:00.000Z", frequency: "hourly", record_id: "r1", failure_count: 0 },
-      { id: "w2", active: true, next_check_at: "2026-01-01T11:00:00.000Z", frequency: "hourly", record_id: "r2", failure_count: 0 },
+      { id: "w1", active: true, next_check_at: "2026-01-01T11:00:00.000Z", frequency: "hourly", record_id: "r1", failure_count: 0, owner_id: "owner-1" },
+      { id: "w2", active: true, next_check_at: "2026-01-01T11:00:00.000Z", frequency: "hourly", record_id: "r2", failure_count: 0, owner_id: "owner-1" },
     ],
     [
       { id: "r1", owner_id: "owner-1", source_url: "https://example.test/1", fields_json: JSON.stringify({ price: "$50" }) },
@@ -118,6 +128,8 @@ Deno.test("sweepDueWatches claims the whole batch before a concurrent sweep coul
   try {
     const result = await sweepDueWatches(base44, 20, fetchImpl);
     assertEquals(result.processed, 2, "both due watches are processed");
+    assertEquals(state.usageEvents.length, 2, "a real direct-source check records one usage event per watch");
+    assertEquals(state.usageEvents.every((row) => row.operation === "watch_check"), true, "recorded events are tagged watch_check");
     // Simulate a second sweep invocation racing in right after the first one
     // claimed but before/while it was still doing the real work -- with the
     // claim in place, it must see nothing left to do.
@@ -130,21 +142,23 @@ Deno.test("sweepDueWatches claims the whole batch before a concurrent sweep coul
 
 Deno.test("processWatch: zyte strategy records a blocked outcome and backs off without calling enrichRecord", async () => {
   const { base44, state } = fakeBase44([
-    { id: "w1", active: true, frequency: "daily", record_id: "r1", failure_count: 0, acquisition_strategy: "zyte" },
+    { id: "w1", active: true, frequency: "daily", record_id: "r1", failure_count: 0, acquisition_strategy: "zyte", owner_id: "owner-1" },
   ]);
   const result: any = await processWatch(base44, base44.asServiceRole.entities, state.watches.get("w1"));
   assertEquals(result.strategy, "zyte", "outcome reports the zyte strategy");
   assertEquals(result.blocked, true, "zyte is reported as blocked");
   assertEquals(state.watches.get("w1").failure_count, 1, "a zyte attempt still counts as a failure for backoff purposes");
+  assertEquals(state.usageEvents.length, 0, "a stubbed, never-sent zyte request must not be recorded as billable usage");
 });
 
 Deno.test("processWatch: owner_browser strategy waits without incrementing failure_count", async () => {
   const { base44, state } = fakeBase44([
-    { id: "w1", active: true, frequency: "daily", record_id: "r1", failure_count: 0, acquisition_strategy: "owner_browser" },
+    { id: "w1", active: true, frequency: "daily", record_id: "r1", failure_count: 0, acquisition_strategy: "owner_browser", owner_id: "owner-1" },
   ]);
   const result: any = await processWatch(base44, base44.asServiceRole.entities, state.watches.get("w1"));
   assertEquals(result.outcome, "waiting_for_owner_browser", "reports the waiting state");
   assertEquals(state.watches.get("w1").failure_count, 0, "owner_browser does not touch failure_count");
+  assertEquals(state.usageEvents.length, 0, "no source was fetched, so no usage event is recorded");
 });
 
 Deno.test("processWatch: an unexpected throw during direct_http is recorded as failed with backoff, not left unresolved", async () => {
