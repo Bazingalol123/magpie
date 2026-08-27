@@ -615,11 +615,13 @@ the most recent conversation. Branch `feat/chat-conversation-history-90`,
 built off a fresh `main` pull. Full detail in `docs/BUILD_GUIDE.md`
 checkpoint 70 and the matching `docs/DECISIONS.md` entry.
 
-- Dashboard-only change (`src/App.jsx`, `src/index.css`): a history button
-  in the Ask Magpie header lists past conversations
-  (`agents.listConversations`) and resumes one on click
-  (`agents.getConversation`). No entity, RLS, or backend change — Low risk
-  per the V3.1 risk matrix's "No-backend UI changes" row.
+- Dashboard-only change (`src/App.jsx`, `src/index.css`): a persistent
+  "Ask Magpie" entry in the desktop sidebar (`AppNavigation`'s
+  `primary-nav`, next to Search) opens the same panel the search
+  palette/mobile nav already did. A history button in the panel header
+  lists past conversations (`agents.listConversations`) and resumes one on
+  click (`agents.getConversation`). No entity, RLS, or backend change — Low
+  risk per the V3.1 risk matrix's "No-backend UI changes" row.
 - **Scope cut, not a gap:** issue #90 also asks for delete/rename. The
   `agents` SDK module has no such method (see the DECISIONS.md entry) —
   ships as List + Read + the pre-existing Create only. Reopen/relabel #90

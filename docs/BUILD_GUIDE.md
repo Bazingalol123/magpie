@@ -2472,7 +2472,7 @@ builder or an event broker.
   tests/sweep-watches-runner.test.ts` passes, and a dispatched Sweep Watches
   run prints a numeric `sweep-watches processed N watch(es)` summary.
 
-### 70. Ask Magpie conversation history (issue #90)
+### 70. Ask Magpie conversation history and a persistent desktop entry point (issue #90)
 
 Ask Magpie (`MagpieAgentPanel` in `src/App.jsx`) silently loaded only the
 single most-recently-updated conversation on open, with no way to browse or
@@ -2497,6 +2497,16 @@ Collection comparison view, or a 3+ Item context strip.
   existing single-conversation load already relied on. No new entity, no RLS
   change, no schema migration -- a "No-backend UI changes" row on the V3.1
   risk matrix (Low).
+- [x] Give Ask Magpie a persistent desktop entry point: an "Ask Magpie" item
+  in `AppNavigation`'s `primary-nav` sidebar (`src/App.jsx`), right after
+  Search, styled identically to Nest/Library/Signals/Search and highlighted
+  `active` while the panel is open. It has no `activeView` of its own (the
+  panel is an overlay, not a route) -- clicking it just calls the same
+  `setIsAgentOpen(true)` the search palette and mobile nav already use.
+  Directly fixes the "hard to find" half of the owner's report: previously
+  the only ways in were the command palette, mobile bottom nav, the
+  Collection comparison view, or a 3+ Item context strip -- none visible by
+  default on desktop.
 - **Scope cut (see `docs/DECISIONS.md`):** issue #90 asks for "CRUD options"
   over conversation history. The `agents` module has no delete/rename method
   in the SDK reference; this checkpoint ships List + Read + Create (already
@@ -2508,9 +2518,10 @@ Collection comparison view, or a 3+ Item context strip.
   a preview and date, and clicking one loads its full message history.
 - **Verified locally (2026-08-27):** `npm run build` is clean. Manually
   driven end-to-end against `npx base44 dev` with a fresh signed-up owner
-  (Playwright): the history button renders in the header, opens to the
-  correct empty state, and toggles back to the chat/welcome view cleanly.
-  Actually sending a message (and therefore populating history with a real
+  (Playwright): the sidebar "Ask Magpie" entry renders, highlights active
+  when clicked, and opens the same panel; the history button renders in the
+  header, opens to the correct empty state, and toggles back to the
+  chat/welcome view cleanly. Actually sending a message (and therefore populating history with a real
   conversation) could not be verified against local dev -- `base44 dev`
   proxies `agents/conversations` calls toward production the same way it
   already does for AI Gateway routing calls (BUILD_GUIDE finding, see
