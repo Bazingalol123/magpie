@@ -2614,3 +2614,103 @@ than guessed from reading the code.
   clicked a history row and confirmed it resumed with full message history;
   confirmed "New chat" resets to the welcome screen; confirmed the Send
   button is disabled only for empty input, not stuck by a prior send.
+
+### 72. Split `src/App.jsx` into a proper multi-file structure (2,854 -> 973 lines)
+
+`src/App.jsx` had grown into the entire dashboard in one file: 52 top-level
+functions/components (every screen, every dialog, every leaf) plus the root
+`App` component itself. Split it into `src/lib/` (pure framework-free
+helpers/consts, matching the existing convention already used by
+`dashboard-pagination.js`/`workspace-search.js`/`pairing-lifecycle.js`),
+`src/hooks/` (the one existing custom hook, `useStagedMessage`),
+`src/components/` (leaves shared across 3+ screens: `SourceFavicon`,
+`FieldValue`, `HighlightedText`, `MagpieMark`, `CapturedContext`),
+`src/layout/AppNavigation.jsx`, `src/ShareCapturePage.jsx` (root, matching
+the existing `Landing`/`LoginPage`/`Docs` full-page-route convention), and
+one `src/features/<domain>/` folder per nav surface or dialog family (nest,
+library, signals, search, records, agent, pairing, watches, projects,
+capture, support).
+
+**Pure structural split, explicitly scoped down twice on purpose:**
+- No logic consolidation. The pre-existing duplicated helpers
+  (`parseJson`/`workspace-search.js`'s copy, `hostFromUrl`/
+  `hostFromSearchUrl`, `isHttpUrl`/`isSafeHttpUrl`) and the three
+  copy-pasted delete-confirm patterns, four independent watch-status
+  derivations, etc. were all left exactly as duplicated as they were --
+  that consolidation is separate, lower-risk follow-up work once this split
+  has proven stable, not bundled into the same diff.
+- `App`'s own body (root component, ~45 `useState`/24 `useEffect`,
+  including at least 13 genuinely fragile pieces -- the
+  `activeCollectionIdRef`/`activeCollectionId` duality dodging a stale
+  closure in an empty-deps `useCallback`, the `dashboardLoadRef`
+  single-flight guard nearly every mutation handler relies on, one shared
+  400ms debounce timer across 8 entity subscriptions to avoid tripping
+  Base44's rate limit during cascade deletes, the bfcache-restore
+  full-reload workaround, etc.) was deliberately **not** decomposed into
+  hooks this pass. Only the 51 other top-level items (every leaf, screen,
+  and dialog) were extracted; `App.jsx` still ends in the `App` component's
+  full original body, unmodified. Decomposing `App` itself into composed
+  hooks (`useAuth`, `useDashboardData`, `useWorkspaceRouting`, etc.) is
+  real follow-on work with a different, higher risk profile (see below) --
+  written up but not started.
+- The confirmed-dead `CollectionSidebar` function (defined in `App.jsx`,
+  never rendered anywhere) and the five orphaned `src/onboarding/*.jsx`
+  components plus all three `src/components/ui/*` primitives (never
+  imported by `App.jsx`) were left untouched -- not moved, not deleted.
+
+**A finding mid-refactor reshaped the safe extraction order:** several Deno
+tests in `tests/` are "grep tests" that call `Deno.readTextFile` on
+`src/App.jsx` and assert on literal substrings of its source -- five of
+them specifically check for a literal `"function <ComponentName>"`
+declaration (`PairingManagementDialog`, `CaptureSourceOffer`, `WatchDialog`,
+`ComparisonPanel`, `CollectionDeleteControl`), which necessarily breaks the
+moment that component moves to its own file even with zero behavior
+change. Beyond those five, many more tests pin other literal JSX/effect
+snippets that happened to live wherever the moved code used to sit. The
+extraction went component-by-component (leaves first, screens next, the
+highest-fragility `MagpieAgentPanel` last among screens, `AppNavigation`
+last overall), running the full build + Deno suite after every single
+step; every test that broke because its literal-text target moved was
+fixed by repointing its `Deno.readTextFile` call at the component's new
+file -- 16 assertions across 5 test files needed this in total, none had
+their actual check weakened. Also cleaned up icon/helper imports left
+unused in `App.jsx` by each extraction (checked per-step, not just at the
+end).
+- **Files:** every file under `src/lib/`, `src/hooks/`, `src/components/`,
+  `src/layout/`, `src/features/**`, `src/ShareCapturePage.jsx`, and
+  `src/App.jsx` itself (now 973 lines: imports, `CollectionSidebar` dead
+  code untouched, and the unmodified `App` component). Test fixes in
+  `tests/pairing-lifecycle-ui.test.ts`, `tests/onboarding-flow-wiring.test.ts`,
+  `tests/pwa-share.test.ts`, `tests/redesign-ui-parity.test.ts`.
+- **You'll know this works when:** the app behaves identically to before --
+  every screen, dialog, and interaction unchanged -- just organized into
+  files instead of one 2,854-line file.
+- **Verified locally (2026-08-28):** `npm run build` clean at every one of
+  19 extraction steps (bundle size unchanged, ~618.47 kB), `deno check`
+  clean on all 23 backend `entry.ts` files, `rg "@base44/sdk" extension`
+  clean, and the full Deno suite green (265/265) after every step,
+  including the 16 repointed assertions. Live in-browser (Playwright,
+  driving the owner's real authenticated session against
+  `npm run dev`): Nest (all-caught-up `CaptureSourceOffer` state), Library
+  (`RecordTable` -> `EmptyCollection` fallback with zero Collections due to
+  a production API 403 in this sandboxed session -- a pre-existing
+  environment limitation, not a regression), Signals (`SignalsSurface`
+  empty state and filter row), and Search (`SearchSurface` empty and
+  typed-query states, "Ask Magpie about ..." action) all rendered
+  correctly with no new console errors. Most significantly, Ask Magpie
+  (`MagpieAgentPanel`) was exercised end to end against the real deployed
+  agent: opened real conversation history (actual production conversations
+  with correct previews/dates), resumed one and confirmed a real
+  markdown-rendered reply (including a GFM table) displayed correctly, and
+  sent a brand-new message ("Testing refactor") that round-tripped through
+  the real `magpie_organizer` agent and back -- the optimistic bubble, the
+  pending-message reconciliation, and the send-timeout guard (the exact
+  fragile logic flagged as highest-risk before starting) all behaved
+  correctly with no stuck spinner and no duplicate message. Collection
+  data with real records (Watch dialog, Record detail, comparison panel,
+  Nest cards with real captures) could not be exercised in this sandboxed
+  session because direct entity-list calls 403 against production without
+  a local `npx base44 dev` backend -- same documented limitation as prior
+  checkpoints, not new. No entity/function/agent change; ships as a
+  dashboard-only, Site-only release per
+  `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`.

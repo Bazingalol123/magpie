@@ -34,7 +34,8 @@ Deno.test("the Nest paste fallback reuses the existing authenticated mobile-capt
 
 Deno.test("capture guidance lives in Nest and opens a deliberate guided modal", async () => {
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
-  assert(app.includes("function CaptureSourceOffer"), "the empty Nest must contain capture-source guidance");
+  const captureSourceOffer = await Deno.readTextFile(new URL("src/features/nest/CaptureSourceOffer.jsx", root));
+  assert(captureSourceOffer.includes("function CaptureSourceOffer"), "the empty Nest must contain capture-source guidance");
   assert(app.includes("<PairingDialog"), "pairing must remain a deliberate modal");
   assert(app.includes("<CaptureGuideDialog"), "the first-run Nest must open the large capture guide on demand");
   assert(app.includes("onOpenGuide={() => setIsCaptureGuideOpen(true)}"), "the guide must be reachable from the real Nest state");
