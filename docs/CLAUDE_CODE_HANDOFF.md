@@ -643,3 +643,49 @@ checkpoint 70 and the matching `docs/DECISIONS.md` entry.
   more pass against the *deployed* app (not just local dev) before treating
   issue #90 as fully closed, since the `q`-filter bug's local-dev-vs-prod
   scope is unconfirmed (see ENGINEERING_NOTES).
+
+## 2026-08-28 — `src/App.jsx` split into a proper multi-file structure (Build Guide checkpoint 72), local-only, not merged or deployed
+
+Branch `refactor/app-jsx-structure`, off a fresh `main` pull (PR #92 merged
+first). `src/App.jsx` was 2,854 lines holding the entire dashboard — every
+screen, dialog, and leaf component plus the root `App` component itself.
+Split the 51 non-`App` top-level items into `src/lib/`, `src/hooks/`,
+`src/components/`, `src/layout/`, `src/features/<domain>/`, and
+`src/ShareCapturePage.jsx`; `App.jsx` is now 973 lines (imports, the
+confirmed-dead `CollectionSidebar` left untouched, and the `App` component
+itself, byte-for-byte unmodified). Pure code motion — no logic
+consolidation (the pre-existing duplicated helpers and copy-pasted
+patterns are still duplicated, deliberately, as a separate lower-risk
+follow-up), no dead-code removal, no new dependencies. Full detail in
+`docs/BUILD_GUIDE.md` checkpoint 72 and the matching `docs/ENGINEERING_NOTES.md`
+entry (several Deno tests grep `App.jsx`'s literal source text, which
+breaks on component-only moves — 16 assertions across 4 test files needed
+repointing at components' new files during the extraction).
+
+- **Not done, and why:** `App`'s own body (~45 `useState`/24 `useEffect`,
+  including the ref/state duality, single-flight load guard, and shared
+  debounce timer called out as fragile) was deliberately left inside
+  `App.jsx` unmodified this pass — decomposing it into composed hooks is
+  real follow-on work with a materially different risk profile (many more
+  literal-text test assertions pin its exact effect bodies) and is written
+  up as "Phase 2" in the plan but not started.
+- **Verification status:** `npm run build` clean and the full Deno suite
+  green (265/265) after every one of 19 extraction steps; `deno check`
+  clean on all 23 backend `entry.ts` files; `@base44/sdk`-in-`extension`
+  grep clean. Live in-browser against the owner's real authenticated
+  session (`npm run dev` + Playwright): Nest, Library's empty state,
+  Signals, and Search all rendered correctly with no new console errors.
+  Ask Magpie was verified genuinely end to end — real conversation
+  history loaded, a past conversation resumed with a real markdown table
+  rendering correctly, and a brand-new message round-tripped through the
+  real `magpie_organizer` agent with the optimistic bubble, pending-message
+  reconciliation, and send-timeout guard (the component's known fragile
+  logic) all behaving correctly. Collection screens with real record data
+  (Watch dialog, Record detail, comparison panel, Nest cards with real
+  captures) could not be exercised in this sandboxed session — direct
+  entity-list calls 403 against production without a local `npx base44 dev`
+  backend, the same documented limitation as prior checkpoints.
+- Not merged, not deployed. Dashboard-only; no entity/function/agent
+  change, so no deploy approval gate applies to the code itself, but
+  deploying the built site afterward still needs the owner's explicit
+  go-ahead as always.

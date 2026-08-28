@@ -31,10 +31,11 @@ Deno.test("reconnect appears only for real pairing history with no active browse
 
 Deno.test("dashboard wiring uses the sanitized pairing function and exposes management", async () => {
   const app = await Deno.readTextFile(new URL("../src/App.jsx", import.meta.url));
+  const pairingManagementDialog = await Deno.readTextFile(new URL("../src/features/pairing/PairingManagementDialog.jsx", import.meta.url));
   if (!app.includes('base44.functions.invoke("list-extension-pairings"')) {
     throw new Error("dashboard must load pairing metadata through the sanitized owner function");
   }
-  if (!app.includes("function PairingManagementDialog")) {
+  if (!pairingManagementDialog.includes("function PairingManagementDialog")) {
     throw new Error("dashboard must expose Connected browsers management");
   }
   if (!app.includes('base44.functions.invoke("revoke-extension-pairing"')) {
