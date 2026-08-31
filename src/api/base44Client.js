@@ -16,7 +16,19 @@ const isLocalDevHost = !!browserOrigin && /^https?:\/\/(localhost|127\.0\.0\.1)(
 // on both hosts, so serverUrl must be the deployed app's own origin, not
 // the platform host -- except for local dev on localhost with no sandbox
 // configured, which still wants the real hosted backend as before.
-const base44ServerUrl = localBaseUrl || (browserOrigin && !isLocalDevHost ? browserOrigin : platformServerUrl);
+// Prefer the browser's own origin whenever it isn't localhost, even over an
+// explicit localBaseUrl -- `npx base44 dev` bakes VITE_BASE44_APP_BASE_URL
+// as a literal http://localhost:<port> into its own embedded frontend
+// bundle regardless of where that bundle actually gets served from. On a
+// phone (loading the dev server over Tailscale/LAN), "localhost" resolves
+// to the phone itself, not the dev machine -- honoring localBaseUrl there
+// produced a silent axios "Network Error" that never reproduced from the
+// dev machine itself (curl and a local Playwright browser both correctly
+// resolve localhost back to the real machine, masking the bug). localBaseUrl
+// only makes sense when the browser is ALSO on localhost -- i.e., the
+// developer's own machine talking directly to its own local backend.
+const useBrowserOrigin = !!(browserOrigin && !isLocalDevHost);
+const base44ServerUrl = useBrowserOrigin ? browserOrigin : (localBaseUrl || platformServerUrl);
 // loginWithProvider/redirectToLogin/logout build full-page redirect URLs as
 // `${appBaseUrl}/api/apps/auth/...`. Login honors an explicit from_url via
 // app_id regardless of host, but logout's server endpoint only redirects
@@ -27,7 +39,7 @@ const base44ServerUrl = localBaseUrl || (browserOrigin && !isLocalDevHost ? brow
 // redirect into a same-origin navigation our own service worker intercepted
 // and quietly fell back to the cached landing page on) -- safe now that
 // public/sw.js exempts /api/* from that fallback.
-const appBaseUrl = localBaseUrl || browserOrigin || base44ServerUrl;
+const appBaseUrl = useBrowserOrigin ? browserOrigin : (localBaseUrl || browserOrigin || base44ServerUrl);
 
 export const base44 = createClient({
   appId,

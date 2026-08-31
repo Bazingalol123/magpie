@@ -1,4 +1,4 @@
-import { Book, Download, LoaderCircle, LockKeyhole, LogOut, MessageCircle, UserRound } from "lucide-react";
+import { Book, Compass, Download, LoaderCircle, LockKeyhole, LogOut, MessageCircle, UserRound } from "lucide-react";
 import { PairingIcon } from "../components/icons.jsx";
 import { WORKSPACE_VIEWS } from "../lib/routing.js";
 import { collectionDotStatus } from "../lib/dashboardData.js";
@@ -6,7 +6,7 @@ import { EXTENSION_RELEASES_URL } from "../lib/constants.js";
 import { searchWorkspace } from "../workspace-search.js";
 import MagpieMark from "../components/MagpieMark.jsx";
 
-export default function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, onManagePairings, isPairing, hasPairingHistory, hasActiveExtension, onOpenDocs, onSignOut, onAsk, isAskOpen }) {
+export default function AppNavigation({ activeView, onNavigate, needsReviewCount, signalCount, collections, activeCollectionId, records, clips, refreshingRecordId, onSelectCollection, user, onPair, onManagePairings, isPairing, hasPairingHistory, hasActiveExtension, onOpenDocs, onSignOut, onAsk, isAskOpen, onReplayTour }) {
   const pairingAction = hasPairingHistory ? onManagePairings : onPair;
   const pairingLabel = !hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser";
   return (
@@ -16,7 +16,7 @@ export default function AppNavigation({ activeView, onNavigate, needsReviewCount
         {WORKSPACE_VIEWS.map(({ id, label, icon: Icon }) => {
           const count = id === "nest" ? needsReviewCount : id === "signals" ? signalCount : 0;
           return (
-            <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => onNavigate(id)}>
+            <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => onNavigate(id)} data-tour={`nav-${id}`}>
               <Icon size={16} /><span>{label}</span>{count > 0 && <b>{count}</b>}{id === "search" && <kbd>⌘K</kbd>}
             </button>
           );
@@ -44,9 +44,10 @@ export default function AppNavigation({ activeView, onNavigate, needsReviewCount
         </div>
       </div>
       <div className="nav-account">
-        <button type="button" onClick={pairingAction} disabled={isPairing}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {pairingLabel}</button>
+        <button type="button" onClick={pairingAction} disabled={isPairing} data-tour="pair-extension">{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {pairingLabel}</button>
         <button type="button" onClick={onOpenDocs}><Book size={14} /> Docs</button>
-        <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer"><Download size={14} /> Download extension</a>
+        {onReplayTour && <button type="button" onClick={onReplayTour}><Compass size={14} /> Replay tour</button>}
+        <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer" data-tour="get-extension"><Download size={14} /> Download extension</a>
         <div className="nav-user"><span><UserRound size={14} /> {user.full_name || user.email}</span><button type="button" onClick={onSignOut} aria-label="Sign out"><LogOut size={14} /></button></div>
         <p><LockKeyhole size={12} /> Owner-scoped by design</p>
       </div>

@@ -210,6 +210,15 @@ export default async function globalSetup(): Promise<void> {
 
     const sidePanel = await openSidePanel(context, extensionId);
     await savePairingIntoExtension(sidePanel, pairing);
+    // The capture matrix validates capture controls, not the new Side Panel
+    // orientation tour. Dismiss that real first-run UI once in the shared
+    // profile so its driver.js overlay does not correctly block later direct
+    // clicks on Save Page / Snip Area.
+    const extensionSkipTour = sidePanel.getByRole("button", { name: "Skip tour", exact: true });
+    if (await extensionSkipTour.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) {
+      await extensionSkipTour.click();
+      await extensionSkipTour.waitFor({ state: "hidden", timeout: 10_000 });
+    }
     await sidePanel.close();
     await dashboardPage.close();
     console.log("[global-setup] Extension paired and connection confirmed (side panel body[data-connected=true]).");

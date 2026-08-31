@@ -46,6 +46,16 @@ export type PairingCredentials = { ingestUrl: string; token: string };
  * "Pair another browser".
  */
 export async function pairExtensionViaDialog(page: Page): Promise<PairingCredentials> {
+  // A newly registered owner now starts inside the real activation tour.
+  // This helper deliberately tests the direct account-rail pairing path,
+  // so dismiss the tour exactly as a user would before clicking underneath
+  // it. Without this, driver.js's overlay correctly intercepts the click and
+  // the harness times out before any capture flow can run.
+  const skipTour = page.getByRole("button", { name: "Skip tour", exact: true });
+  if (await skipTour.isVisible().catch(() => false)) {
+    await skipTour.click();
+    await skipTour.waitFor({ state: "hidden", timeout: 10_000 });
+  }
   await page.locator(".app-navigation .nav-account").getByRole("button", { name: /Pair extension/i }).click();
   const dialog = page.locator(".pairing-dialog");
   await dialog.waitFor({ state: "visible", timeout: 15_000 });

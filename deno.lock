@@ -24,6 +24,7 @@
         "npm:@vitejs/plugin-react@^4.3.4",
         "npm:autoprefixer@^10.4.20",
         "npm:base44@~0.1.5",
+        "npm:driver.js@^1.8.0",
         "npm:lucide-react@0.475",
         "npm:postcss@^8.5.3",
         "npm:react-dom@^18.2.0",

@@ -2714,3 +2714,29 @@ end).
   checkpoints, not new. No entity/function/agent change; ships as a
   dashboard-only, Site-only release per
   `docs/V3_1_PRODUCT_AND_RISK_PLAN.md`.
+
+### ✅ Checkpoint 73 — retire mobile capture; keep mobile orientation (2026-08-30)
+
+- **Built:** removed the PWA share target and relay, iOS Shortcut artifact and
+  setup UI/doc, paste-link dialog, `/share` page, and `mobile-capture` backend
+  function. Mobile first-run now orients users to Nest, Library, Signals, and
+  Search, then explains that capture happens through the desktop extension.
+  Add to Home Screen remains available, including the iOS re-login caveat.
+- **Files:** `public/manifest.webmanifest`, `public/sw.js`, `src/App.jsx`,
+  `src/Docs.jsx`, `src/lib/routing.js`, `src/features/nest/CaptureSourceOffer.jsx`,
+  `src/onboarding/CaptureGuideDialog.jsx`, `src/tour/mobileSteps.js`,
+  `src/tour/useMobileTourController.js`, `src/tour/TourOverlay.jsx`, retired
+  capture/share files under `src/`, `public/`, and `base44/functions/`, plus
+  the matching tests.
+- **You'll know this works when:** the desktop activation tour still reaches
+  its real first-capture outcome; a phone sees an orientation-only tour and
+  can install the PWA but never sees paste/share/Shortcut capture actions;
+  `/share` is no longer registered; the production build and full Deno suite
+  pass with no active-source references to the retired path.
+- **Verified locally (2026-08-30):** production build clean; Deno suite
+  298/298; real unpacked-extension Playwright suite 7/7 across cancel,
+  element, image, link, page, selection, and visual-snip flows; rendered UI
+  Playwright matrix 6/6 across desktop Chrome, Pixel 7 Chromium, and iPhone
+  14 WebKit. The UI matrix signs in through the visible login form, navigates
+  Nest/Library/Signals/Search through the rendered controls, and replays each
+  platform's onboarding through its real buttons and dialogs.

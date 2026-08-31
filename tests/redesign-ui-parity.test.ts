@@ -126,10 +126,8 @@ Deno.test("Project creation selects the returned Project and clears stale Collec
   assert(app.includes('setActiveView("library")'), "creation must enter the new Project in Library");
 });
 
-Deno.test("mobile capture and saved Search expose explicit Project scope", async () => {
-  const mobileCaptureDialog = await Deno.readTextFile(new URL("src/features/capture/MobileCaptureDialog.jsx", root));
+Deno.test("saved Search exposes explicit Project scope", async () => {
   const searchSurface = await Deno.readTextFile(new URL("src/features/search/SearchSurface.jsx", root));
-  assert(mobileCaptureDialog.includes("Save to<select value={missionId}"), "the capture dialog must disclose and allow changing its Project destination");
   assert(searchSurface.includes('className="search-workspace-scope"'), "Search must disclose workspace vs Project scope");
   assert(searchSurface.includes('workspaceScope === "workspace" ? "" : workspaceScope'), "saved searches must preserve the visible scope");
 });
