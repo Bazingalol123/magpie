@@ -37,6 +37,7 @@ Deno.test("the orientation tour navigates to each surface it describes, via Tour
 
   const controller = await Deno.readTextFile(new URL("src/tour/useMobileTourController.js", root));
   assert(!controller.includes("CaptureOutcome") && !controller.includes("onAppInstalled"), "the orientation controller has no capture-outcome floor -- it's a plain linear walk");
+  assert(controller.includes("orientationStep") && controller.includes("TourProgressStatus.IN_PROGRESS"), "an interrupted orientation must resume from the per-user saved step");
 });
 
 Deno.test("TourOverlay is shared between desktop and mobile via a steps prop, and App.jsx mounts both gated to the right platform", async () => {

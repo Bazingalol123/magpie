@@ -2740,3 +2740,26 @@ end).
   14 WebKit. The UI matrix signs in through the visible login form, navigates
   Nest/Library/Signals/Search through the rendered controls, and replays each
   platform's onboarding through its real buttons and dialogs.
+
+### ✅ Checkpoint 74 — persist independent tour progress on the built-in User entity (2026-08-30)
+
+- **Built:** added the built-in `User` entity's `onboarding_progress` object
+  with independent activation/orientation statuses and an orientation resume
+  index. Desktop Skip/Done now records `activation: skipped/completed`; mobile
+  orientation records each highlighted step and resumes an interrupted walk,
+  while Skip/Done records `orientation: skipped/completed`. Replay resets only
+  the platform-appropriate tour. Existing accounts without the new object fall
+  back to `onboarding_dismissed`, so rollout does not replay onboarding for
+  everyone; the legacy boolean remains intact for its older consumers.
+- **Files:** `base44/entities/user.jsonc`, `src/tour/onboardingProgress.js`,
+  `src/tour/useMobileTourController.js`, `src/tour/TourOverlay.jsx`,
+  `src/App.jsx`, generated Base44 types, and onboarding/UI tests.
+- **You'll know this works when:** Skip and Done produce different persisted
+  statuses; activation never completes orientation; an interrupted mobile tour
+  resumes at its saved step; a fresh `auth.me()` read returns the object from
+  the User record rather than only seeing optimistic React state.
+- **Verified locally (2026-08-30):** generated Base44 types; production build
+  clean; Deno suite 303/303; rendered UI matrix 6/6 across desktop Chrome,
+  Pixel 7 Chromium, and iPhone 14 WebKit. The UI suite reads the fresh User
+  back through `base44.auth.me()` and confirms the persisted activation and
+  orientation values after real tour controls are clicked.

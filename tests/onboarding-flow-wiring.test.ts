@@ -61,6 +61,8 @@ Deno.test("an empty first-run account can explicitly open Library", async () => 
 Deno.test("onboarding dismissal is tracked on the User record, not a browser-local flag that leaks across accounts sharing a browser", async () => {
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
   assert(!app.includes("magpie.onboarding.dismissed"), "must not read/write the old localStorage flag -- it leaked a previous account's dismissal onto a brand-new signup in the same browser");
-  assert(app.includes("base44.auth.updateMe({ onboarding_dismissed: true })"), "dismissal must persist to the authenticated user's own record via the SDK's owner-scoped updateMe");
+  assert(app.includes("base44.auth.updateMe(update)"), "dismissal and granular progress must persist through the SDK's owner-scoped updateMe");
+  assert(app.includes("{ onboarding_dismissed: true }"), "desktop activation must keep updating the existing legacy field while progress migration is additive");
+  assert(app.includes("onboarding_progress: nextProgress"), "granular activation/orientation state must live on the authenticated User record");
   assert(app.includes("user?.onboarding_dismissed"), "the stage machine must read dismissal from the real user object, not local state seeded from localStorage");
 });

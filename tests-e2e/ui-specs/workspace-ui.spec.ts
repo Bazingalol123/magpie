@@ -19,6 +19,13 @@ async function dismissActiveTour(page: Page) {
   }
 }
 
+async function readOnboardingProgress(page: Page) {
+  return page.evaluate(async () => {
+    const client = (window as unknown as { __magpieBase44: { auth: { me: () => Promise<{ onboarding_progress?: unknown }> } } }).__magpieBase44;
+    return (await client.auth.me()).onboarding_progress;
+  });
+}
+
 async function replayTour(page: Page, mobile: boolean) {
   if (mobile) {
     await page.getByRole("button", { name: "Account menu" }).click();
@@ -68,6 +75,7 @@ test("the platform-appropriate onboarding tour is operable end to end", async ({
     await expect(page.getByRole("dialog", { name: "Download the extension" })).toBeVisible();
     await page.getByRole("button", { name: "Skip tour", exact: true }).click();
     await expect(page.locator(".driver-popover")).toBeHidden();
+    await expect.poll(() => readOnboardingProgress(page)).toMatchObject({ activation: "skipped" });
     return;
   }
 
@@ -93,4 +101,8 @@ test("the platform-appropriate onboarding tour is operable end to end", async ({
   }
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.locator(".driver-popover")).toBeHidden();
+  await expect.poll(() => readOnboardingProgress(page)).toMatchObject({
+    orientation: "completed",
+    orientationStep: 6,
+  });
 });

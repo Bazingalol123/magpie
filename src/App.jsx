@@ -45,6 +45,7 @@ import { useTourController } from "./tour/useTourController.js";
 import { ACTIVATION_STEPS } from "./tour/dashboardSteps.js";
 import { useMobileTourController } from "./tour/useMobileTourController.js";
 import TourOverlay from "./tour/TourOverlay.jsx";
+import { TourProgressStatus, hasStoredOnboardingProgress, isTourProgressFinal, mergeOnboardingProgress, readOnboardingProgress } from "./tour/onboardingProgress.js";
 import { collectionDotStatus, listDashboardPage, DASHBOARD_LIST_LIMIT, RECORDS_PAGE_SIZE, emptyData, emptyDataMeta } from "./lib/dashboardData.js";
 import MagpieMark from "./components/MagpieMark.jsx";
 import PairingDialog from "./features/pairing/PairingDialog.jsx";
@@ -773,8 +774,20 @@ export default function App() {
     && data.records.length === 0
     && data.clips.length === 0;
   const onboardingDismissed = !!user?.onboarding_dismissed;
-  const tourDismissed = onboardingDismissed || !canInstallExtension();
-  const mobileTourDismissed = onboardingDismissed || canInstallExtension();
+  const onboardingProgress = useMemo(() => readOnboardingProgress(user?.onboarding_progress), [user?.onboarding_progress]);
+  const hasProgressRecord = hasStoredOnboardingProgress(user?.onboarding_progress);
+  // Existing accounts fall back to the legacy dismissal flag until they
+  // write onboarding_progress once. From then on the two tours are tracked
+  // independently: completing activation must not silently complete the
+  // orientation tour (or vice versa).
+  const activationDismissed = hasProgressRecord
+    ? isTourProgressFinal(onboardingProgress.activation)
+    : onboardingDismissed;
+  const orientationDismissed = hasProgressRecord
+    ? isTourProgressFinal(onboardingProgress.orientation)
+    : onboardingDismissed;
+  const tourDismissed = activationDismissed || !canInstallExtension();
+  const mobileTourDismissed = orientationDismissed || canInstallExtension();
   // Any real app modal (pairing, capture guide, record detail, etc.) needs
   // full interactivity -- driver.js sets pointer-events:none on everything
   // except whatever it's currently highlighting, so a modal opened while
@@ -791,7 +804,7 @@ export default function App() {
     captureOutcome: latestCaptureOutcome,
     onNavigateToView: (view) => navigateWorkspace(view),
   });
-  const { steps: mobileTourSteps, floorIndex: mobileTourFloorIndex } = useMobileTourController();
+  const { steps: mobileTourSteps, floorIndex: mobileTourFloorIndex } = useMobileTourController(onboardingProgress);
   // Platform-independent: surfacing the exact Collection a first capture
   // landed in matters the same way whether it came from the extension or a
   // phone, so this isn't tied to either tour's own floor/step index.
@@ -811,14 +824,46 @@ export default function App() {
     setActiveMissionId(collection?.mission_id || "");
     selectCollection(record.collection_id);
   }, [onboardingDismissed, onboardingStage, latestCaptureOutcome, data.clips, data.records, data.collections]);
-  const replayTour = async () => {
-    setUser((current) => (current ? { ...current, onboarding_dismissed: false } : current));
-    setTourReplayToken((token) => token + 1);
+  const persistOnboardingProgress = async (patch, legacyPatch = {}) => {
+    // The first granular write is also the one-time migration for an older
+    // account. Preserve its legacy dismissal independently for both tours,
+    // then apply only the explicit patch (for example, replaying orientation
+    // must not make desktop activation reappear later).
+    const currentProgress = hasStoredOnboardingProgress(user?.onboarding_progress)
+      ? user.onboarding_progress
+      : {
+          activation: onboardingDismissed ? TourProgressStatus.SKIPPED : TourProgressStatus.NOT_STARTED,
+          orientation: onboardingDismissed ? TourProgressStatus.SKIPPED : TourProgressStatus.NOT_STARTED,
+          orientationStep: 0,
+        };
+    const nextProgress = mergeOnboardingProgress(currentProgress, patch);
+    const update = { ...legacyPatch, onboarding_progress: nextProgress };
+    setUser((current) => (current ? { ...current, ...update } : current));
     try {
-      await base44.auth.updateMe({ onboarding_dismissed: false });
+      await base44.auth.updateMe(update);
     } catch (error) {
-      setLoadError(error.response?.data?.error || error.message || "Could not restart the tour.");
+      setLoadError(error.response?.data?.error || error.message || "Could not save your tour progress.");
     }
+  };
+  const replayTour = async () => {
+    let saveProgress;
+    if (canInstallExtension()) {
+      saveProgress = persistOnboardingProgress(
+        { activation: TourProgressStatus.NOT_STARTED },
+        { onboarding_dismissed: false },
+      );
+    } else {
+      saveProgress = persistOnboardingProgress({
+        orientation: TourProgressStatus.NOT_STARTED,
+        orientationStep: 0,
+      });
+    }
+    // Restart immediately after the optimistic User update. Waiting for the
+    // network first lets the newly-undismissed overlay auto-open, and a late
+    // replay token can then yank someone back to Welcome after they already
+    // clicked Next (reproduced under Android Chromium in the UI matrix).
+    setTourReplayToken((token) => token + 1);
+    await saveProgress;
   };
   const hasPairingHistory = data.extensionInstalls.length > 0;
   const hasActiveExtension = hasActivePairing(data.extensionInstalls);
@@ -843,17 +888,31 @@ export default function App() {
       window.history.replaceState({}, "", "/nest");
     }
   }, [activeView, isFirstRun, user]);
-  const dismissOnboarding = async () => {
+  const finishActivationTour = async (status) => {
     // Tracked on the User record (base44.auth.updateMe), not localStorage:
     // a browser-local flag leaks across accounts sharing one browser (a
     // brand-new signup silently inherited a previous account's dismissal
     // in this same origin) and never follows a real user across devices.
-    setUser((current) => (current ? { ...current, onboarding_dismissed: true } : current));
-    try {
-      await base44.auth.updateMe({ onboarding_dismissed: true });
-    } catch (error) {
-      setLoadError(error.response?.data?.error || error.message || "Could not save your onboarding preference.");
-    }
+    await persistOnboardingProgress(
+      { activation: status },
+      { onboarding_dismissed: true },
+    );
+  };
+  const finishOrientationTour = async (status) => {
+    await persistOnboardingProgress({
+      orientation: status,
+      ...(status === TourProgressStatus.NOT_STARTED ? { orientationStep: 0 } : {}),
+    });
+  };
+  const saveOrientationStep = (_step, index) => {
+    if (
+      onboardingProgress.orientation === TourProgressStatus.IN_PROGRESS
+      && onboardingProgress.orientationStep === index
+    ) return;
+    void persistOnboardingProgress({
+      orientation: TourProgressStatus.IN_PROGRESS,
+      orientationStep: index,
+    });
   };
   const openOnboardingReview = (clipId) => {
     setSelectedReviewClipId(clipId);
@@ -943,8 +1002,8 @@ export default function App() {
       <nav className="mobile-bottom-nav" aria-label="Workspace">{[["nest", "Nest", Inbox], ["library", "Collections", Layers3], ["signals", "Signals", Radio]].map(([id, label, Icon]) => <button type="button" key={id} data-tour={`mobilenav-${id}`} className={activeView === id ? "active" : ""} onClick={() => navigateWorkspace(id)}><Icon size={18} /><span>{label}</span></button>)}<button type="button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={18} /><span>Ask</span></button></nav>
       {routingUndo && <div className="routing-undo-toast" role="status"><Check size={15} /><span><b>{routingUndo.title}</b> filed in {routingUndo.collectionName}.</span><button type="button" onClick={undoRoutingResolution}>Undo</button></div>}
       {canInstallExtension()
-        ? <TourOverlay steps={ACTIVATION_STEPS} floorIndex={tourFloorIndex} dismissed={tourDismissed} paused={isAnyModalOpen} onSkip={dismissOnboarding} replayToken={tourReplayToken} skipFirstStepWhen={tourExtensionDetected} skipFirstStepTarget={tourSkipToIndexFromStep0} />
-        : <TourOverlay steps={mobileTourSteps} floorIndex={mobileTourFloorIndex} dismissed={mobileTourDismissed} paused={isAnyModalOpen} onSkip={dismissOnboarding} replayToken={tourReplayToken} onStepView={(step) => { if (step.requiresView) navigateWorkspace(step.requiresView); }} />}
+        ? <TourOverlay steps={ACTIVATION_STEPS} floorIndex={tourFloorIndex} dismissed={tourDismissed} paused={isAnyModalOpen} onSkip={() => finishActivationTour(TourProgressStatus.SKIPPED)} onComplete={() => finishActivationTour(TourProgressStatus.COMPLETED)} replayToken={tourReplayToken} skipFirstStepWhen={tourExtensionDetected} skipFirstStepTarget={tourSkipToIndexFromStep0} />
+        : <TourOverlay steps={mobileTourSteps} floorIndex={mobileTourFloorIndex} dismissed={mobileTourDismissed} paused={isAnyModalOpen} onSkip={() => finishOrientationTour(TourProgressStatus.SKIPPED)} onComplete={() => finishOrientationTour(TourProgressStatus.COMPLETED)} replayToken={tourReplayToken} onStepChange={saveOrientationStep} onStepView={(step) => { if (step.requiresView) navigateWorkspace(step.requiresView); }} />}
       {isActivityOpen && <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} onClose={() => setIsActivityOpen(false)} />}
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} onCreateWatch={openWatchDialog} isTogglingWatch={isTogglingWatch} onCorrectField={correctSelectedRecordField} />
       {isCaptureGuideOpen && <CaptureGuideDialog onClose={() => setIsCaptureGuideOpen(false)} onPair={handleCreatePairing} isPairing={isPairing} hasPairedExtension={hasPairedExtension} />}

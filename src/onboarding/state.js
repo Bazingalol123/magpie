@@ -69,10 +69,9 @@ export function deriveCaptureOutcome(clip) {
 // whose only active Extension pairing later goes inactive gets a short
 // RECONNECT state instead of silence, without re-running the full tour.
 //
-// Capture evidence (clips.length > 0) outranks desktop pairing status: a
-// mobile-only user (iPhone Shortcut / Android Share Target / paste-URL) who
-// never pairs the Chrome extension still has a real first capture and must
-// reach FIRST_CAPTURE_RECEIVED, not stay stuck in NOT_PAIRED forever.
+// Capture evidence (clips.length > 0) outranks desktop pairing status. This
+// also keeps legacy accounts that captured through now-retired mobile paths
+// from falling backward into NOT_PAIRED after those paths were removed.
 /**
  * @param {{ extensionInstalls?: Array<{ active: boolean, last_used_at?: string|null }>, clips?: Array<object>, dismissed?: boolean }} [args]
  */
