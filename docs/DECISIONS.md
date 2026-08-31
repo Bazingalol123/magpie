@@ -1221,3 +1221,24 @@ still wanted, first confirm with Base44 (support/docs) whether a supported
 path exists before adding backend code against it. Until then, issue #90
 should be reopened/relabeled to reflect List+Resume as done and
 Delete/Rename as a separate, blocked follow-up rather than closed outright.
+
+## 2026-08-30 — mobile is read/organize only; capture is extension-only for now
+
+The iOS Shortcut, Android PWA share target, `/share` relay, paste-a-link
+dialog, and `mobile-capture` backend function are retired. Real-device testing
+showed that the flow multiplied authentication boundaries, depended on a
+browser handoff that was hard to explain, and still could not offer the same
+reliable page acquisition as the desktop extension without expensive browser
+automation.
+
+The installed mobile PWA remains useful for reviewing and organizing. Its
+first-run tour is therefore an orientation walk through Nest, Library,
+Signals, and Search, with an honest final note that capture happens on a
+computer. Add to Home Screen remains available on Android and iOS; iOS copy
+states that the installed app has its own sign-in session.
+
+Desktop activation remains unchanged: install/pair the extension, make the
+first capture, and see its real routing outcome. The only desktop surface
+removed is paste-a-link/iPhone capture, making the product consistently
+extension-only. If mobile capture returns, it must be designed as a new,
+explicitly authenticated acquisition path rather than reviving these files.

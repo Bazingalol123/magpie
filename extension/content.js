@@ -12,6 +12,19 @@ let snipRect = null;
 let snipStart = null;
 let captureSubmitting = false;
 
+// Lets the dashboard detect the extension is installed before any pairing
+// exists, without needing to know this extension's ID (unpacked/dev-mode
+// installs get a different random ID per machine, so the usual
+// externally_connectable + chrome.runtime.sendMessage(extensionId, ...)
+// pattern doesn't work here). The content script is already injected into
+// every page including the dashboard's own, so it can just mark the page
+// directly -- gated to Magpie's own origins only (browser-enforced, not
+// spoofable by page script) so no other site can read this presence signal.
+if (/^https?:\/\/(magpiecapture\.com|localhost|127\.0\.0\.1)(:|\/|$)/.test(location.origin)) {
+  document.documentElement.setAttribute("data-magpie-extension", "installed");
+  window.dispatchEvent(new CustomEvent("magpie:extension-present"));
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "magpie:start-picker") {
     startPicker(message.mode);

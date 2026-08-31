@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Inbox, Layers3, LoaderCircle, Radio, X } from "lucide-react";
 import { ClipElementIcon, PairingIcon, SavePageIcon, SnipAreaIcon } from "../components/icons.jsx";
 
+// Desktop-only: this walks through the extension's capture modes. Mobile is
+// a read/organize surface with no capture path, so it never opens this.
+const OUTCOME_STEP = {
+  label: "What happens next",
+  title: "Magpie handles the filing.",
+  body: "Structured Items go straight into Collections. Ambiguous captures wait in Nest for one decision. Watches keep checking sources and surface meaningful changes in Signals.",
+  icon: Layers3,
+  isLast: true,
+};
+
 const GUIDE_STEPS = [
   {
     label: "Clip Element",
@@ -27,13 +37,7 @@ const GUIDE_STEPS = [
     alt: "The Magpie extension Side Panel showing Clip Element, Snip Area, and Save Page",
     icon: SavePageIcon,
   },
-  {
-    label: "What happens next",
-    title: "Magpie handles the filing.",
-    body: "Structured Items go straight into Collections. Ambiguous captures wait in Nest for one decision. Watches keep checking sources and surface meaningful changes in Signals.",
-    icon: Layers3,
-    isLast: true,
-  },
+  OUTCOME_STEP,
 ];
 
 function CaptureOutcomePreview() {
@@ -74,7 +78,7 @@ function CaptureOutcomePreview() {
   );
 }
 
-export default function CaptureGuideDialog({ onClose, onPair, onPaste, onIos, isPairing, hasPairedExtension }) {
+export default function CaptureGuideDialog({ onClose, onPair, isPairing, hasPairedExtension }) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = GUIDE_STEPS[stepIndex];
   const Icon = step.icon;
@@ -104,7 +108,7 @@ export default function CaptureGuideDialog({ onClose, onPair, onPaste, onIos, is
 
         <div className={`capture-guide-body${step.isLast ? " is-outcome" : ""}`}>
           <figure className={`capture-guide-media${step.label === "Save Page" ? " is-portrait" : ""}`}>
-            {step.isLast ? <CaptureOutcomePreview /> : <img src={step.src} alt={step.alt} />}
+            {step.isLast ? <CaptureOutcomePreview /> : step.src ? <img src={step.src} alt={step.alt} /> : <div className="capture-guide-icon-figure" aria-hidden="true"><Icon size={56} /></div>}
           </figure>
 
           <div className="capture-guide-copy">
@@ -114,15 +118,15 @@ export default function CaptureGuideDialog({ onClose, onPair, onPaste, onIos, is
             {step.isLast && (
               <div className="capture-guide-source-actions">
                 <button type="button" className="primary-button" disabled={isPairing} onClick={() => closeThen(onPair)}>{isPairing ? <LoaderCircle className="spin" size={14} /> : <PairingIcon size={14} />} {hasPairedExtension ? "Pair another browser" : "Pair extension"}</button>
-                <button type="button" className="secondary-button" onClick={() => closeThen(onPaste)}>Paste a link</button>
-                <button type="button" className="text-button" onClick={() => closeThen(onIos)}>Use iPhone / iPad</button>
               </div>
             )}
           </div>
         </div>
 
         <footer className="capture-guide-footer">
-          <button type="button" className="secondary-button" disabled={stepIndex === 0} onClick={() => setStepIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={14} /> Back</button>
+          {stepIndex === 0
+            ? <button type="button" className="secondary-button" onClick={onClose}>Close</button>
+            : <button type="button" className="secondary-button" onClick={() => setStepIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={14} /> Back</button>}
           <div className="capture-guide-progress" role="group" aria-label="Capture guide steps">
             {GUIDE_STEPS.map((item, index) => <button key={item.label} type="button" className={index === stepIndex ? "active" : ""} onClick={() => setStepIndex(index)} aria-label={`Go to ${item.label}`} aria-current={index === stepIndex ? "step" : undefined} />)}
           </div>

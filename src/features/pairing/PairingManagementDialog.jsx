@@ -27,7 +27,7 @@ export default function PairingManagementDialog({ pairings, onClose, onPair, isP
         <p>Each browser has its own write-only token. Creating a new connection never disconnects another browser.</p>
         {error && <div className="review-error pairing-management-error">{error}</div>}
         <div className="pairing-management-list">
-          {pairings.length === 0 && <div className="pairing-empty"><PairingIcon size={22} /><div><b>No browsers paired</b><span>Pair the Chrome Extension to start capturing from the web. Don't have it yet? <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">Download the extension</a>.</span></div></div>}
+          {pairings.length === 0 && <div className="pairing-empty"><PairingIcon size={22} /><div><b>No browsers paired</b><span>Pair the Chrome Extension on your computer to start capturing from the web. Don't have it yet? <a href={EXTENSION_RELEASES_URL} target="_blank" rel="noreferrer">Download the extension</a>.</span></div></div>}
           {pairings.map((install) => {
             const status = derivePairingDisplayStatus(install);
             const copy = PAIRING_STATUS_COPY[status];

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Magpie</title>
     <link rel="stylesheet" href="sidepanel.css" />
+    <link rel="stylesheet" href="vendor/driver.css" />
   </head>
   <body>
     <main>
@@ -24,16 +25,16 @@
       </section>
 
       <div id="capture-zone">
-        <button id="start-picker" class="hero-action">
+        <button id="start-picker" class="hero-action" data-tour="capture-clip-element">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/></svg>
           <span>Clip element<small>Alt+Shift+M · hover, then press C</small></span>
         </button>
         <div class="secondary-actions">
-          <button id="start-visual" class="mini-action">
+          <button id="start-visual" class="mini-action" data-tour="capture-snip-area">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
             Snip area
           </button>
-          <button id="save-page" class="mini-action">
+          <button id="save-page" class="mini-action" data-tour="capture-save-page">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
             Save page
           </button>
@@ -63,7 +64,7 @@
         </section>
       </div>
 
-      <button id="open-dashboard" class="dashboard-link">
+      <button id="open-dashboard" class="dashboard-link" data-tour="open-dashboard">
         Open dashboard in a new tab
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
       </button>
@@ -82,6 +83,7 @@
       <footer>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         Write-only by design — this token can never read your data.
+        <button type="button" id="replay-tour" class="tour-replay-link">Replay tour</button>
       </footer>
     </main>
     <script type="module" src="sidepanel.js"></script>

@@ -1,5 +1,4 @@
-const CACHE = "magpie-shell-v2";
-const SHARE_CACHE = "magpie-share-inbox-v1";
+const CACHE = "magpie-shell-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/magpie-mark-192.png", "/magpie-mark-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -8,25 +7,16 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type !== "consume_share" || !event.data.id) return;
-  event.waitUntil(caches.open(SHARE_CACHE).then((cache) => cache.delete(new Request(`/__magpie_share/${event.data.id}`))));
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
-  const requestUrl = new URL(event.request.url);
-  if (requestUrl.pathname.startsWith("/__magpie_share/")) {
-    event.respondWith(caches.open(SHARE_CACHE).then((cache) => cache.match(event.request)));
-    return;
-  }
-  if (event.request.method === "POST" && requestUrl.pathname === "/share") {
-    event.respondWith(storeShareAndRedirect(event.request));
-    return;
-  }
   if (event.request.method !== "GET") return;
+  const requestUrl = new URL(event.request.url);
   // Auth (/api/apps/auth/*) and other backend routes are cross-origin
   // redirect chains (OAuth) or API calls, not SPA pages. Never intercept
   // them with the offline shell fallback below, or a fetch() hiccup partway
@@ -44,20 +34,4 @@ async function fetchWithNavigationFallback(request) {
   } catch {
     return (await caches.match(request)) || (await caches.match("/"));
   }
-}
-
-async function storeShareAndRedirect(request) {
-  const form = await request.formData();
-  const id = crypto.randomUUID();
-  const payload = {
-    title: String(form.get("title") || ""),
-    text: String(form.get("text") || ""),
-    url: String(form.get("url") || ""),
-  };
-  const cache = await caches.open(SHARE_CACHE);
-  await cache.put(
-    new Request(`/__magpie_share/${id}`),
-    new Response(JSON.stringify(payload), { headers: { "Content-Type": "application/json" } }),
-  );
-  return Response.redirect(`/share?share_id=${encodeURIComponent(id)}`, 303);
 }

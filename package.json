@@ -8,10 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test --config=playwright.config.ts",
-    "record:onboarding-media": "playwright test --config=playwright.media.config.ts && node scripts/encode-onboarding-gifs.mjs"
+    "test:e2e:ui": "playwright test --config=playwright.ui.config.ts",
+    "record:onboarding-media": "playwright test --config=playwright.media.config.ts && node scripts/encode-onboarding-gifs.mjs",
+    "browse:ios": "playwright open -b webkit --device=\"iPhone 14\" http://localhost:5173",
+    "browse:android": "playwright open -b chromium --device=\"Pixel 7\" http://localhost:5173"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.3",
+    "driver.js": "^1.8.0",
     "lucide-react": "^0.475.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

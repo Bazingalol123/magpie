@@ -1976,3 +1976,69 @@ While splitting `src/App.jsx` (Build Guide checkpoint 72), several tests in `tes
 None of this was discoverable by reading the components themselves — it only shows up by actually running the Deno suite after each extraction step. The fix pattern that worked: after moving a component, re-run the full suite immediately; for any test that fails because its literal-text target moved, add a second `Deno.readTextFile` call for the component's new file path and repoint just that specific assertion at it, leaving every other assertion (and the test's actual intent) untouched. 16 assertions across those 4 test files needed this by the end of the 18-component split — always exactly the assertions whose target string lived inside the component that had just moved, never a false positive elsewhere.
 
 Implication for anyone splitting a big file with this style of test in place: budget for "grep test whack-a-mole" as a real, recurring step in the extraction loop, not a one-time cleanup at the end — it is not safe to move a component and defer the test fix, because a second component's move can break a test that already looked fixed if that test's remaining assertions pointed at code that hadn't moved yet at the time of the first fix.
+
+## 2026-08-29 — iOS Safari can install the PWA via Add to Home Screen; only the Web Share Target API is Android-only
+
+Corrected a design mistake in the mobile activation tour (`src/tour/mobileSteps.js`) and capture guide (`src/onboarding/CaptureGuideDialog.jsx`) found by the owner: an earlier pass conflated two genuinely separate iOS Safari capabilities and got one of them wrong.
+
+- **Add to Home Screen** (installing the PWA to the home screen, running in standalone display mode) works on iOS Safari today, with no service worker requirement at all for the install itself — `window.matchMedia("(display-mode: standalone)")` / `navigator.standalone` correctly detect it once installed (`src/lib/pwaInstall.js`'s `isStandalone()`, confirmed to work identically on both platforms).
+- **Web Share Target API** (receiving a share from the OS share sheet directly into an installed PWA, `share_target` in `public/manifest.webmanifest`) is Android/Chrome-only. Safari has no equivalent, which is the entire reason `docs/IOS_SHORTCUT_SETUP.md`'s Shortcut workaround exists.
+
+The earlier mistake: the mobile tour's iOS branch treated the Shortcut as the *only* iOS setup step, which silently implied iOS had no install path at all and skipped real, valuable Add-to-Home-Screen guidance. Fixed by giving iOS its own concrete install step (real Safari Share → Add to Home Screen → Add steps) plus a *separate, additional* step for the Shortcut, framed explicitly as "you've already installed Magpie above, this just turns on one-tap sharing" — never a replacement for installing. `src/lib/pwaInstall.js`'s `beforeinstallprompt`/`appinstalled` wiring (Android's real one-tap install path) was already correct and needed no changes, just confirmation it's genuinely wired (imported first in `src/main.jsx`, ahead of the app rendering, so the one-per-page-load event can't be missed).
+
+## 2026-08-29 — a first-run redirect effect silently destroyed any query string on `/`, breaking every `/?docs=...` deep link for new accounts
+
+Found live while re-auditing the mobile onboarding flow: tapping "Turn on one-tap sharing" (which opens `/?docs=ios-shortcut` in a new tab) landed on a plain `/nest` with no docs content, for every first-run account, on both mobile and desktop. Root cause was `src/App.jsx`'s "guide a brand-new account from the bare root into the capture task" effect — it matched on `window.location.pathname === "/"` only, ignoring the query string, so it fired on `/?docs=ios-shortcut` exactly as it would on a bare `/`, immediately `history.replaceState`-ing the URL to `/nest` before `isDocsRoute()` (checked inline in the render body against `window.location.href`) ever got to see the docs param on a later render. Confirmed via a real authenticated Playwright session: `goto("/?docs=ios-shortcut")` resolved to `location.href === "http://localhost:5174/nest"` after ~1.5s, with the Docs page never rendering at all.
+
+Fix was a one-line guard: also require `!window.location.search`. Any other `/`-rooted deep link (the existing `?review=` handling, `?share_id=`, future additions) was equally exposed to the same effect since it's a generic "first-run + activeView library + pathname /" check with no query-string awareness — worth checking this guard again if a new `/`-based query param is ever added.
+
+Also found in the same pass: `CaptureGuideDialog.jsx`'s step-0 footer rendered a `disabled` "Back" button (same size/weight as "Next", just dimmed via `opacity:.45`) rather than omitting it — landing on step 1 directly (as the primary "Add Magpie to your home screen" action does) offered no working way back except a small header "×" icon, and testing confirmed the dimming wasn't obvious enough to read as non-interactive. Fixed by rendering a real, working "Close" button in Back's place on step 0 instead of a disabled Back.
+
+## 2026-08-29 — real-device testing over Tailscale: two blockers (SDK localhost baked into the bundle; Vite dev server crashing on a phone's ECONNRESET), plus a misleading iOS install step
+
+Testing the mobile onboarding on a real iPhone (over Tailscale to the dev machine) surfaced three issues emulation had missed, two of them hard blockers.
+
+**1. `base44 dev` bakes `VITE_BASE44_APP_BASE_URL=http://localhost:<port>` into its own frontend bundle.** On a phone reaching that bundle over Tailscale/LAN, `localhost` is the phone itself, so every API call failed with a silent axios "Network Error." It never reproduced from the dev machine because curl and a local Playwright browser both resolve `localhost` back to the same machine. Fixed in `src/api/base44Client.js`: browser origin now wins over an explicit `localBaseUrl` whenever the origin isn't localhost (`useBrowserOrigin = browserOrigin && !isLocalDevHost`), so a non-localhost browser talks same-origin and relies on the dev/preview `/api` proxy. `localBaseUrl` still applies only when the browser is also on localhost (the developer's own machine). Confirmed via a real UI login round-trip from the phone origin landing on `/nest` with no network error.
+
+**2. Opening the installed PWA crashed the Vite dev server** with an unhandled `Error: read ECONNRESET` on a raw socket → `Frontend dev server exited with code 1`, leaving the owner unable to log in at all. Root cause: a phone (especially an iOS standalone webview) aborting a slow proxied `/api` request mid-flight — e.g. a cold-starting backend function like `list-extension-pairings` — makes http-proxy re-emit the reset as an unhandled `'error'`, which kills the whole Vite process. Two-part fix in `vite.config.js`: (a) attach `proxy.on('error', () => {})` to the `/api` proxy on both `server` and `preview` so a client reset can't take the server down; (b) add a `preview` config and use **`npm run preview` (a production build) as the real-device test path** — a prod build has no HMR websocket (the fragile connection a phone resets), and is a static-serve + proxy that survived a 25-request abort storm in testing where the dev server had died on the first reset. The proxy target is `MAGPIE_BACKEND_URL || http://127.0.0.1:4400` because `base44 dev` picks its backend port non-deterministically (seen on 4400 and 4491).
+
+Note: over plain HTTP on a Tailscale/LAN IP, `navigator.serviceWorker` is undefined (browsers require a secure context — HTTPS or localhost), so the service worker does not register in that setup. iOS Add-to-Home-Screen does not need one, so device testing of the install flow still works; the real SW-backed PWA only engages on the production HTTPS origin.
+
+**3. The iOS install tour step spotlighted a button that couldn't do what the tooltip said.** The tooltip recited "tap the Share button in Safari…" while spotlighting the in-app "Add Magpie to your home screen" button, whose tap (no `beforeinstallprompt` exists on iOS Safari) actually opened the multi-step capture-guide carousel. Read as broken on a real phone. Fixed: the tooltip now only says "tap the highlighted button," and that button opens a new focused `AddToHomeScreenGuide` dialog with the exact 2–3 taps (branched: Safari Share → Add to Home Screen on iOS; browser ⋮ menu → Install on Android). On Android the button still fires the real `beforeinstallprompt` first and only falls to the how-to when no prompt is available. The how-to is a modal, so it pauses the live tour like every other dialog and resumes the install step on close.
+
+## 2026-08-30 — retiring a feature means removing its dead onboarding too
+
+After the mobile capture decision, the obvious runtime files were not the
+whole surface. Two already-unmounted legacy components
+(`OnboardingWelcomeFlow.jsx` and `OnboardingPanel.jsx`) still contained the
+old phone card, paste form, and capture props, and several source-text tests
+still treated those dead files as product truth. Leaving them would make the
+retired design look supported to the next maintainer and easy to reconnect by
+accident.
+
+The cleanup therefore removed the dead components and their capture-only CSS,
+then repointed the surviving media assertions at the live desktop
+`CaptureGuideDialog`. Historical notes remain intact as evidence of what was
+tried; the new decision entry is the current product truth.
+
+## 2026-08-30 — interactive device browsers are useful for inspection, but the release gate needs device-project assertions
+
+`npm run browse:android` and `npm run browse:ios` open Playwright's interactive
+browser viewer, which is useful for human inspection but does not give the test
+runner an attachable page for repeatable assertions. The same Pixel 7 Chromium
+and iPhone 14 WebKit profiles now live in `playwright.ui.config.ts`, alongside
+desktop Chrome, and run through `npm run test:e2e:ui`.
+
+The first matrix run found two timing/identity issues that API and source-text
+tests could not expose: returning mobile users had no live
+`mobile-primary-action` anchor for the replayed install step, and WebKit could
+render the automatic tour just after a one-shot visibility check. The product
+now keeps the Add to Home Screen action in the returning-user Nest state, and
+the UI helper waits for the asynchronous tour before dismissing it. A second
+failure was test-only: the install guide and resumed tour intentionally shared
+the same accessible title, so the guide assertion was narrowed to the real
+`.pairing-dialog` rather than treating the driver's resumed popover as a modal
+that failed to close.
+
+Final result: 6/6 rendered UI flows across all three profiles, in addition to
+the separate 7/7 real unpacked-extension capture suite.

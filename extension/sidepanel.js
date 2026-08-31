@@ -1,3 +1,5 @@
+import { initExtensionTour } from "./tour.js";
+
 const ingestUrl = document.getElementById("ingest-url");
 const extensionToken = document.getElementById("extension-token");
 const status = document.getElementById("status");
@@ -8,6 +10,7 @@ const connectionPill = document.getElementById("connection-pill");
 const setupCallout = document.getElementById("setup-callout");
 const connectionSettings = document.getElementById("connection-settings");
 const autoRefresh = document.getElementById("auto-refresh");
+const replayTourButton = document.getElementById("replay-tour");
 const captureButtons = [
   document.getElementById("start-picker"),
   document.getElementById("start-visual"),
@@ -55,6 +58,9 @@ chrome.storage.local.get({ autoRefreshEnabled: true }).then((config) => {
   autoRefresh.checked = config.autoRefreshEnabled;
 });
 autoRefresh.addEventListener("change", () => chrome.storage.local.set({ autoRefreshEnabled: autoRefresh.checked }));
+
+const extensionTour = initExtensionTour();
+replayTourButton.addEventListener("click", () => extensionTour.replay());
 
 function updateConnectionState() {
   const connected = Boolean(ingestUrl.value.trim() && extensionToken.value.trim());

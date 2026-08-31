@@ -21,7 +21,7 @@ export default function RecordCardGrid({ records, columns, clipsById, enrichment
     : records;
 
   return (
-    <div className="card-grid">
+    <div className="card-grid" data-tour="record-grid">
       {orderedRecords.map((record) => {
         const fields = parseJson(record.fields_json, {});
         const image = screenshotUrlFor(clipsById.get(record.clip_id));

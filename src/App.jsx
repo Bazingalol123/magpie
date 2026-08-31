@@ -5,6 +5,7 @@ import {
   Book,
   Bug,
   Check,
+  Compass,
   Inbox,
   Layers3,
   Linkedin,
@@ -28,7 +29,8 @@ import LoginPage from "./LoginPage.jsx";
 import Docs from "./Docs.jsx";
 import { isDocsRoute, parseDocsLocation } from "./docs-navigation.js";
 import CaptureGuideDialog from "./onboarding/CaptureGuideDialog.jsx";
-import { OnboardingStage, deriveOnboardingStage } from "./onboarding/state.js";
+import AddToHomeScreenGuide from "./onboarding/AddToHomeScreenGuide.jsx";
+import { OnboardingStage, CaptureOutcome, deriveOnboardingStage, mostRecentClip, deriveCaptureOutcome } from "./onboarding/state.js";
 import { fetchAllPages } from "./dashboard-pagination.js";
 import {
   hasActivePairing,
@@ -37,7 +39,12 @@ import {
 import { searchWorkspace } from "./workspace-search.js";
 import { parseJson } from "./lib/parsing.js";
 import { clipTitle, collectionHasCapturedImages } from "./lib/text.js";
-import { workspaceViewFromPath, readShareDraft } from "./lib/routing.js";
+import { workspaceViewFromPath } from "./lib/routing.js";
+import { canInstallExtension } from "./lib/device.js";
+import { useTourController } from "./tour/useTourController.js";
+import { ACTIVATION_STEPS } from "./tour/dashboardSteps.js";
+import { useMobileTourController } from "./tour/useMobileTourController.js";
+import TourOverlay from "./tour/TourOverlay.jsx";
 import { collectionDotStatus, listDashboardPage, DASHBOARD_LIST_LIMIT, RECORDS_PAGE_SIZE, emptyData, emptyDataMeta } from "./lib/dashboardData.js";
 import MagpieMark from "./components/MagpieMark.jsx";
 import PairingDialog from "./features/pairing/PairingDialog.jsx";
@@ -53,11 +60,9 @@ import NeedsReviewPanel from "./features/nest/NeedsReviewPanel.jsx";
 import SignalsSurface from "./features/signals/SignalsSurface.jsx";
 import SearchSurface from "./features/search/SearchSurface.jsx";
 import MagpieAgentPanel from "./features/agent/MagpieAgentPanel.jsx";
-import ShareCapturePage from "./ShareCapturePage.jsx";
 import AppNavigation from "./layout/AppNavigation.jsx";
 import ProjectDialog from "./features/projects/ProjectDialog.jsx";
 import BugReportDialog from "./features/support/BugReportDialog.jsx";
-import MobileCaptureDialog from "./features/capture/MobileCaptureDialog.jsx";
 
 function CollectionSidebar({ collections, activeCollectionId, records, hasMoreRecords, onSelect, onDelete, deletingId, refreshingRecordId }) {
   const [confirmingId, setConfirmingId] = useState(null);
@@ -129,11 +134,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [, forceRouteRender] = useState(0);
-  const [shareDraft, setShareDraft] = useState(() => readShareDraft());
   const isLoginRoute = window.location.pathname === "/login";
-  const isShareRoute = window.location.pathname === "/share";
-  const shareId = isShareRoute ? new URLSearchParams(window.location.search).get("share_id") : null;
-  const shareRedirectPath = shareId ? `/share?share_id=${encodeURIComponent(shareId)}` : "/share";
   const [data, setData] = useState(emptyData);
   const [dataMeta, setDataMeta] = useState(emptyDataMeta);
   const [activeView, setActiveView] = useState(() => workspaceViewFromPath(window.location.pathname));
@@ -149,6 +150,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPairing, setIsPairing] = useState(false);
   const [pairing, setPairing] = useState(null);
+  const [tourReplayToken, setTourReplayToken] = useState(0);
   const [isPairingManagementOpen, setIsPairingManagementOpen] = useState(false);
   const [pairingManagementError, setPairingManagementError] = useState("");
   const [revokingInstallationId, setRevokingInstallationId] = useState(null);
@@ -172,10 +174,6 @@ export default function App() {
   const [watchDialog, setWatchDialog] = useState(null);
   const [isSavingWatch, setIsSavingWatch] = useState(false);
   const [watchDialogError, setWatchDialogError] = useState("");
-  const [isMobileCaptureOpen, setIsMobileCaptureOpen] = useState(false);
-  const [isMobileCapturing, setIsMobileCapturing] = useState(false);
-  const [mobileCaptureError, setMobileCaptureError] = useState("");
-  const [mobileCaptureResult, setMobileCaptureResult] = useState(null);
   const [deletingCollectionId, setDeletingCollectionId] = useState(null);
   const [deletingMissionId, setDeletingMissionId] = useState(null);
   const [isBugReportOpen, setIsBugReportOpen] = useState(false);
@@ -294,18 +292,6 @@ export default function App() {
   }, [navigateWorkspace, user]);
 
   useEffect(() => {
-    if (window.location.pathname !== "/share") return undefined;
-    const shareId = new URLSearchParams(window.location.search).get("share_id");
-    if (!shareId) return undefined;
-    let cancelled = false;
-    fetch(`/__magpie_share/${encodeURIComponent(shareId)}`)
-      .then((response) => response.ok ? response.json() : null)
-      .then((draft) => { if (!cancelled && draft) setShareDraft(draft); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
     let active = true;
     base44.auth.me()
       .then((currentUser) => active && setUser(currentUser))
@@ -313,11 +299,6 @@ export default function App() {
       .finally(() => active && setIsLoading(false));
     return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    if (isLoading || user || !isShareRoute) return;
-    base44.auth.loginWithProvider("google", shareRedirectPath);
-  }, [isLoading, user, isShareRoute, shareRedirectPath]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -478,32 +459,6 @@ export default function App() {
       return false;
     } finally {
       setIsRevokingAllPairings(false);
-    }
-  };
-
-  const submitMobileCapture = async (payload) => {
-    setIsMobileCapturing(true);
-    setMobileCaptureError("");
-    setMobileCaptureResult(null);
-    try {
-      const { mission_id: requestedMissionId, ...capturePayload } = payload;
-      const captureMissionId = requestedMissionId === undefined ? activeMissionId : requestedMissionId;
-      const response = await base44.functions.invoke("mobile-capture", {
-        ...capturePayload,
-        ...(captureMissionId ? { mission_id: captureMissionId } : {}),
-      });
-      setMobileCaptureResult(response.data);
-      if (window.location.pathname === "/share") {
-        const shareId = new URLSearchParams(window.location.search).get("share_id");
-        try { sessionStorage.removeItem("magpie.share.draft"); } catch { /* storage can be unavailable */ }
-        if (shareId && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ type: "consume_share", id: shareId });
-      }
-      await requestDashboardLoad();
-      return response.data;
-    } catch (error) {
-      setMobileCaptureError(error.response?.data?.error || error.message || "Could not save this capture.");
-    } finally {
-      setIsMobileCapturing(false);
     }
   };
 
@@ -754,13 +709,13 @@ export default function App() {
     return response.data.mission;
   };
 
-  const openIosShortcutSetup = () => window.open("/?docs=ios-shortcut", "_blank", "noopener");
-
-  const openMobileCapture = () => {
-    setMobileCaptureError("");
-    setMobileCaptureResult(null);
-    setIsMobileCaptureOpen(true);
-  };
+  // Adding to the home screen is a browser-native gesture no web page can
+  // trigger, so the "Add Magpie to your home screen" button opens a focused
+  // how-to instead of pretending to do it. This is the one mobile PWA
+  // affordance kept after mobile *capture* was retired -- installing gives a
+  // real app icon for reviewing and organizing on the go.
+  const [isInstallHelpOpen, setIsInstallHelpOpen] = useState(false);
+  const openInstallHelp = () => setIsInstallHelpOpen(true);
 
   const saveWorkspaceSearch = async (query, name, missionId = "") => {
     const response = await base44.functions.invoke("create-saved-search", {
@@ -809,10 +764,62 @@ export default function App() {
     }),
     [data.extensionInstalls, data.clips, user?.onboarding_dismissed],
   );
-  const isFirstRun = onboardingStage === OnboardingStage.NOT_PAIRED
-    && data.collections.length === 0
+  // Not gated on onboardingStage === NOT_PAIRED -- a user who just paired but
+  // hasn't captured anything yet is AWAITING_FIRST_CAPTURE, not NOT_PAIRED,
+  // but is still absolutely a first-run user. Gating on stage caused
+  // CaptureSourceOffer to show the wrong "all caught up" empty state the
+  // instant pairing succeeded, before anything was ever captured.
+  const isFirstRun = data.collections.length === 0
     && data.records.length === 0
     && data.clips.length === 0;
+  const onboardingDismissed = !!user?.onboarding_dismissed;
+  const tourDismissed = onboardingDismissed || !canInstallExtension();
+  const mobileTourDismissed = onboardingDismissed || canInstallExtension();
+  // Any real app modal (pairing, capture guide, record detail, etc.) needs
+  // full interactivity -- driver.js sets pointer-events:none on everything
+  // except whatever it's currently highlighting, so a modal opened while
+  // the tour is active would otherwise render but be completely unclickable.
+  const isAnyModalOpen = !!pairing || isPairingManagementOpen || isProjectDialogOpen
+    || isCaptureGuideOpen || isActivityOpen || isReviewOpen
+    || isBugReportOpen || !!selectedRecord || !!watchDialog || isInstallHelpOpen;
+  const latestClip = mostRecentClip(data.clips);
+  const latestCaptureOutcome = latestClip ? deriveCaptureOutcome(latestClip) : null;
+  const { floorIndex: tourFloorIndex, extensionDetected: tourExtensionDetected, skipToIndexFromStep0: tourSkipToIndexFromStep0 } = useTourController({
+    onboardingStage,
+    dismissed: tourDismissed,
+    activeView,
+    captureOutcome: latestCaptureOutcome,
+    onNavigateToView: (view) => navigateWorkspace(view),
+  });
+  const { steps: mobileTourSteps, floorIndex: mobileTourFloorIndex } = useMobileTourController();
+  // Platform-independent: surfacing the exact Collection a first capture
+  // landed in matters the same way whether it came from the extension or a
+  // phone, so this isn't tied to either tour's own floor/step index.
+  const hasNavigatedToFirstRecordRef = useRef(false);
+  useEffect(() => {
+    if (
+      onboardingDismissed
+      || onboardingStage !== OnboardingStage.FIRST_CAPTURE_RECEIVED
+      || latestCaptureOutcome === CaptureOutcome.NEEDS_REVIEW
+      || hasNavigatedToFirstRecordRef.current
+    ) return;
+    const clip = mostRecentClip(data.clips);
+    const record = clip && data.records.find((item) => item.clip_id === clip.id);
+    if (!record) return;
+    const collection = data.collections.find((item) => item.id === record.collection_id);
+    hasNavigatedToFirstRecordRef.current = true;
+    setActiveMissionId(collection?.mission_id || "");
+    selectCollection(record.collection_id);
+  }, [onboardingDismissed, onboardingStage, latestCaptureOutcome, data.clips, data.records, data.collections]);
+  const replayTour = async () => {
+    setUser((current) => (current ? { ...current, onboarding_dismissed: false } : current));
+    setTourReplayToken((token) => token + 1);
+    try {
+      await base44.auth.updateMe({ onboarding_dismissed: false });
+    } catch (error) {
+      setLoadError(error.response?.data?.error || error.message || "Could not restart the tour.");
+    }
+  };
   const hasPairingHistory = data.extensionInstalls.length > 0;
   const hasActiveExtension = hasActivePairing(data.extensionInstalls);
   const showPairingReconnect = needsPairingReconnect(data.extensionInstalls);
@@ -825,8 +832,13 @@ export default function App() {
   useEffect(() => {
     // Guide a brand-new account from the bare root into the capture task, but
     // never trap it there. An explicit /library visit must render Library's
-    // honest empty state even before the first Collection exists.
-    if (user && isFirstRun && activeView === "library" && window.location.pathname === "/") {
+    // honest empty state even before the first Collection exists. Bare root
+    // means no query string either -- a "/" visit carrying its own intent
+    // (e.g. "/?docs=getting-started") must not get silently rewritten to
+    // "/nest" before the query is ever read: confirmed live, this exact
+    // effect was wiping a `?docs=` param out from under the docs route on
+    // every first-run account, landing them back on Nest instead.
+    if (user && isFirstRun && activeView === "library" && window.location.pathname === "/" && !window.location.search) {
       setActiveView("nest");
       window.history.replaceState({}, "", "/nest");
     }
@@ -853,8 +865,6 @@ export default function App() {
   }
 
   if (isLoading) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
-  if (!user && isShareRoute) return <main className="app-loader"><LoaderCircle className="spin" size={24} /></main>;
-  if (isShareRoute && user) return <ShareCapturePage draft={shareDraft} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} />;
   if (!user && isLoginRoute) return <LoginPage onBack={closeLogin} onAuthenticated={handleAuthenticated} redirectPath="/" />;
   if (!user) return <Landing isSigningIn={isSigningIn} onSignIn={handleSignIn} />;
 
@@ -894,28 +904,29 @@ export default function App() {
         onAsk={() => setIsAgentOpen(true)}
         isAskOpen={isAgentOpen}
         onOpenDocs={() => { window.open("/docs/getting-started", "_blank", "noopener"); }}
+        onReplayTour={replayTour}
         onSignOut={handleSignOut}
       />
       <section className="workspace-main">
         <header className="mobile-workspace-header">
           <button type="button" className="nav-brand" onClick={() => navigateWorkspace("nest")}><MagpieMark size={25} /><span>magpie</span></button>
-          <div><button type="button" className="icon-button" onClick={() => navigateWorkspace("search")} aria-label="Search"><Search size={18} /></button><button type="button" className="icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu"><UserRound size={18} /></button></div>
-          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" onClick={() => { if (hasPairingHistory) openPairingManagement(); else handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {!hasPairingHistory ? "Pair extension" : hasActiveExtension ? "Connected browsers" : "Reconnect browser"}</button><a href="/docs/getting-started" role="menuitem" target="_blank" rel="noopener"><Book size={15} /> Docs</a><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
+          <div><button type="button" className="icon-button" data-tour="mobilenav-search" onClick={() => navigateWorkspace("search")} aria-label="Search"><Search size={18} /></button><button type="button" className="icon-button" onClick={() => setIsAccountMenuOpen((current) => !current)} aria-label="Account menu"><UserRound size={18} /></button></div>
+          {isAccountMenuOpen && <div className="mobile-menu" role="menu"><button role="menuitem" data-tour="pair-extension" onClick={() => { if (hasPairingHistory) openPairingManagement(); else handleCreatePairing(); setIsAccountMenuOpen(false); }}><PairingIcon size={15} /> {!hasPairingHistory ? (canInstallExtension() ? "Pair extension" : "Connect a computer") : hasActiveExtension ? "Connected browsers" : "Reconnect browser"}</button><a href="/docs/getting-started" role="menuitem" target="_blank" rel="noopener"><Book size={15} /> Docs</a><button role="menuitem" onClick={() => { replayTour(); setIsAccountMenuOpen(false); }}><Compass size={15} /> Replay tour</button><span role="menuitem" className="mobile-menu-account">{user.full_name || user.email}</span><button role="menuitem" onClick={handleSignOut}><LogOut size={15} /> Sign out</button></div>}
         </header>
         {loadError && <div className="error-banner workspace-error">{loadError}<button onClick={() => setLoadError("")}><X size={15} /></button></div>}
         {showPairingReconnect && <PairingReconnectNotice onManage={openPairingManagement} onPair={handleCreatePairing} isPairing={isPairing} />}
-        {activeView === "nest" && <NestSurface clips={needsReviewClips} decisionsByClip={decisionsByClip} collections={data.collections} allClips={data.clips} isFirstRun={isFirstRun} hasPairedExtension={hasPairedExtension} resolvingClipId={resolvingClipId} resolveError={resolveError} onResolve={resolveReview} onOpenAdvanced={(clipId) => { setSelectedReviewClipId(clipId); setIsReviewOpen(true); }} onPair={handleCreatePairing} isPairing={isPairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} onOpenLibrary={() => navigateWorkspace("library")} onOpenGuide={() => setIsCaptureGuideOpen(true)} />}
+        {activeView === "nest" && <NestSurface clips={needsReviewClips} decisionsByClip={decisionsByClip} collections={data.collections} allClips={data.clips} isFirstRun={isFirstRun} hasPairedExtension={hasPairedExtension} resolvingClipId={resolvingClipId} resolveError={resolveError} onResolve={resolveReview} onOpenAdvanced={(clipId) => { setSelectedReviewClipId(clipId); setIsReviewOpen(true); }} onPair={handleCreatePairing} isPairing={isPairing} onOpenLibrary={() => navigateWorkspace("library")} onOpenGuide={() => setIsCaptureGuideOpen(true)} onShowInstallHelp={openInstallHelp} />}
         {activeView === "library" && (
           <section className="workspace-surface library-surface">
             <div className="mobile-library-context">
               <div className="eyebrow">organized automatically</div>
               <WorkspaceSwitcher missions={data.missions} collections={data.collections} records={data.records} watchRules={data.watchRules} activeMissionId={activeMissionId} onSelect={selectProject} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} />
               <p>{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p>
-              <div className="mobile-library-actions"><span className="capture-status"><Layers3 size={14} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="secondary-button" onClick={openMobileCapture}><Plus size={14} /> Add capture</button><button type="button" className="icon-button" onClick={() => setIsProjectDialogOpen(true)} aria-label="New Project"><Target size={15} /></button></div>
+              <div className="mobile-library-actions"><span className="capture-status"><Layers3 size={14} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="icon-button" onClick={() => setIsProjectDialogOpen(true)} aria-label="New Project"><Target size={15} /></button></div>
             </div>
             <header className="library-heading">
               <div><div className="eyebrow">organized automatically</div><WorkspaceSwitcher missions={data.missions} collections={data.collections} records={data.records} watchRules={data.watchRules} activeMissionId={activeMissionId} onSelect={selectProject} onNewProject={() => setIsProjectDialogOpen(true)} onDelete={deleteMission} deletingId={deletingMissionId} /><p>{activeMission ? missionConstraints.criteria || activeMission.goal || "A focused Project with automatically organized Collections." : "Everything you clip, organized into reusable Collections."}</p></div>
-              <div className="heading-actions"><span className="capture-status"><Layers3 size={15} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="secondary-button" onClick={openMobileCapture}><Plus size={14} /> Add capture</button><button type="button" className="secondary-button" onClick={() => setIsProjectDialogOpen(true)}><Target size={14} /> New Project</button></div>
+              <div className="heading-actions"><span className="capture-status"><Layers3 size={15} /> {missionRecords.length}{dataMeta.records.hasMore ? "+" : ""} Items</span><button type="button" className="secondary-button" onClick={() => setIsProjectDialogOpen(true)}><Target size={14} /> New Project</button></div>
             </header>
             <div className="contextual-strips">
               {onboardingStage === OnboardingStage.FIRST_CAPTURE_RECEIVED && activeCollectionRecords.length > 0 && !dismissedGuides.routing && <div className="context-strip"><ArrowRightLeft size={15} /><span><b>Your first capture filed itself.</b> Magpie used its type and fields to choose this Collection.</span><button type="button" onClick={() => setDismissedGuides((current) => ({ ...current, routing: true }))}><X size={14} /></button></div>}
@@ -926,15 +937,18 @@ export default function App() {
           </section>
         )}
         {activeView === "signals" && <SignalsSurface records={data.records} enrichments={data.enrichments} watchRules={data.watchRules} refreshAttempts={data.refreshAttempts} onSelectRecord={selectRecord} onToggleWatch={toggleSelectedWatch} togglingWatchId={togglingWatchId} onCreateWatch={openWatchDialog} />}
-        {activeView === "search" && <SearchSurface records={data.records} clips={data.clips} collections={data.collections} missions={data.missions} onSelectRecord={selectRecord} onSelectCollection={selectCollectionAnywhere} onAddCapture={openMobileCapture} onCreateProject={() => setIsProjectDialogOpen(true)} onCreateWatch={openWatchDialog} onAsk={() => setIsAgentOpen(true)} onSaveSearch={saveWorkspaceSearch} onExit={() => navigateWorkspace("library")} focusVersion={searchFocusVersion} />}
+        {activeView === "search" && <SearchSurface records={data.records} clips={data.clips} collections={data.collections} missions={data.missions} onSelectRecord={selectRecord} onSelectCollection={selectCollectionAnywhere} onCreateProject={() => setIsProjectDialogOpen(true)} onCreateWatch={openWatchDialog} onAsk={() => setIsAgentOpen(true)} onSaveSearch={saveWorkspaceSearch} onExit={() => navigateWorkspace("library")} focusVersion={searchFocusVersion} />}
         <footer className="workspace-footer"><span><span className="status-dot" /> Realtime owner data</span><span>Magpie never grants the extension read access.</span><div className="footer-links"><a className="footer-link" href="https://www.linkedin.com/company/magpie-or-else" target="_blank" rel="noreferrer"><Linkedin size={12} /> LinkedIn</a><button type="button" className="footer-link footer-link-button" onClick={() => setIsBugReportOpen(true)}><Bug size={12} /> Found a bug?</button></div></footer>
       </section>
-      <nav className="mobile-bottom-nav" aria-label="Workspace">{[["nest", "Nest", Inbox], ["library", "Collections", Layers3], ["signals", "Signals", Radio]].map(([id, label, Icon]) => <button type="button" key={id} className={activeView === id ? "active" : ""} onClick={() => navigateWorkspace(id)}><Icon size={18} /><span>{label}</span></button>)}<button type="button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={18} /><span>Ask</span></button></nav>
+      <nav className="mobile-bottom-nav" aria-label="Workspace">{[["nest", "Nest", Inbox], ["library", "Collections", Layers3], ["signals", "Signals", Radio]].map(([id, label, Icon]) => <button type="button" key={id} data-tour={`mobilenav-${id}`} className={activeView === id ? "active" : ""} onClick={() => navigateWorkspace(id)}><Icon size={18} /><span>{label}</span></button>)}<button type="button" onClick={() => setIsAgentOpen(true)}><MessageCircle size={18} /><span>Ask</span></button></nav>
       {routingUndo && <div className="routing-undo-toast" role="status"><Check size={15} /><span><b>{routingUndo.title}</b> filed in {routingUndo.collectionName}.</span><button type="button" onClick={undoRoutingResolution}>Undo</button></div>}
+      {canInstallExtension()
+        ? <TourOverlay steps={ACTIVATION_STEPS} floorIndex={tourFloorIndex} dismissed={tourDismissed} paused={isAnyModalOpen} onSkip={dismissOnboarding} replayToken={tourReplayToken} skipFirstStepWhen={tourExtensionDetected} skipFirstStepTarget={tourSkipToIndexFromStep0} />
+        : <TourOverlay steps={mobileTourSteps} floorIndex={mobileTourFloorIndex} dismissed={mobileTourDismissed} paused={isAnyModalOpen} onSkip={dismissOnboarding} replayToken={tourReplayToken} onStepView={(step) => { if (step.requiresView) navigateWorkspace(step.requiresView); }} />}
       {isActivityOpen && <ActivityPanel enrichments={data.enrichments} records={data.records} onSelect={selectRecord} onClose={() => setIsActivityOpen(false)} />}
       <RecordDetail record={selectedRecord} clip={selectedClip} enrichments={selectedEnrichments} watch={selectedWatch} onClose={() => { setSelectedRecord(null); setRefreshNotice(null); }} onRefresh={refreshSelectedRecord} isRefreshing={isRefreshing} onStatus={updateCandidateStatus} refreshNotice={refreshNotice} onDelete={deleteSelectedRecord} isDeleting={isDeletingRecord} onToggleWatch={toggleSelectedWatch} onCreateWatch={openWatchDialog} isTogglingWatch={isTogglingWatch} onCorrectField={correctSelectedRecordField} />
-      {isMobileCaptureOpen && <MobileCaptureDialog onClose={() => setIsMobileCaptureOpen(false)} onSubmit={submitMobileCapture} isSubmitting={isMobileCapturing} error={mobileCaptureError} result={mobileCaptureResult} missions={data.missions} activeMissionId={activeMissionId} />}
-      {isCaptureGuideOpen && <CaptureGuideDialog onClose={() => setIsCaptureGuideOpen(false)} onPair={handleCreatePairing} onPaste={openMobileCapture} onIos={openIosShortcutSetup} isPairing={isPairing} hasPairedExtension={hasPairedExtension} />}
+      {isCaptureGuideOpen && <CaptureGuideDialog onClose={() => setIsCaptureGuideOpen(false)} onPair={handleCreatePairing} isPairing={isPairing} hasPairedExtension={hasPairedExtension} />}
+      {isInstallHelpOpen && <AddToHomeScreenGuide onClose={() => setIsInstallHelpOpen(false)} />}
       {pairing && <PairingDialog pairing={pairing} onClose={() => setPairing(null)} />}
       {isPairingManagementOpen && <PairingManagementDialog pairings={data.extensionInstalls} onClose={() => setIsPairingManagementOpen(false)} onPair={createPairingFromManagement} isPairing={isPairing} onRevoke={revokeExtensionPairing} onRevokeAll={revokeAllExtensionPairings} revokingId={revokingInstallationId} isRevokingAll={isRevokingAllPairings} error={pairingManagementError} />}
       {watchDialog && <WatchDialog records={data.records} watchRules={data.watchRules} initialRecordId={watchDialog.recordId} initialField={watchDialog.field} onClose={() => setWatchDialog(null)} onSave={saveManualWatch} isSaving={isSavingWatch} error={watchDialogError} />}

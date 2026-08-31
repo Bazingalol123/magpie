@@ -75,4 +75,21 @@ input:focus { outline: 2px solid #86ab8d; outline-offset: 1px; }
 #status { display: block; min-height: 16px; margin-top: 8px; color: #478052; font-size: 11px; }
 
 footer { margin-top: auto; padding-top: 10px; border-top: 1px solid #e3eadf; display: flex; align-items: center; gap: 7px; color: #84927f; font-size: 10.5px; line-height: 1.35; }
+
+.tour-replay-link { margin-left: auto; padding: 0; color: #6d8172; background: none; border: none; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
+.tour-replay-link:hover { color: #254d32; }
+
+/* Live in-panel tour (vendored driver.js) -- same palette as the dashboard's
+   own tour styling in src/index.css, kept in sync deliberately. */
+.magpie-tour-popover.driver-popover { max-width: 260px; padding: 14px; color: #15261d; background: #fefffc; border: 2px solid #254d32; border-radius: 12px; box-shadow: 0 16px 44px rgba(18,36,24,.3); font-family: "DM Sans", "Segoe UI", system-ui, sans-serif; }
+.magpie-tour-popover .driver-popover-title { color: #1c3a24; font-size: 14px; font-weight: 700; }
+.magpie-tour-popover .driver-popover-title::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; background: #2e7d46; border-radius: 50%; }
+.magpie-tour-popover .driver-popover-description { color: #45524a; font-size: 12px; line-height: 1.55; }
+.magpie-tour-popover .driver-popover-footer { align-items: center; gap: 8px; margin-top: 10px; }
+.magpie-tour-popover .driver-popover-close-btn { color: #84927f; }
+.magpie-tour-popover .driver-popover-navigation-btns button { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 11px; }
+.magpie-tour-popover .driver-popover-navigation-btns .driver-popover-next-btn { color: #fff; background: #254d32; border-color: #254d32; }
+.magpie-tour-popover .driver-popover-navigation-btns .driver-popover-next-btn:hover { background: #193d27; }
+.tour-skip-link { padding: 0; margin-right: auto; color: #84927f; background: none; border: none; font-size: 11px; text-decoration: underline; cursor: pointer; }
+.tour-skip-link:hover { color: #254d32; }
 footer svg { width: 12px; height: 12px; color: #93a89a; }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Magpie",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Stop losing what you find. Turn the messy web into living, structured collections.",
   "permissions": ["activeTab", "storage", "tabs", "scripting", "contextMenus", "sidePanel"],
   "host_permissions": ["http://*/*", "https://*/*"],

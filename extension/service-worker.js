@@ -55,6 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return undefined;
 });
 
+
 chrome.runtime.onInstalled.addListener(() => {
   // Chrome persists this setting across service-worker restarts, so it only
   // needs to run once per install/update, same as the two calls below. If it
@@ -168,6 +169,12 @@ async function submitCapture(payload) {
   }
 
   await rememberSavedUrl(payload.source_url);
+  // The Side Panel's own in-extension tour reacts to this locally, without
+  // ever reading Clips/Records back -- the extension already knows whether
+  // its own submission succeeded, so this is the one signal it needs.
+  await chrome.storage.local.set({
+    lastCaptureOutcome: { at: Date.now(), routingStatus: body.routing_status || null, captureStatus: body.capture_status || null },
+  });
   return { ...body, dashboard_url: buildDashboardUrl(ingestUrl, body.clip_id, body.routing_status) };
 }
 
