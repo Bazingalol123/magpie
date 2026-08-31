@@ -21,7 +21,7 @@ function scheduleRefresh(instance) {
 // close/back/next controls at all. The steps API reads the global config
 // correctly and gives Back/Next/Done for free, including the right
 // disabled-on-first-step / Done-on-last-step behavior.
-export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSkip, replayToken, skipFirstStepWhen, skipFirstStepTarget, onStepView }) {
+export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSkip, onComplete = onSkip, replayToken, skipFirstStepWhen, skipFirstStepTarget, onStepView, onStepChange }) {
   const driverRef = useRef(null);
   const lastActiveIndexRef = useRef(0);
   // Per-step side effect fired when a step is highlighted -- the orientation
@@ -31,6 +31,8 @@ export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSk
   // unchanged.
   const onStepViewRef = useRef(onStepView);
   onStepViewRef.current = onStepView;
+  const onStepChangeRef = useRef(onStepChange);
+  onStepChangeRef.current = onStepChange;
   // App.jsx re-renders constantly (live entity subscriptions, debounced
   // reloads every ~400ms) and passes a brand-new dismissOnboarding function
   // reference each time -- a naive [onSkip] effect dependency would tear
@@ -41,6 +43,8 @@ export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSk
   // is created exactly once for this component's lifetime.
   const onSkipRef = useRef(onSkip);
   onSkipRef.current = onSkip;
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   // Whether step 0's Next should jump straight to skipFirstStepTarget --
   // read via a ref (not baked into the steps array at mount time) so it can
   // still change later without rebuilding the instance. This never skips
@@ -63,7 +67,10 @@ export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSk
       steps: steps.map((step, index) => ({
         element: step.selector || undefined,
         ...(step.waitForElement ? { waitForElement: step.waitForElement } : {}),
-        onHighlightStarted: () => onStepViewRef.current?.(step),
+        onHighlightStarted: () => {
+          onStepViewRef.current?.(step);
+          onStepChangeRef.current?.(step, index);
+        },
         popover: {
           title: step.title,
           description: step.description,
@@ -74,7 +81,7 @@ export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSk
           // and shows "Next" (which, if clicked, falsely claims whichever
           // OTHER outcome comes next). Forcing "Done" here regardless of
           // array position is what actually makes that true.
-          ...(step.isTerminal ? { nextBtnText: "Done", onNextClick: () => onSkipRef.current() } : {}),
+          ...(step.isTerminal ? { nextBtnText: "Done", onNextClick: () => onCompleteRef.current() } : {}),
           ...(index === 0 && skipFirstStepTarget != null
             ? {
                 onNextClick: () => {
@@ -86,7 +93,7 @@ export default function TourOverlay({ steps, floorIndex, dismissed, paused, onSk
         },
       })),
       onCloseClick: () => onSkipRef.current(),
-      onDoneClick: () => onSkipRef.current(),
+      onDoneClick: () => onCompleteRef.current(),
       onPopoverRender: (popoverDom) => {
         const skip = document.createElement("button");
         skip.type = "button";

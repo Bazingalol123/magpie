@@ -724,14 +724,18 @@ and more serious failure: a genuinely new user never sees it at all.
 
 Fixed by moving the flag onto the User record itself via
 `base44.auth.updateMe({ onboarding_dismissed: true })`, read back as
-`user.onboarding_dismissed`. This needed no new entity, schema file, or
-backend function -- the installed `@base44/sdk`'s own `auth.updateMe()`
-already supports arbitrary custom fields on the authenticated user's own
-record (confirmed in `.agents/skills/base44-sdk/references/auth.md`), and
-it's inherently owner-scoped (a user can only ever update their own
-record through it), so this carries none of the cross-owner-write risk a
-new entity or function would need fixtures for. `localStorage` is no
-longer read or written for this at all.
+`user.onboarding_dismissed`. The SDK operation is inherently owner-scoped (a
+user can only update their own record through it), so this carries none of
+the cross-owner-write risk a separate entity or backend function would need
+fixtures for. `localStorage` is no longer read or written for this at all.
+
+**Correction after adding `onboarding_progress` (2026-08-30):** `updateMe()`
+accepts custom User fields, but the field must exist in the app's User schema.
+`onboarding_dismissed` already existed in the linked app, which made the
+earlier change appear to require no schema declaration. A live local
+read-after-write proved that a brand-new undeclared field is discarded.
+`base44/entities/user.jsonc` now declares both the legacy boolean and the new
+progress object; no backend function is still needed.
 
 One accepted one-time cost: any account that dismissed onboarding under
 the old `localStorage` scheme will see it once more after this ships,

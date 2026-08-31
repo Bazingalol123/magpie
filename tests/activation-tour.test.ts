@@ -40,8 +40,8 @@ Deno.test("the desktop activation tour is disabled on mobile devices, not shown 
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
   assert(app.includes("useTourController"), "App.jsx must wire the tour controller");
   assert(app.includes("<TourOverlay"), "App.jsx must mount the tour overlay");
-  assert(/tourDismissed\s*=\s*onboardingDismissed\s*\|\|\s*!canInstallExtension\(\)/.test(app), "the extension-pairing tour must not show on devices that cannot install a Chrome extension");
-  assert(/mobileTourDismissed\s*=\s*onboardingDismissed\s*\|\|\s*canInstallExtension\(\)/.test(app), "the mobile tour must not show on devices that can install a Chrome extension");
+  assert(/tourDismissed\s*=\s*activationDismissed\s*\|\|\s*!canInstallExtension\(\)/.test(app), "the extension-pairing tour must not show on devices that cannot install a Chrome extension");
+  assert(/mobileTourDismissed\s*=\s*orientationDismissed\s*\|\|\s*canInstallExtension\(\)/.test(app), "the mobile orientation tour must not show on devices that can install a Chrome extension");
 });
 
 Deno.test("the driver.js instance is created once per mount, not rebuilt on every App.jsx re-render", async () => {
@@ -97,11 +97,14 @@ Deno.test("landing the first capture selects its actual Collection, not just the
   assert(app.includes("selectCollection(record.collection_id)"), "must land the user looking at the specific Collection their capture filed into, not an arbitrary one");
 });
 
-Deno.test("skipping or finishing the tour reuses the existing User-record dismissal, and a replay entry point exists", async () => {
+Deno.test("activation skip/completion and replay persist independent User-record progress", async () => {
   const app = await Deno.readTextFile(new URL("src/App.jsx", root));
-  assert(app.includes("onSkip={dismissOnboarding}"), "the tour's skip/done action must call the existing dismissOnboarding, keeping one dismissal mechanism");
+  assert(app.includes("finishActivationTour(TourProgressStatus.SKIPPED)"), "Skip must persist an activation-specific skipped status");
+  assert(app.includes("finishActivationTour(TourProgressStatus.COMPLETED)"), "Done must persist an activation-specific completed status");
+  assert(app.includes("{ onboarding_dismissed: true }"), "desktop activation must retain the legacy dismissal write for existing static onboarding consumers");
   assert(app.includes("replayTour"), "there must be a way to un-dismiss and restart the tour");
   assert(app.includes("onboarding_dismissed: false"), "replay must reuse the same User-record field, not a parallel flag");
+  assert(app.includes("activation: TourProgressStatus.NOT_STARTED"), "desktop replay must reset only activation progress");
 
   const nav = await Deno.readTextFile(new URL("src/layout/AppNavigation.jsx", root));
   assert(nav.includes("onReplayTour"), "the replay action must be reachable from the UI, not just exist in App.jsx");

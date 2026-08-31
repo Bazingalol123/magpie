@@ -44,7 +44,7 @@ Deno.test("terminal steps show Done (not Next) regardless of array position: des
   assert(overlay.includes("step.isTerminal"), "TourOverlay must actually act on isTerminal");
   assert(overlay.includes('nextBtnText: "Done"'), "a terminal step must show Done regardless of its array position");
   assert(
-    /isTerminal \? \{ nextBtnText: "Done", onNextClick: \(\) => onSkipRef\.current\(\) \}/.test(overlay),
-    "a terminal step's Next/Done must dismiss the tour, not advance into whichever OTHER step happens to be next in the array",
+    /isTerminal \? \{ nextBtnText: "Done", onNextClick: \(\) => onCompleteRef\.current\(\) \}/.test(overlay),
+    "a terminal step's Next/Done must complete the tour, not skip or advance into whichever OTHER step happens to be next in the array",
   );
 });

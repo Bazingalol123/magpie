@@ -1,0 +1,33 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "onboarding_dismissed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Legacy first-run dismissal flag retained for existing onboarding surfaces."
+    },
+    "onboarding_progress": {
+      "type": "object",
+      "description": "Independent, owner-scoped progress for activation and workspace-orientation tours.",
+      "properties": {
+        "activation": {
+          "type": "string",
+          "enum": ["not_started", "in_progress", "completed", "skipped"],
+          "default": "not_started"
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["not_started", "in_progress", "completed", "skipped"],
+          "default": "not_started"
+        },
+        "orientationStep": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    }
+  },
+  "required": []
+}

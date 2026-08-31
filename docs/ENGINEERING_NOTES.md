@@ -2042,3 +2042,32 @@ that failed to close.
 
 Final result: 6/6 rendered UI flows across all three profiles, in addition to
 the separate 7/7 real unpacked-extension capture suite.
+
+## 2026-08-30 — `auth.updateMe()` does not make an undeclared custom User field durable
+
+The SDK reference correctly documents `auth.updateMe()` as the owner-scoped
+way to write custom User data, but it does not state clearly enough that the
+custom field must also be present in the app's User schema. The first Phase 8
+implementation wrote an `onboarding_progress` object and updated local React
+state optimistically; build and unit tests passed, and the tour visibly
+closed. A real `auth.me()` read in the UI E2E returned no field at all on all
+three browser profiles. The local backend had silently discarded the unknown
+property.
+
+Why the earlier `onboarding_dismissed` change did not expose this: that field
+already existed in the linked app's built-in User schema even though there was
+no checked-in `base44/entities/user.jsonc`, so its writes were accepted. The
+fix was to check in the built-in `User` schema with both custom fields. After
+that, the same UI tests read back `activation: "skipped"` on desktop and
+`orientation: "completed", orientationStep: 6` on Android and iPhone.
+
+A repeat Android run caught one more state-ordering issue: replay awaited the
+User write before incrementing the visual replay token. The newly-undismissed
+overlay could therefore open immediately, accept a Next click, and then be
+reset to Welcome by the late token. Replay now starts from the optimistic User
+update immediately and awaits durability afterward, so network latency cannot
+rewind an already-visible tour.
+
+Practical rule: every new built-in User custom field needs a schema declaration
+and a read-after-write test. An optimistic UI update is not evidence that the
+platform stored it.
